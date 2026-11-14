@@ -1,0 +1,22 @@
+{
+  "name": "mvp-releasedesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Release Desk — Northwind Bank KYC demo and future multi-agent release orchestration",
+  "license": "GPL-3.0-only",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @northwind/kyc",
+    "build": "npm run build -w @northwind/kyc",
+    "start": "npm run start -w @northwind/kyc",
+    "test": "npm run test -w @northwind/kyc",
+    "lint": "npm run lint -w @northwind/kyc",
+    "seed": "npm run seed -w @northwind/kyc"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
