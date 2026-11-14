@@ -1,0 +1,8 @@
+node_modules
+.next
+data/*.json
+data/reports
+!.gitkeep
+
+AGENTS.md
+.next/

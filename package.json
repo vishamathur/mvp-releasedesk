@@ -10,20 +10,25 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @northwind/kyc",
+    "desk": "npm run dev -w @releasedesk/ui",
     "build": "npm run build -w @northwind/kyc",
+    "build:desk": "npm run build -w @releasedesk/ui",
     "build:core": "npm run build -w @releasedesk/core",
     "build:lead": "npm run build -w @releasedesk/lead",
     "build:specialists": "npm run build -w @releasedesk/specialists",
     "start": "npm run start -w @northwind/kyc",
-    "test": "npm run test -w @northwind/kyc && npm run test -w @releasedesk/core && npm run test -w @releasedesk/lead && npm run test -w @releasedesk/specialists",
+    "start:desk": "npm run start -w @releasedesk/ui",
+    "test": "npm run test -w @northwind/kyc && npm run test -w @releasedesk/core && npm run test -w @releasedesk/lead && npm run test -w @releasedesk/specialists && npm run test -w @releasedesk/ui",
     "test:kyc": "npm run test -w @northwind/kyc",
     "test:core": "npm run test -w @releasedesk/core",
     "test:lead": "npm run test -w @releasedesk/lead",
     "test:specialists": "npm run test -w @releasedesk/specialists",
+    "test:desk": "npm run test -w @releasedesk/ui",
     "check:release": "npm run check -w @releasedesk/specialists --",
     "check:release:stubs": "npm run check -w @releasedesk/lead --",
     "lint": "npm run lint -w @northwind/kyc",
-    "seed": "npm run seed -w @northwind/kyc"
+    "seed": "npm run seed -w @northwind/kyc",
+    "generate:demos": "npm run generate:demos -w @releasedesk/ui"
   },
   "engines": {
     "node": ">=20"

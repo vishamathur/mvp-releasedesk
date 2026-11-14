@@ -1,0 +1,1186 @@
+{
+  "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+  "scenarioId": "pending-approval",
+  "scenarioLabel": "Pending approval",
+  "createdAt": "2026-11-14T09:41:09.099Z",
+  "updatedAt": "2026-11-14T09:41:09.107Z",
+  "prClientMode": "mock",
+  "autoMerge": false,
+  "report": {
+    "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+    "run": {
+      "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+      "status": "completed",
+      "goal": "Demo: pending DM approval gates for Northwind KYC",
+      "target": {
+        "repository": "vishamathur/mvp-releasedesk",
+        "baseRef": "main",
+        "headRef": "HEAD"
+      },
+      "tasks": [
+        {
+          "id": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "name": "Change analysis",
+          "agentRole": "change_analyst",
+          "status": "completed",
+          "dependsOn": [],
+          "evidence": [
+            {
+              "id": "ev_ba2c0fb9-a1fb-4bf9-9b4b-724af5c9b358",
+              "kind": "diff",
+              "title": "Change summary (stub)",
+              "summary": "MOCK: Reviewed head vs base with stub commit list",
+              "source": "change_analyst",
+              "createdAt": "2026-11-14T09:41:09.101Z",
+              "mock": {
+                "mocked": true,
+                "mockLabel": "change-analyst-stub",
+                "note": "MOCK: Reviewed head vs base with stub commit list"
+              }
+            }
+          ],
+          "input": {
+            "repository": "vishamathur/mvp-releasedesk",
+            "baseRef": "main",
+            "headRef": "HEAD",
+            "focusPaths": []
+          },
+          "output": {
+            "summary": "MOCK: Change analysis complete (stub)",
+            "agentRole": "change_analyst",
+            "releaseNotesDraft": "MOCK: Stub release notes: KYC demo + shared contracts; no real git history inspected.",
+            "findings": [
+              {
+                "path": "apps/kyc",
+                "changeType": "modified",
+                "impact": "low",
+                "summary": "MOCK: KYC app paths touched (stub)"
+              }
+            ],
+            "overallImpact": "low",
+            "commitsReviewed": 0,
+            "evidence": [
+              {
+                "id": "ev_5ee7a62f-14a2-41ae-b05e-c4e7499e50fd",
+                "kind": "diff",
+                "title": "Change summary (stub)",
+                "summary": "MOCK: Reviewed head vs base with stub commit list",
+                "source": "change_analyst",
+                "createdAt": "2026-11-14T09:41:09.101Z",
+                "mock": {
+                  "mocked": true,
+                  "mockLabel": "change-analyst-stub",
+                  "note": "MOCK: Reviewed head vs base with stub commit list"
+                }
+              }
+            ],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "change-analyst-stub",
+                "note": "MOCK: Fixture change analysis; no GitHub API call"
+              }
+            ]
+          },
+          "retry": {
+            "attempt": 0,
+            "maxAttempts": 2
+          },
+          "createdAt": "2026-11-14T09:41:09.100Z",
+          "updatedAt": "2026-11-14T09:41:09.102Z",
+          "startedAt": "2026-11-14T09:41:09.100Z",
+          "completedAt": "2026-11-14T09:41:09.102Z"
+        },
+        {
+          "id": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "name": "Standards compliance",
+          "agentRole": "standards",
+          "status": "completed",
+          "dependsOn": [],
+          "evidence": [
+            {
+              "id": "ev_2749eaa5-3478-4a3b-8d32-94f3c7a1cda9",
+              "kind": "policy_ref",
+              "title": "Policy check (stub)",
+              "summary": "MOCK: Northwind KYC standards evaluated against fixture corpus",
+              "source": "standards",
+              "createdAt": "2026-11-14T09:41:09.102Z",
+              "mock": {
+                "mocked": true,
+                "mockLabel": "standards-stub",
+                "note": "MOCK: Northwind KYC standards evaluated against fixture corpus"
+              }
+            }
+          ],
+          "input": {
+            "repository": "vishamathur/mvp-releasedesk",
+            "policyRefs": [
+              "northwind-kyc-baseline"
+            ]
+          },
+          "output": {
+            "summary": "MOCK: Standards check complete (stub) — compliant",
+            "agentRole": "standards",
+            "compliant": true,
+            "deviations": [],
+            "policiesChecked": [
+              "MOCK:northwind-kyc-baseline"
+            ],
+            "evidence": [
+              {
+                "id": "ev_26878a64-8414-4eac-87f6-5141b25cbcc6",
+                "kind": "policy_ref",
+                "title": "Policy check (stub)",
+                "summary": "MOCK: Northwind KYC standards evaluated against fixture corpus",
+                "source": "standards",
+                "createdAt": "2026-11-14T09:41:09.101Z",
+                "mock": {
+                  "mocked": true,
+                  "mockLabel": "standards-stub",
+                  "note": "MOCK: Northwind KYC standards evaluated against fixture corpus"
+                }
+              }
+            ],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "standards-stub",
+                "note": "MOCK: Fixture standards check; no policy corpus loaded"
+              }
+            ]
+          },
+          "retry": {
+            "attempt": 0,
+            "maxAttempts": 2
+          },
+          "createdAt": "2026-11-14T09:41:09.100Z",
+          "updatedAt": "2026-11-14T09:41:09.102Z",
+          "startedAt": "2026-11-14T09:41:09.101Z",
+          "completedAt": "2026-11-14T09:41:09.102Z"
+        },
+        {
+          "id": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "name": "Security review",
+          "agentRole": "security",
+          "status": "completed",
+          "dependsOn": [],
+          "evidence": [
+            {
+              "id": "ev_9248d421-6983-4231-adee-1029e40041c6",
+              "kind": "advisory",
+              "title": "Security scan (stub)",
+              "summary": "MOCK: No release-blocking advisories in fixture scan",
+              "source": "security",
+              "createdAt": "2026-11-14T09:41:09.103Z",
+              "mock": {
+                "mocked": true,
+                "mockLabel": "security-stub",
+                "note": "MOCK: No release-blocking advisories in fixture scan"
+              }
+            }
+          ],
+          "input": {
+            "repository": "vishamathur/mvp-releasedesk",
+            "components": [],
+            "advisoryHints": []
+          },
+          "output": {
+            "summary": "MOCK: Security check complete (stub) — risk none",
+            "agentRole": "security",
+            "findings": [],
+            "releaseBlockingCount": 0,
+            "riskLevel": "none",
+            "evidence": [
+              {
+                "id": "ev_dcb24bbb-e78b-4e9c-b699-826ca3b87556",
+                "kind": "advisory",
+                "title": "Security scan (stub)",
+                "summary": "MOCK: No release-blocking advisories in fixture scan",
+                "source": "security",
+                "createdAt": "2026-11-14T09:41:09.101Z",
+                "mock": {
+                  "mocked": true,
+                  "mockLabel": "security-stub",
+                  "note": "MOCK: No release-blocking advisories in fixture scan"
+                }
+              }
+            ],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "security-stub",
+                "note": "MOCK: Fixture security scan; no NVD/advisory API"
+              }
+            ]
+          },
+          "retry": {
+            "attempt": 0,
+            "maxAttempts": 2
+          },
+          "createdAt": "2026-11-14T09:41:09.100Z",
+          "updatedAt": "2026-11-14T09:41:09.103Z",
+          "startedAt": "2026-11-14T09:41:09.101Z",
+          "completedAt": "2026-11-14T09:41:09.103Z"
+        },
+        {
+          "id": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "name": "Lead consolidation",
+          "agentRole": "lead",
+          "status": "completed",
+          "dependsOn": [],
+          "evidence": [],
+          "output": {
+            "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+            "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+            "agentRole": "lead",
+            "status": "completed",
+            "completedAt": "2026-11-14T09:41:09.106Z",
+            "summary": "Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human",
+            "evidence": [],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "change-analyst-stub",
+                "note": "MOCK: Fixture change analysis; no GitHub API call"
+              },
+              {
+                "mocked": true,
+                "mockLabel": "change-analyst-stub",
+                "note": "MOCK: Reviewed head vs base with stub commit list"
+              },
+              {
+                "mocked": true,
+                "mockLabel": "standards-stub",
+                "note": "MOCK: Fixture standards check; no policy corpus loaded"
+              },
+              {
+                "mocked": true,
+                "mockLabel": "standards-stub",
+                "note": "MOCK: Northwind KYC standards evaluated against fixture corpus"
+              },
+              {
+                "mocked": true,
+                "mockLabel": "security-stub",
+                "note": "MOCK: Fixture security scan; no NVD/advisory API"
+              },
+              {
+                "mocked": true,
+                "mockLabel": "security-stub",
+                "note": "MOCK: No release-blocking advisories in fixture scan"
+              }
+            ],
+            "readiness": "needs_human",
+            "delegations": [
+              {
+                "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+                "agentRole": "change_analyst",
+                "rationale": "Parallel analysis wave — Change analysis"
+              },
+              {
+                "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+                "agentRole": "standards",
+                "rationale": "Parallel analysis wave — Standards compliance"
+              },
+              {
+                "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+                "agentRole": "security",
+                "rationale": "Parallel analysis wave — Security review"
+              }
+            ],
+            "blockingIssues": [],
+            "remediationRecommended": false,
+            "checkpoints": {
+              "checkpoints": [
+                {
+                  "id": "checkpoint_specialist_analysis_8_1794649269104",
+                  "stage": "specialist_analysis",
+                  "status": "passed",
+                  "at": "2026-11-14T09:41:09.104Z",
+                  "cycle": 0,
+                  "issues": [],
+                  "summary": "Checkpoint specialist_analysis passed (cycle 0)",
+                  "evidence": {
+                    "taskIds": [
+                      "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+                      "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+                      "task_2fc08594-7110-4e99-9e3d-32e68939aa41"
+                    ],
+                    "blockingIssues": []
+                  }
+                }
+              ]
+            },
+            "pullRequests": {
+              "pullRequests": []
+            },
+            "autoMerge": false
+          },
+          "createdAt": "2026-11-14T09:41:09.105Z",
+          "updatedAt": "2026-11-14T09:41:09.106Z",
+          "startedAt": "2026-11-14T09:41:09.106Z",
+          "completedAt": "2026-11-14T09:41:09.106Z"
+        }
+      ],
+      "auditTrail": [
+        {
+          "id": "aud_7c6b4ebd-089e-41ec-910a-6aa909ade2cc",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "run.created",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "system"
+          },
+          "message": "Run created: Demo: pending DM approval gates for Northwind KYC",
+          "details": {
+            "target": {
+              "repository": "vishamathur/mvp-releasedesk",
+              "baseRef": "main",
+              "headRef": "HEAD"
+            }
+          }
+        },
+        {
+          "id": "aud_9324b75d-d7f0-46c1-ab3b-666f5aa04c89",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.invoked",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "message": "Lead Agent starting release check orchestration",
+          "details": {
+            "trigger": {
+              "kind": "on_demand",
+              "requestedBy": "demo-fixture-generator",
+              "notes": "Recorded fixture for scenario pending-approval"
+            },
+            "target": {
+              "repository": "vishamathur/mvp-releasedesk",
+              "baseRef": "main",
+              "headRef": "HEAD"
+            },
+            "prClientMode": "mock"
+          }
+        },
+        {
+          "id": "aud_8601a650-910e-4528-a44a-b101b470bb15",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "mock.integration_used",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "system"
+          },
+          "message": "MOCK: GitHub PR client (no GH_TOKEN/GITHUB_TOKEN)",
+          "details": {
+            "integration": "github-pr",
+            "mode": "mock"
+          }
+        },
+        {
+          "id": "aud_fe261afd-9f50-4c18-8299-c3f629f52a59",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.created",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "change_analyst"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "Task created: Change analysis",
+          "details": {
+            "status": "ready",
+            "dependsOn": []
+          }
+        },
+        {
+          "id": "aud_598c5887-dc8f-4b6d-9038-17b14cb2e5cb",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.created",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "standards"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "Task created: Standards compliance",
+          "details": {
+            "status": "ready",
+            "dependsOn": []
+          }
+        },
+        {
+          "id": "aud_bbcebb12-1f73-44ac-84bf-7c051b82e5ca",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.created",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "security"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "Task created: Security review",
+          "details": {
+            "status": "ready",
+            "dependsOn": []
+          }
+        },
+        {
+          "id": "aud_dfd18f5b-2b8f-45b9-9481-86e2c5e1d48d",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.started",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "change_analyst"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "Task started: Change analysis"
+        },
+        {
+          "id": "aud_0a9ffc83-081d-489b-a69b-c8f7d458ec97",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.invoked",
+          "at": "2026-11-14T09:41:09.100Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "change_analyst"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "Agent invoked: change_analyst"
+        },
+        {
+          "id": "aud_37ea5567-4fdf-4da9-878a-9a974d923585",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.started",
+          "at": "2026-11-14T09:41:09.101Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "standards"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "Task started: Standards compliance"
+        },
+        {
+          "id": "aud_5d46b7d3-bfef-437d-a2fa-24cb0d2875db",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.invoked",
+          "at": "2026-11-14T09:41:09.101Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "standards"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "Agent invoked: standards"
+        },
+        {
+          "id": "aud_6928337c-df35-4b27-9c66-17a40aa3542e",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.started",
+          "at": "2026-11-14T09:41:09.101Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "security"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "Task started: Security review"
+        },
+        {
+          "id": "aud_8c68746e-7ec1-45ec-8815-7f2bb95b690e",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.invoked",
+          "at": "2026-11-14T09:41:09.101Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "security"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "Agent invoked: security"
+        },
+        {
+          "id": "aud_392045e3-5729-4ed2-8982-2a05dceac112",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "evidence.added",
+          "at": "2026-11-14T09:41:09.101Z",
+          "actor": {
+            "kind": "system"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "Evidence added: Change summary (stub)",
+          "details": {
+            "evidenceId": "ev_ba2c0fb9-a1fb-4bf9-9b4b-724af5c9b358",
+            "kind": "diff"
+          }
+        },
+        {
+          "id": "aud_3351f8c4-a799-4f48-b9ad-e7094e9cfa87",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "mock.integration_used",
+          "at": "2026-11-14T09:41:09.101Z",
+          "actor": {
+            "kind": "system"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "MOCK: Reviewed head vs base with stub commit list",
+          "details": {
+            "mockLabel": "change-analyst-stub"
+          }
+        },
+        {
+          "id": "aud_66bee717-41db-46d8-ad04-f7ca7fb6dbce",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.completed",
+          "at": "2026-11-14T09:41:09.102Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "change_analyst"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "Task completed: Change analysis"
+        },
+        {
+          "id": "aud_014b3544-02b2-438b-991a-bebe1d90f558",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.completed",
+          "at": "2026-11-14T09:41:09.102Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "change_analyst"
+          },
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "message": "Agent completed: change_analyst"
+        },
+        {
+          "id": "aud_bb547743-3643-45fd-92a8-2cbd9739043b",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "evidence.added",
+          "at": "2026-11-14T09:41:09.102Z",
+          "actor": {
+            "kind": "system"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "Evidence added: Policy check (stub)",
+          "details": {
+            "evidenceId": "ev_2749eaa5-3478-4a3b-8d32-94f3c7a1cda9",
+            "kind": "policy_ref"
+          }
+        },
+        {
+          "id": "aud_1d67a7f2-1488-45d1-8347-898911382b75",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "mock.integration_used",
+          "at": "2026-11-14T09:41:09.102Z",
+          "actor": {
+            "kind": "system"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "MOCK: Northwind KYC standards evaluated against fixture corpus",
+          "details": {
+            "mockLabel": "standards-stub"
+          }
+        },
+        {
+          "id": "aud_541cf747-a747-46c9-b56f-11f3d1ef47c5",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.completed",
+          "at": "2026-11-14T09:41:09.102Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "standards"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "Task completed: Standards compliance"
+        },
+        {
+          "id": "aud_d799b3a4-92c8-4419-8e27-96c3ff31c163",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.completed",
+          "at": "2026-11-14T09:41:09.103Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "standards"
+          },
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "message": "Agent completed: standards"
+        },
+        {
+          "id": "aud_630c4dd7-584f-40cb-bc3b-86142de2e2d3",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "evidence.added",
+          "at": "2026-11-14T09:41:09.103Z",
+          "actor": {
+            "kind": "system"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "Evidence added: Security scan (stub)",
+          "details": {
+            "evidenceId": "ev_9248d421-6983-4231-adee-1029e40041c6",
+            "kind": "advisory"
+          }
+        },
+        {
+          "id": "aud_45b63d4a-9308-440a-9c6e-5df809328628",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "mock.integration_used",
+          "at": "2026-11-14T09:41:09.103Z",
+          "actor": {
+            "kind": "system"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "MOCK: No release-blocking advisories in fixture scan",
+          "details": {
+            "mockLabel": "security-stub"
+          }
+        },
+        {
+          "id": "aud_c4abbe08-070e-407e-8155-b7e4b2045036",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.completed",
+          "at": "2026-11-14T09:41:09.103Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "security"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "Task completed: Security review"
+        },
+        {
+          "id": "aud_2d2407bf-ced4-49c3-b69b-48f4d17ef09f",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.completed",
+          "at": "2026-11-14T09:41:09.103Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "security"
+          },
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "message": "Agent completed: security"
+        },
+        {
+          "id": "aud_339a09b4-3a7a-47f1-8916-7577353e538a",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "run.updated",
+          "at": "2026-11-14T09:41:09.104Z",
+          "actor": {
+            "kind": "system"
+          },
+          "message": "Run updated",
+          "details": {
+            "keys": [
+              "metadata"
+            ]
+          }
+        },
+        {
+          "id": "aud_a72948dc-0af8-45c1-8e88-51531f1ed9d3",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "checkpoint.passed",
+          "at": "2026-11-14T09:41:09.104Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "message": "Checkpoint specialist_analysis passed (cycle 0)",
+          "details": {
+            "checkpointId": "checkpoint_specialist_analysis_8_1794649269104",
+            "stage": "specialist_analysis",
+            "cycle": 0,
+            "issues": [],
+            "evidence": {
+              "taskIds": [
+                "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+                "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+                "task_2fc08594-7110-4e99-9e3d-32e68939aa41"
+              ],
+              "blockingIssues": []
+            }
+          }
+        },
+        {
+          "id": "aud_e813c3cb-8b39-4ab0-a00b-d48d0f3f3165",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "run.updated",
+          "at": "2026-11-14T09:41:09.104Z",
+          "actor": {
+            "kind": "system"
+          },
+          "message": "Run updated",
+          "details": {
+            "keys": [
+              "metadata"
+            ]
+          }
+        },
+        {
+          "id": "aud_a93bfcc6-7ebf-45f7-9b5f-0c6f7b71aa51",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "human.approval_requested",
+          "at": "2026-11-14T09:41:09.104Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "message": "Human approval requested for release: Release decision requires human approval",
+          "details": {
+            "gateId": "approval_release_7_1794649269104",
+            "kind": "release"
+          }
+        },
+        {
+          "id": "aud_d556ba6f-be1b-4245-873f-49da6d74d3e2",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "run.updated",
+          "at": "2026-11-14T09:41:09.105Z",
+          "actor": {
+            "kind": "system"
+          },
+          "message": "Run updated",
+          "details": {
+            "keys": [
+              "metadata"
+            ]
+          }
+        },
+        {
+          "id": "aud_387d3089-cc84-4303-a5cc-dfee68b6b182",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "human.approval_requested",
+          "at": "2026-11-14T09:41:09.105Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "message": "Human approval requested for merge: Merge decision requires human approval (never auto-merge)",
+          "details": {
+            "gateId": "approval_merge_8_1794649269104",
+            "kind": "merge"
+          }
+        },
+        {
+          "id": "aud_6de7b6e0-665e-46ef-a7aa-848b1369bb46",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.created",
+          "at": "2026-11-14T09:41:09.105Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+          "message": "Task created: Lead consolidation",
+          "details": {
+            "status": "ready",
+            "dependsOn": []
+          }
+        },
+        {
+          "id": "aud_4e35bef0-5e0c-4cbb-941f-428f3324b849",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.started",
+          "at": "2026-11-14T09:41:09.106Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+          "message": "Task started: Lead consolidation"
+        },
+        {
+          "id": "aud_5bffbc67-a4c8-4c2a-b3af-74cb18fecfbd",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.invoked",
+          "at": "2026-11-14T09:41:09.106Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+          "message": "Agent invoked: lead"
+        },
+        {
+          "id": "aud_71fd41f3-b022-4927-9055-cdb55869369a",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "task.completed",
+          "at": "2026-11-14T09:41:09.107Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+          "message": "Task completed: Lead consolidation"
+        },
+        {
+          "id": "aud_e7c5ff32-1c31-4be5-92e5-01140ba5af29",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "agent.completed",
+          "at": "2026-11-14T09:41:09.107Z",
+          "actor": {
+            "kind": "agent",
+            "agentRole": "lead"
+          },
+          "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+          "message": "Agent completed: lead"
+        },
+        {
+          "id": "aud_f457f528-0bbe-428a-aff5-23bb4a2892dc",
+          "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+          "action": "run.completed",
+          "at": "2026-11-14T09:41:09.107Z",
+          "actor": {
+            "kind": "system"
+          },
+          "message": "Lead readiness: needs_human. Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human"
+        }
+      ],
+      "metadata": {
+        "trigger": {
+          "kind": "on_demand",
+          "requestedBy": "demo-fixture-generator",
+          "notes": "Recorded fixture for scenario pending-approval"
+        },
+        "leadAgent": "lead",
+        "approvals": {
+          "gates": [
+            {
+              "id": "approval_release_7_1794649269104",
+              "kind": "release",
+              "status": "pending",
+              "requestedAt": "2026-11-14T09:41:09.104Z",
+              "reason": "Release decision requires human approval"
+            },
+            {
+              "id": "approval_merge_8_1794649269104",
+              "kind": "merge",
+              "status": "pending",
+              "requestedAt": "2026-11-14T09:41:09.104Z",
+              "reason": "Merge decision requires human approval (never auto-merge)"
+            }
+          ]
+        },
+        "checkpoints": {
+          "checkpoints": [
+            {
+              "id": "checkpoint_specialist_analysis_8_1794649269104",
+              "stage": "specialist_analysis",
+              "status": "passed",
+              "at": "2026-11-14T09:41:09.104Z",
+              "cycle": 0,
+              "issues": [],
+              "summary": "Checkpoint specialist_analysis passed (cycle 0)",
+              "evidence": {
+                "taskIds": [
+                  "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+                  "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+                  "task_2fc08594-7110-4e99-9e3d-32e68939aa41"
+                ],
+                "blockingIssues": []
+              }
+            }
+          ]
+        },
+        "pullRequests": {
+          "pullRequests": []
+        },
+        "prClientMode": "mock",
+        "prClientDescription": "MOCK: GitHub PR client (no GH_TOKEN/GITHUB_TOKEN)",
+        "autoMerge": false,
+        "scenarioId": "pending-approval",
+        "scenarioLabel": "Pending approval",
+        "completionSummary": "Lead readiness: needs_human. Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human"
+      },
+      "createdAt": "2026-11-14T09:41:09.099Z",
+      "updatedAt": "2026-11-14T09:41:09.107Z",
+      "completedAt": "2026-11-14T09:41:09.107Z"
+    },
+    "leadOutput": {
+      "runId": "run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce",
+      "taskId": "task_076aedd3-27be-4165-97c8-5b6470708dc3",
+      "agentRole": "lead",
+      "status": "completed",
+      "completedAt": "2026-11-14T09:41:09.106Z",
+      "summary": "Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human",
+      "evidence": [],
+      "mocksUsed": [
+        {
+          "mocked": true,
+          "mockLabel": "change-analyst-stub",
+          "note": "MOCK: Fixture change analysis; no GitHub API call"
+        },
+        {
+          "mocked": true,
+          "mockLabel": "change-analyst-stub",
+          "note": "MOCK: Reviewed head vs base with stub commit list"
+        },
+        {
+          "mocked": true,
+          "mockLabel": "standards-stub",
+          "note": "MOCK: Fixture standards check; no policy corpus loaded"
+        },
+        {
+          "mocked": true,
+          "mockLabel": "standards-stub",
+          "note": "MOCK: Northwind KYC standards evaluated against fixture corpus"
+        },
+        {
+          "mocked": true,
+          "mockLabel": "security-stub",
+          "note": "MOCK: Fixture security scan; no NVD/advisory API"
+        },
+        {
+          "mocked": true,
+          "mockLabel": "security-stub",
+          "note": "MOCK: No release-blocking advisories in fixture scan"
+        }
+      ],
+      "readiness": "needs_human",
+      "delegations": [
+        {
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "agentRole": "change_analyst",
+          "rationale": "Parallel analysis wave — Change analysis"
+        },
+        {
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "agentRole": "standards",
+          "rationale": "Parallel analysis wave — Standards compliance"
+        },
+        {
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "agentRole": "security",
+          "rationale": "Parallel analysis wave — Security review"
+        }
+      ],
+      "blockingIssues": [],
+      "remediationRecommended": false
+    },
+    "assessment": {
+      "readiness": "needs_human",
+      "blockingIssues": [],
+      "remediationRecommended": false,
+      "specialists": [
+        {
+          "role": "change_analyst",
+          "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+          "status": "completed",
+          "summary": "MOCK: Change analysis complete (stub)",
+          "output": {
+            "summary": "MOCK: Change analysis complete (stub)",
+            "agentRole": "change_analyst",
+            "releaseNotesDraft": "MOCK: Stub release notes: KYC demo + shared contracts; no real git history inspected.",
+            "findings": [
+              {
+                "path": "apps/kyc",
+                "changeType": "modified",
+                "impact": "low",
+                "summary": "MOCK: KYC app paths touched (stub)"
+              }
+            ],
+            "overallImpact": "low",
+            "commitsReviewed": 0,
+            "evidence": [
+              {
+                "id": "ev_5ee7a62f-14a2-41ae-b05e-c4e7499e50fd",
+                "kind": "diff",
+                "title": "Change summary (stub)",
+                "summary": "MOCK: Reviewed head vs base with stub commit list",
+                "source": "change_analyst",
+                "createdAt": "2026-11-14T09:41:09.101Z",
+                "mock": {
+                  "mocked": true,
+                  "mockLabel": "change-analyst-stub",
+                  "note": "MOCK: Reviewed head vs base with stub commit list"
+                }
+              }
+            ],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "change-analyst-stub",
+                "note": "MOCK: Fixture change analysis; no GitHub API call"
+              }
+            ]
+          }
+        },
+        {
+          "role": "standards",
+          "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+          "status": "completed",
+          "summary": "MOCK: Standards check complete (stub) — compliant",
+          "output": {
+            "summary": "MOCK: Standards check complete (stub) — compliant",
+            "agentRole": "standards",
+            "compliant": true,
+            "deviations": [],
+            "policiesChecked": [
+              "MOCK:northwind-kyc-baseline"
+            ],
+            "evidence": [
+              {
+                "id": "ev_26878a64-8414-4eac-87f6-5141b25cbcc6",
+                "kind": "policy_ref",
+                "title": "Policy check (stub)",
+                "summary": "MOCK: Northwind KYC standards evaluated against fixture corpus",
+                "source": "standards",
+                "createdAt": "2026-11-14T09:41:09.101Z",
+                "mock": {
+                  "mocked": true,
+                  "mockLabel": "standards-stub",
+                  "note": "MOCK: Northwind KYC standards evaluated against fixture corpus"
+                }
+              }
+            ],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "standards-stub",
+                "note": "MOCK: Fixture standards check; no policy corpus loaded"
+              }
+            ]
+          }
+        },
+        {
+          "role": "security",
+          "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+          "status": "completed",
+          "summary": "MOCK: Security check complete (stub) — risk none",
+          "output": {
+            "summary": "MOCK: Security check complete (stub) — risk none",
+            "agentRole": "security",
+            "findings": [],
+            "releaseBlockingCount": 0,
+            "riskLevel": "none",
+            "evidence": [
+              {
+                "id": "ev_dcb24bbb-e78b-4e9c-b699-826ca3b87556",
+                "kind": "advisory",
+                "title": "Security scan (stub)",
+                "summary": "MOCK: No release-blocking advisories in fixture scan",
+                "source": "security",
+                "createdAt": "2026-11-14T09:41:09.101Z",
+                "mock": {
+                  "mocked": true,
+                  "mockLabel": "security-stub",
+                  "note": "MOCK: No release-blocking advisories in fixture scan"
+                }
+              }
+            ],
+            "mocksUsed": [
+              {
+                "mocked": true,
+                "mockLabel": "security-stub",
+                "note": "MOCK: Fixture security scan; no NVD/advisory API"
+              }
+            ]
+          }
+        }
+      ],
+      "summary": "Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human"
+    },
+    "delegations": [
+      {
+        "taskId": "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+        "agentRole": "change_analyst",
+        "rationale": "Parallel analysis wave — Change analysis"
+      },
+      {
+        "taskId": "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+        "agentRole": "standards",
+        "rationale": "Parallel analysis wave — Standards compliance"
+      },
+      {
+        "taskId": "task_2fc08594-7110-4e99-9e3d-32e68939aa41",
+        "agentRole": "security",
+        "rationale": "Parallel analysis wave — Security review"
+      }
+    ],
+    "approvals": {
+      "gates": [
+        {
+          "id": "approval_release_7_1794649269104",
+          "kind": "release",
+          "status": "pending",
+          "requestedAt": "2026-11-14T09:41:09.104Z",
+          "reason": "Release decision requires human approval"
+        },
+        {
+          "id": "approval_merge_8_1794649269104",
+          "kind": "merge",
+          "status": "pending",
+          "requestedAt": "2026-11-14T09:41:09.104Z",
+          "reason": "Merge decision requires human approval (never auto-merge)"
+        }
+      ]
+    },
+    "checkpoints": {
+      "checkpoints": [
+        {
+          "id": "checkpoint_specialist_analysis_8_1794649269104",
+          "stage": "specialist_analysis",
+          "status": "passed",
+          "at": "2026-11-14T09:41:09.104Z",
+          "cycle": 0,
+          "issues": [],
+          "summary": "Checkpoint specialist_analysis passed (cycle 0)",
+          "evidence": {
+            "taskIds": [
+              "task_98a14f88-e63a-4ab6-bdf6-f2b159751a60",
+              "task_4a4b8d94-b6a1-405b-a413-e172a3ee308d",
+              "task_2fc08594-7110-4e99-9e3d-32e68939aa41"
+            ],
+            "blockingIssues": []
+          }
+        }
+      ]
+    },
+    "pullRequests": {
+      "pullRequests": []
+    },
+    "dmSession": {
+      "messages": [
+        {
+          "channel": "text",
+          "role": "dm",
+          "text": "Start on_demand release check for vishamathur/mvp-releasedesk",
+          "at": "2026-11-14T09:41:09.099Z"
+        },
+        {
+          "channel": "text",
+          "role": "lead",
+          "text": "Starting release check: Demo: pending DM approval gates for Northwind KYC",
+          "at": "2026-11-14T09:41:09.099Z"
+        },
+        {
+          "channel": "text",
+          "role": "lead",
+          "text": "Release check run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce finished — readiness: needs_human",
+          "at": "2026-11-14T09:41:09.108Z"
+        }
+      ]
+    }
+  },
+  "dmSession": {
+    "messages": [
+      {
+        "channel": "text",
+        "role": "dm",
+        "text": "Start on_demand release check for vishamathur/mvp-releasedesk",
+        "at": "2026-11-14T09:41:09.099Z"
+      },
+      {
+        "channel": "text",
+        "role": "lead",
+        "text": "Starting release check: Demo: pending DM approval gates for Northwind KYC",
+        "at": "2026-11-14T09:41:09.099Z"
+      },
+      {
+        "channel": "text",
+        "role": "lead",
+        "text": "Release check run_63ac72f2-3840-40af-a5c5-cbfb30fb09ce finished — readiness: needs_human",
+        "at": "2026-11-14T09:41:09.108Z"
+      }
+    ]
+  }
+}

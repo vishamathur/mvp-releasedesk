@@ -10,6 +10,7 @@ This repository currently includes:
 - **Milestone 4** — specialist agents (`packages/releasedesk-specialists`)
 - **Milestone 5** — Builder → Cursor Cloud Agents (Coding / Testing / Review; MOCK by default)
 - **Milestone 6** — Verification checkpoints, remediation loops, PR workflow + human gates
+- **Milestone 7** — Release Desk UI + demo scenarios (`apps/releasedesk`)
 
 License: [GPL-3.0](./LICENSE).
 
@@ -23,16 +24,29 @@ npm run seed
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) for KYC.
+
+**Release Desk UI (M7):**
+
+```bash
+npm run build:core && npm run build:lead
+npm run generate:demos
+npm run desk
+```
+
+Open [http://localhost:3001](http://localhost:3001).
 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the KYC app (Next.js) on port 3000 |
+| `npm run desk` | Start Release Desk UI on port **3001** |
 | `npm run seed` | Load sample applications into the local JSON store |
-| `npm test` | Run KYC + core + lead + specialists unit tests |
-| `npm run test:kyc` / `npm run test:core` / `npm run test:lead` / `npm run test:specialists` | Workspace-scoped tests |
+| `npm test` | Run KYC + core + lead + specialists + desk unit tests |
+| `npm run test:kyc` / `npm run test:core` / `npm run test:lead` / `npm run test:specialists` / `npm run test:desk` | Workspace-scoped tests |
 | `npm run build` / `npm start` | Production build and serve KYC |
+| `npm run build:desk` / `npm run start:desk` | Production build and serve Release Desk UI |
 | `npm run build:core` / `npm run build:lead` / `npm run build:specialists` | Compile packages to `dist/` |
+| `npm run generate:demos` | Record demo run-context fixtures via Lead orchestrator |
 | `npm run check:release -- --repo owner/name` | On-demand Lead + specialists release check (CLI) |
 | `npm run check:release:stubs -- --repo owner/name` | Same flow with M3 MOCK stub runners |
 
@@ -58,13 +72,12 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```
 apps/
-  kyc/                      # Northwind Bank KYC (Milestone 1)
+  kyc/                        # Northwind Bank KYC (Milestone 1)
+  releasedesk/                # Release Desk UI + demos (Milestone 7)
 packages/
   releasedesk-core/           # Shared run context + agent contracts (Milestone 2)
   releasedesk-lead/           # Lead orchestrator + verification/PR workflow (M3 + M6)
   releasedesk-specialists/    # Specialists + Builder Cloud Agents (M4–M5)
-# later (not in this PR):
-#   releasedesk/            # Orchestration / UI (M7)
 ```
 
 Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/runtime packages out of `apps/kyc` so release-check tooling can land beside the demo app without a rewrite.
@@ -137,15 +150,27 @@ npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --js
 
 See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.md).
 
+## Milestone 7 — Release Desk UI + demo scenarios
+
+App: [`apps/releasedesk`](./apps/releasedesk/) (`@releasedesk/ui`).
+
+- Delivery-manager surface for consolidated release readiness from Lead runs
+- Start on-demand checks; inspect specialists, checkpoints, cloud handoffs, PRs, audit trail
+- Human approve/reject for merge + release (never auto-merges)
+- Demo scenarios: happy path, remediation loop, blocked-on-security, pending approval
+- UI driven by real orchestrator outputs / recorded `fixtures/demos/*.json` — not fake agent chat
+- MOCK integrations clearly labeled (stubs, GitHub PR client, voice)
+
+```bash
+npm run desk
+# Demo script: apps/releasedesk/README.md
+```
+
 ## KYC domain snapshot
 
 - Statuses: `draft` → `submitted` → `in_review` → `approved` | `rejected` | `needs_info`
 - Required docs to submit: one government ID (`passport` \| `national_id` \| `drivers_license`) + `proof_of_address`
 - Persistence: `apps/kyc/data/store.json` (gitignored; recreated by seed)
-
-## Later milestones (out of scope here)
-
-- Release Desk UI and demo scenarios (M7)
 
 ## GPL-3.0
 
