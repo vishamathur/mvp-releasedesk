@@ -32,6 +32,14 @@ export const AuditActionSchema = z.enum([
   "human.approval_requested",
   "human.approval_recorded",
   "mock.integration_used",
+  /** Milestone 6 — verification checkpoints + PR workflow */
+  "checkpoint.passed",
+  "checkpoint.failed",
+  "remediation.cycle_started",
+  "pr.opened",
+  "pr.tracked",
+  "pr.status_polled",
+  "pr.merge_blocked",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;

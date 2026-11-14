@@ -22,6 +22,15 @@ export type ReadinessAssessment = {
   summary: string;
 };
 
+/** Structural checkpoint trail (avoids circular import with verification.ts). */
+export type ReadinessCheckpointTrail = {
+  checkpoints: Array<{
+    stage: string;
+    status: "passed" | "failed";
+    issues: Array<{ code: string; message: string; remediable: boolean }>;
+  }>;
+};
+
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -59,6 +68,8 @@ export function assessReadiness(input: {
   approvals?: ApprovalRecord;
   /** When true, treat open remediation findings as recommending builder work. */
   considerRemediation?: boolean;
+  /** Latest checkpoint trail (M6) — failed terminal checkpoints add blockers. */
+  checkpoints?: ReadinessCheckpointTrail;
 }): ReadinessAssessment {
   const allSpecialists = input.tasks.filter((t) => t.agentRole !== "lead");
   /** Builder history is informative; readiness uses latest per role. */
@@ -120,6 +131,20 @@ export function assessReadiness(input: {
       if (impact === "high") {
         remediationRecommended = true;
       }
+    }
+
+    if (task.agentRole === "builder" && asBoolean(out.testsPassed) === false) {
+      blockingIssues.push("Builder: Cloud Agent testsPassed=false");
+      remediationRecommended = true;
+    }
+  }
+
+  const latestCheckpoint = input.checkpoints?.checkpoints.at(-1);
+  if (latestCheckpoint?.status === "failed") {
+    for (const issue of latestCheckpoint.issues) {
+      const msg = `Checkpoint ${latestCheckpoint.stage}: ${issue.message}`;
+      if (!blockingIssues.includes(msg)) blockingIssues.push(msg);
+      if (issue.remediable) remediationRecommended = true;
     }
   }
 

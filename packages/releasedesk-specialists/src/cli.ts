@@ -26,7 +26,7 @@ type CliArgs = {
 };
 
 function printHelp(): void {
-  console.log(`Release Desk — Lead + specialist agents on-demand check (M4)
+  console.log(`Release Desk — Lead + specialists on-demand check (M6)
 
 Usage:
   releasedesk-check --repo <owner/name> [options]
@@ -42,9 +42,9 @@ Options:
   --json                  Print full JSON report
   -h, --help              Show help
 
-Uses real specialist runners (Change Analyst / Standards / Security / Builder).
-External APIs (Grok, NVD, Cursor Cloud) are MOCK-labeled when credentials are unavailable.
-Human approval gates are requested but not auto-approved.
+Uses specialist runners + Lead verification checkpoints + PR workflow.
+External APIs (Grok, NVD, Cursor Cloud, GitHub) are MOCK-labeled when credentials are unavailable.
+Human approval gates are requested but never auto-approved / never auto-merged.
 `);
 }
 
@@ -143,7 +143,10 @@ async function main(): Promise<void> {
       baseRef: args.base,
       headRef: args.head,
     },
-    trigger: { requestedBy: "cli", notes: "On-demand check via specialists CLI (M4)" },
+    trigger: {
+      requestedBy: "cli",
+      notes: "On-demand check via specialists CLI (M6 verification + PR workflow)",
+    },
   });
 
   if (args.json) {
@@ -156,6 +159,9 @@ async function main(): Promise<void> {
           remediationRecommended: report.leadOutput.remediationRecommended,
           delegations: report.delegations,
           approvals: report.approvals,
+          checkpoints: report.checkpoints,
+          pullRequests: report.pullRequests,
+          autoMerge: false,
           tasks: report.run.tasks.map((t) => ({
             id: t.id,
             name: t.name,
@@ -164,6 +170,7 @@ async function main(): Promise<void> {
             summary: t.output?.summary,
           })),
           auditTrailSize: report.run.auditTrail.length,
+          auditActions: [...new Set(report.run.auditTrail.map((e) => e.action))],
           summary: report.leadOutput.summary,
         },
         null,
@@ -177,6 +184,19 @@ async function main(): Promise<void> {
   console.log(`Status:     ${report.run.status}`);
   console.log(`Readiness:  ${report.leadOutput.readiness}`);
   console.log(`Summary:    ${report.leadOutput.summary}`);
+  console.log(`Checkpoints:`);
+  for (const c of report.checkpoints.checkpoints) {
+    console.log(`  - ${c.stage} [cycle ${c.cycle}]: ${c.status}`);
+  }
+  console.log(`Pull requests:`);
+  if (report.pullRequests.pullRequests.length === 0) {
+    console.log(`  (none — no remediation PR this run)`);
+  }
+  for (const p of report.pullRequests.pullRequests) {
+    console.log(
+      `  - #${p.prNumber} ${p.url} (autoMerge=false, checks=${p.lastStatus?.checkStatus ?? "n/a"})`,
+    );
+  }
   console.log(`Delegations:${report.delegations.length}`);
   for (const d of report.delegations) {
     console.log(`  - ${d.agentRole} (${d.taskId}): ${d.rationale}`);
@@ -195,7 +215,7 @@ async function main(): Promise<void> {
   }
   console.log(`Audit events: ${report.run.auditTrail.length}`);
   console.log(
-    "\nNote: specialists use local analysis + fixture corpora. External APIs labeled MOCK: when unavailable. Human gates pending.",
+    "\nNote: checkpoints + PR workflow active (M6). External APIs labeled MOCK: when unavailable. Human gates pending — never auto-merge.",
   );
 }
 
