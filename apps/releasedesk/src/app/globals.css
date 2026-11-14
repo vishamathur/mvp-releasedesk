@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --rd-ink: #0b1210;
+  --rd-forest: #143029;
+  --rd-canopy: #1f4a3e;
+  --rd-mist: #c9d8d1;
+  --rd-brass: #c4a06a;
+  --rd-signal: #d9923b;
+  --rd-alert: #b84a3c;
+  --rd-fog: #e7efeb;
+  --background: var(--rd-fog);
+  --foreground: var(--rd-ink);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--foreground);
+  background:
+    radial-gradient(900px 520px at 8% -8%, rgba(196, 160, 106, 0.22), transparent 55%),
+    radial-gradient(800px 480px at 100% 0%, rgba(31, 74, 62, 0.18), transparent 50%),
+    linear-gradient(165deg, #dfe9e4 0%, var(--rd-fog) 42%, #d5e2dc 100%);
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(196, 160, 106, 0.35);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -14px, 0);
+  }
+}
+
+@keyframes pulse-line {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.75s ease-out both;
+}
+
+.animate-rise-delay {
+  animation: rise-in 0.85s ease-out 0.12s both;
+}
+
+.animate-rise-late {
+  animation: rise-in 0.9s ease-out 0.24s both;
+}
+
+.animate-drift {
+  animation: drift 7s ease-in-out infinite alternate;
+}
+
+.animate-pulse-line {
+  animation: pulse-line 2.8s ease-in-out infinite;
+}
+
+.hero-plane {
+  background:
+    linear-gradient(
+      118deg,
+      rgba(11, 18, 16, 0.94) 0%,
+      rgba(20, 48, 41, 0.88) 46%,
+      rgba(31, 74, 62, 0.72) 100%
+    ),
+    url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c4a06a' fill-opacity='0.06'%3E%3Cpath d='M50 50v-6h-4v6h-6v4h6v6h4v-6h6v-4h-6zm0-40V4h-4v6h-6v4h6v6h4V14h6v-4h-6zM14 50v-6H8v6H2v4h6v6h4v-6h6v-4h-6zM14 10V4H8v6H2v4h6v6h4V14h6v-4h-6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(160deg, #0b1210, #1f4a3e);
+  background-size: auto, 80px 80px, auto;
+}
+
+.mock-chip {
+  @apply inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em];
+  background: rgba(196, 160, 106, 0.18);
+  color: #8a6a35;
+  border: 1px solid rgba(196, 160, 106, 0.45);
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2;
+  background: var(--rd-brass);
+  color: var(--rd-ink);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-sm font-semibold transition;
+  border-color: rgba(20, 48, 41, 0.25);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--rd-ink);
+}
+
+.btn-secondary:hover {
+  border-color: var(--rd-canopy);
+  color: var(--rd-forest);
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold text-white transition;
+  background: var(--rd-alert);
+}
+
+.btn-danger:hover {
+  filter: brightness(1.06);
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition;
+  color: rgba(11, 18, 16, 0.65);
+}
+
+.btn-ghost:hover {
+  color: var(--rd-ink);
+}
+
+.status-ready {
+  background: rgba(31, 74, 62, 0.14);
+  color: var(--rd-canopy);
+}
+
+.status-needs_human {
+  background: rgba(217, 146, 59, 0.18);
+  color: #8a5a16;
+}
+
+.status-not_ready {
+  background: rgba(184, 74, 60, 0.14);
+  color: var(--rd-alert);
+}
+
+.status-unknown {
+  background: rgba(11, 18, 16, 0.08);
+  color: rgba(11, 18, 16, 0.7);
+}
