@@ -1,6 +1,6 @@
 # `@releasedesk/specialists`
 
-Milestone 4 — **specialist Agent runners** for Release Desk.
+Milestone 4–5 — **specialist Agent runners** for Release Desk, including Builder → Cursor Cloud Agents.
 
 Implements Change Analyst, Standards, Security, and Builder as real executions that return independently recorded results for the Lead’s shared run context (not hardcoded simulated conversations).
 
@@ -15,7 +15,7 @@ npm run typecheck -w @releasedesk/specialists
 npm run build:specialists
 ```
 
-On-demand check with real specialists:
+On-demand check with real specialists (Cloud Agents default to **MOCK**):
 
 ```bash
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
@@ -34,6 +34,8 @@ const lead = new LeadOrchestrator({
   runners: createSpecialistRunners({
     workspaceRoot: process.cwd(),
     skipGrok: !process.env.XAI_API_KEY,
+    // Cloud Agents: omit to use MOCK client (CI-safe).
+    // cloudClient: createMockCloudAgentClient(),
   }),
 });
 
@@ -56,9 +58,66 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | **Change Analyst** | Local `git diff` / `git log` for `base...head`; impact heuristics; release-notes draft. Fixture notes if git empty/unavailable (`MOCK:`). |
 | **Standards** | Loads in-repo Northwind policy markdown; evaluates deviations with evidence (`policy_ref`). |
 | **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
-| **Builder** | Turns Lead remediation goals into implementation instructions + **planned** Cursor Cloud Agent handoff shapes (coding / testing / review). Tracks `proposedBranch`, `testsPassed`, `prUrl` fields (unset until M5/M6). |
+| **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
 Optional Grok enrichment via `XAI_API_KEY` / `GROK_API_KEY`. Without credentials, local analysis still runs; Grok calls are skipped or `MOCK:`-labeled.
+
+## Cursor Cloud Agents (Milestone 5)
+
+Builder plans three handoffs (`coding`, `testing`, `review`), then runs:
+
+1. **Coding** (sequential, with retries)
+2. **Testing** and **Review** in parallel after Coding completes
+
+Results land on the Builder task output / evidence / `cloudAgentAudit` trail in the shared run context. Lead human **merge** and **release** gates remain pending — Cloud Agents must not merge.
+
+### MOCK vs real client
+
+| Mode | How to enable | CI |
+| --- | --- | --- |
+| **MOCK** (default) | unset `RELEASEDESK_CLOUD_CLIENT`, or set `=mock` | Passes without Cursor credentials |
+| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** `CURSOR_API_KEY` (or `CURSOR_SERVICE_ACCOUNT_KEY`) | Not required for CI |
+
+```bash
+# Default / CI — MOCK client (same interface as real)
+npm run test:specialists
+
+# Opt-in live Cursor Cloud Agents API
+export CURSOR_API_KEY=...          # Dashboard → API Keys
+export RELEASEDESK_CLOUD_CLIENT=real
+npm run check:release -- --repo vishamathur/mvp-releasedesk --json
+```
+
+Programmatic injection (tests):
+
+```ts
+import {
+  createBuilderRunner,
+  createMockCloudAgentClient,
+  createRealCloudAgentClient,
+  resolveCloudAgentClient,
+} from "@releasedesk/specialists";
+
+createBuilderRunner({
+  cloudClient: createMockCloudAgentClient(),
+  cloudMaxAttempts: 2,
+});
+
+// Pluggable real client when credentials exist:
+resolveCloudAgentClient({
+  mode: "real",
+  real: { apiKey: process.env.CURSOR_API_KEY },
+});
+```
+
+Tracked fields on Builder output:
+
+- `proposedBranch` / `branchMetadata.proposedBranch`
+- `testsPassed` / `branchMetadata.testsPassed`
+- `proposedPrUrl` / `branchMetadata.prUrl`
+- `workItems[].status`: `planned` → `dispatched` → `completed` \| `failed`
+- `cloudAgentHandoffs[]`, `cloudAgentAudit[]`, `cloudAgentAttempts[]`
+- `branchMetadata.autoMerge: false`, `humanMergeGateRequired: true`
 
 ## Fixtures
 
@@ -76,27 +135,19 @@ packages/releasedesk-specialists/
   fixtures/
   src/
     change-analyst.ts, standards.ts, security.ts, builder.ts
+    cloud/              # MOCK + real Cursor Cloud Agent clients + dispatch
     runners.ts, git-diff.ts, policy-corpus.ts, advisories.ts
     grok.ts, cli.ts, *.test.ts
   README.md
 ```
 
-## Milestone 5 handoff — Cursor Cloud Agents
+## Milestone 6 handoff — verification loops / PR workflow
 
-Builder already emits `cloudAgentHandoffs[]` with:
+Builder now records PR metadata (`proposedPrUrl`, handoff `metadata.prUrl`, `pr_ref` evidence) and test outcomes from Cloud Agents. **M6 should:**
 
-- `agentKind`: `coding` | `testing` | `review`
-- `handoffId`, `prompt`, `acceptanceCriteria`
-- `repository`, `baseBranch`, `proposedBranch`
-- `metadata.cloudAgentApi: "not_wired"`
-- work item `status: "planned"`
+1. Drive verification / reverification loops using `testsPassed` + specialist reverify wave.
+2. Surface PR workflow (status, review comments) beyond metadata recording — still no auto-merge.
+3. Keep Lead human gates authoritative for merge/release.
+4. Optionally wire live Cloud Agent webhooks instead of poll-only.
 
-**M5 should:**
-
-1. Add a Cursor Cloud Agent client (auth, create agent run, poll status).
-2. Dispatch each planned handoff; flip work item status `planned` → `dispatched` → `completed` | `failed`.
-3. Fill `branchMetadata.testsPassed` and `prUrl` / `proposedPrUrl` from coding/testing/review results.
-4. Keep Lead human merge/release gates — Cloud Agents must not auto-merge.
-5. Record Cloud Agent run URLs as evidence (`pr_ref` / `artifact`) on the Builder task.
-
-Out of scope here: full PR merge automation UI (M6/M7), SPLX red teaming.
+Out of scope here: Release Desk UI (M7), SPLX red teaming.

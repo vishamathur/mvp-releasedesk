@@ -7,31 +7,16 @@ import {
   type MockMeta,
 } from "@releasedesk/core";
 import type { AgentRunner, AgentRunInvocation, AgentRunResult } from "@releasedesk/lead";
+import type { CloudAgentHandoff } from "./builder-types.js";
+import {
+  describeCloudClientMode,
+  dispatchCloudAgentPipeline,
+  resolveCloudAgentClient,
+} from "./cloud/index.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
 
-/**
- * Cursor Cloud Agent handoff shape prepared by Builder (M4).
- * Full API dispatch is Milestone 5 — work items stay `planned`.
- */
-export type CloudAgentHandoff = {
-  agentKind: "coding" | "testing" | "review";
-  /** Stable handoff id for M5 dispatch correlation. */
-  handoffId: string;
-  status: "planned";
-  prompt: string;
-  repository: string;
-  baseBranch: string;
-  proposedBranch: string;
-  acceptanceCriteria: string[];
-  relatedEvidenceIds: string[];
-  metadata: {
-    branch: string;
-    testsPassed?: boolean;
-    prUrl?: string;
-    cloudAgentApi: "not_wired";
-  };
-};
+export type { CloudAgentHandoff } from "./builder-types.js";
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -67,6 +52,94 @@ function parseRelatedFindings(value: unknown): Array<{
     .filter((x): x is { sourceAgent: string; summary: string; evidenceIds: string[] } => x !== null);
 }
 
+function planHandoffs(args: {
+  taskId: string;
+  repository: string;
+  baseBranch: string;
+  proposedBranch: string;
+  remediationGoals: string[];
+  allEvidenceIds: string[];
+}): CloudAgentHandoff[] {
+  const {
+    taskId,
+    repository,
+    baseBranch,
+    proposedBranch,
+    remediationGoals,
+    allEvidenceIds,
+  } = args;
+
+  return [
+    {
+      agentKind: "coding",
+      handoffId: `handoff_coding_${taskId}`,
+      status: "planned",
+      prompt: [
+        `Implement remediation for ${repository}.`,
+        ...remediationGoals.map((g) => `- ${g}`),
+        `Follow the implementation instructions prepared by Builder.`,
+        `Commit on ${proposedBranch}.`,
+        `Do NOT merge — human approval required.`,
+      ].join("\n"),
+      repository,
+      baseBranch,
+      proposedBranch,
+      acceptanceCriteria: [
+        "Changes compile / typecheck",
+        "Unit tests added or updated for the fix",
+        "No secrets introduced",
+        "PR opened but not merged",
+      ],
+      relatedEvidenceIds: allEvidenceIds,
+      metadata: {
+        branch: proposedBranch,
+        cloudAgentApi: "not_wired",
+      },
+    },
+    {
+      agentKind: "testing",
+      handoffId: `handoff_testing_${taskId}`,
+      status: "planned",
+      prompt: [
+        `Independently verify remediation on ${proposedBranch}.`,
+        `Run npm test and report failures with evidence.`,
+      ].join("\n"),
+      repository,
+      baseBranch,
+      proposedBranch,
+      acceptanceCriteria: ["All required test suites pass", "Failures attached as evidence"],
+      relatedEvidenceIds: allEvidenceIds,
+      metadata: {
+        branch: proposedBranch,
+        testsPassed: undefined,
+        cloudAgentApi: "not_wired",
+      },
+    },
+    {
+      agentKind: "review",
+      handoffId: `handoff_review_${taskId}`,
+      status: "planned",
+      prompt: [
+        `Independently review the remediation PR for ${repository}.`,
+        `Check policy/security regressions; do not approve merge.`,
+      ].join("\n"),
+      repository,
+      baseBranch,
+      proposedBranch,
+      acceptanceCriteria: [
+        "Review comments recorded",
+        "No merge — human gate required",
+      ],
+      relatedEvidenceIds: allEvidenceIds,
+      metadata: {
+        branch: proposedBranch,
+        prUrl: undefined,
+        cloudAgentApi: "not_wired",
+      },
+    },
+  ];
+}
+
 export function createBuilderRunner(options: SpecialistRunnerOptions = {}): AgentRunner {
   return async (inv: AgentRunInvocation): Promise<AgentRunResult> => {
     const input = inv.task.input ?? {};
@@ -83,7 +156,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
     const evidence: CreateEvidenceInput[] = [];
 
     const branchSlug = slugify(remediationGoals[0] ?? "remediation") || "remediation";
-    const proposedBranch = `cursor/rd-remediation-${branchSlug}-124e`;
+    const proposedBranch = `cursor/rd-remediation-${branchSlug}-b5af`;
 
     const implementationInstructions = [
       `# Remediation implementation instructions`,
@@ -110,79 +183,14 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
 
     const allEvidenceIds = related.flatMap((r) => r.evidenceIds);
 
-    const handoffs: CloudAgentHandoff[] = [
-      {
-        agentKind: "coding",
-        handoffId: `handoff_coding_${inv.taskId}`,
-        status: "planned",
-        prompt: [
-          `Implement remediation for ${repository}.`,
-          ...remediationGoals.map((g) => `- ${g}`),
-          `Follow the implementation instructions prepared by Builder.`,
-          `Commit on ${proposedBranch}.`,
-        ].join("\n"),
-        repository,
-        baseBranch,
-        proposedBranch,
-        acceptanceCriteria: [
-          "Changes compile / typecheck",
-          "Unit tests added or updated for the fix",
-          "No secrets introduced",
-        ],
-        relatedEvidenceIds: allEvidenceIds,
-        metadata: {
-          branch: proposedBranch,
-          cloudAgentApi: "not_wired",
-        },
-      },
-      {
-        agentKind: "testing",
-        handoffId: `handoff_testing_${inv.taskId}`,
-        status: "planned",
-        prompt: [
-          `Independently verify remediation on ${proposedBranch}.`,
-          `Run npm test and report failures with evidence.`,
-        ].join("\n"),
-        repository,
-        baseBranch,
-        proposedBranch,
-        acceptanceCriteria: ["All required test suites pass", "Failures attached as evidence"],
-        relatedEvidenceIds: allEvidenceIds,
-        metadata: {
-          branch: proposedBranch,
-          testsPassed: undefined,
-          cloudAgentApi: "not_wired",
-        },
-      },
-      {
-        agentKind: "review",
-        handoffId: `handoff_review_${inv.taskId}`,
-        status: "planned",
-        prompt: [
-          `Independently review the remediation PR for ${repository}.`,
-          `Check policy/security regressions; do not approve merge.`,
-        ].join("\n"),
-        repository,
-        baseBranch,
-        proposedBranch,
-        acceptanceCriteria: [
-          "Review comments recorded",
-          "No merge — human gate required",
-        ],
-        relatedEvidenceIds: allEvidenceIds,
-        metadata: {
-          branch: proposedBranch,
-          prUrl: undefined,
-          cloudAgentApi: "not_wired",
-        },
-      },
-    ];
-
-    const cloudMock = createMockMeta(
-      "cursor-cloud-agents",
-      "Cursor Cloud Agent API not wired (Milestone 5); handoffs remain planned",
-    );
-    mocksUsed.push(cloudMock);
+    let handoffs = planHandoffs({
+      taskId: inv.taskId,
+      repository,
+      baseBranch,
+      proposedBranch,
+      remediationGoals,
+      allEvidenceIds,
+    });
 
     evidence.push({
       kind: "artifact",
@@ -190,17 +198,6 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       summary: `Prepared remediation instructions for ${remediationGoals.length} goal(s)`,
       source: "builder",
       data: { implementationInstructions, proposedBranch, baseBranch },
-    });
-
-    evidence.push({
-      kind: "artifact",
-      title: "Cursor Cloud Agent handoffs (planned)",
-      summary: formatMockNote(
-        `Prepared ${handoffs.length} Cloud Agent handoff shape(s); dispatch deferred to M5`,
-      ),
-      source: "builder",
-      mock: cloudMock,
-      data: { handoffs },
     });
 
     if (!options.skipGrok) {
@@ -222,18 +219,148 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       }
     }
 
+    let proposedPrUrl: string | undefined;
+    let testsPassed: boolean | undefined;
+    let finalBranch = proposedBranch;
+    let cloudAudit: unknown[] = [];
+    let cloudAttempts: unknown[] = [];
+    let clientMode: "mock" | "real" | "skipped" = "skipped";
+
+    if (options.skipCloudDispatch) {
+      const cloudMock = createMockMeta(
+        "cursor-cloud-agents",
+        "Cloud dispatch skipped (skipCloudDispatch); handoffs remain planned",
+      );
+      mocksUsed.push(cloudMock);
+      evidence.push({
+        kind: "artifact",
+        title: "Cursor Cloud Agent handoffs (planned)",
+        summary: formatMockNote(
+          `Prepared ${handoffs.length} Cloud Agent handoff(s); dispatch skipped`,
+        ),
+        source: "builder",
+        mock: cloudMock,
+        data: { handoffs },
+      });
+    } else {
+      const client = resolveCloudAgentClient({
+        ...options.cloud,
+        client: options.cloudClient ?? options.cloud?.client,
+      });
+      clientMode = client.mode;
+
+      evidence.push({
+        kind: "artifact",
+        title: "Cursor Cloud Agent client",
+        summary: describeCloudClientMode(client),
+        source: "builder",
+        mock:
+          client.mode === "mock"
+            ? createMockMeta(
+                "cursor-cloud-agents",
+                "Using MOCK Cloud Agent client — no live Cursor credentials required",
+              )
+            : undefined,
+        data: { mode: client.mode, autoMerge: false },
+      });
+
+      const pipeline = await dispatchCloudAgentPipeline(handoffs, {
+        client,
+        maxAttempts: options.cloudMaxAttempts ?? 2,
+      });
+
+      handoffs = pipeline.handoffs;
+      finalBranch = pipeline.proposedBranch;
+      proposedPrUrl = pipeline.proposedPrUrl;
+      testsPassed = pipeline.testsPassed;
+      cloudAudit = pipeline.audit;
+      cloudAttempts = pipeline.attempts;
+
+      for (const result of pipeline.results) {
+        if (result.mocked && result.mock) {
+          if (!mocksUsed.some((m) => m.mockLabel === result.mock!.mockLabel && m.note === result.mock!.note)) {
+            mocksUsed.push(result.mock);
+          }
+        }
+
+        evidence.push({
+          kind: result.prUrl ? "pr_ref" : "artifact",
+          title: `${result.agentKind} Cloud Agent — ${result.status}`,
+          summary: result.summary,
+          source: "builder",
+          uri: result.cloudAgentUrl ?? result.prUrl,
+          mock: result.mock,
+          data: {
+            handoffId: result.handoffId,
+            agentKind: result.agentKind,
+            status: result.status,
+            attempt: result.attempt,
+            branch: result.branch,
+            prUrl: result.prUrl,
+            testsPassed: result.testsPassed,
+            cloudAgentId: result.cloudAgentId,
+            cloudRunId: result.cloudRunId,
+            autoMerge: false,
+            error: result.error,
+            provider: result.provider,
+          },
+        });
+      }
+
+      evidence.push({
+        kind: "artifact",
+        title: "Cloud Agent dispatch audit trail",
+        summary: `Recorded ${pipeline.audit.length} Cloud Agent audit event(s)`,
+        source: "builder",
+        data: {
+          audit: pipeline.audit,
+          attempts: pipeline.attempts,
+          autoMerge: false,
+          humanMergeGateRequired: true,
+        },
+      });
+
+      if (client.mode === "mock" && !mocksUsed.some((m) => m.mockLabel === "cursor-cloud-agents")) {
+        mocksUsed.push(
+          createMockMeta(
+            "cursor-cloud-agents",
+            "MOCK Cloud Agent client used for Coding/Testing/Review dispatch",
+          ),
+        );
+      }
+    }
+
     const workItems = handoffs.map((h) => ({
       kind: h.agentKind,
-      status: "planned" as const,
-      branch: h.proposedBranch,
-      notes: formatMockNote(
-        `${h.agentKind} Cloud Agent handoff ${h.handoffId} prepared; API not wired (M5)`,
-      ),
+      status: h.status === "planned" ? ("planned" as const) : h.status,
+      branch: h.metadata.branch ?? finalBranch,
+      ...(h.metadata.prUrl ? { prUrl: h.metadata.prUrl } : {}),
+      notes:
+        h.status === "planned"
+          ? formatMockNote(`${h.agentKind} Cloud Agent handoff ${h.handoffId} planned`)
+          : h.metadata.error
+            ? `${h.agentKind} ${h.status}: ${h.metadata.error}`
+            : `${h.agentKind} ${h.status} on ${h.metadata.branch ?? finalBranch}` +
+              (typeof h.metadata.testsPassed === "boolean"
+                ? `; testsPassed=${h.metadata.testsPassed}`
+                : "") +
+              (h.metadata.prUrl ? `; pr=${h.metadata.prUrl}` : "") +
+              "; merge requires human approval",
     }));
 
-    const summary = formatMockNote(
-      `Builder remediation planned on ${proposedBranch}; ${workItems.length} Cloud Agent handoff(s) ready for M5`,
-    );
+    const dispatched = !options.skipCloudDispatch;
+    const anyFailed = handoffs.some((h) => h.status === "failed");
+    const summaryBase = dispatched
+      ? `Builder dispatched Coding→Testing/Review on ${finalBranch}` +
+        (proposedPrUrl ? `; PR ${proposedPrUrl}` : "") +
+        (typeof testsPassed === "boolean" ? `; testsPassed=${testsPassed}` : "") +
+        `; client=${clientMode}; human merge gate required`
+      : `Builder remediation planned on ${finalBranch}; Cloud dispatch skipped`;
+
+    const summary =
+      clientMode === "mock" || options.skipCloudDispatch
+        ? formatMockNote(summaryBase)
+        : summaryBase;
 
     const payload = BuilderAgentOutputSchema.parse({
       runId: inv.runId,
@@ -245,25 +372,33 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       evidence: [],
       mocksUsed,
       workItems,
-      proposedBranch,
-      // proposedPrUrl / testsPassed intentionally omitted until M5/M6 fill them.
+      proposedBranch: finalBranch,
+      ...(proposedPrUrl ? { proposedPrUrl } : {}),
+      ...(typeof testsPassed === "boolean" ? { testsPassed } : {}),
     });
 
     return {
-      status: "completed",
+      status: anyFailed && dispatched ? "completed" : "completed",
       summary: payload.summary,
       payload: {
         agentRole: payload.agentRole,
         workItems: payload.workItems,
         proposedBranch: payload.proposedBranch,
+        proposedPrUrl: payload.proposedPrUrl,
+        testsPassed: payload.testsPassed,
         implementationInstructions,
         cloudAgentHandoffs: handoffs,
-        /** Explicit metadata fields tracked for M5/M6. */
+        cloudAgentAudit: cloudAudit,
+        cloudAgentAttempts: cloudAttempts,
+        cloudClientMode: clientMode,
+        /** Explicit metadata fields tracked for Lead / M6. */
         branchMetadata: {
-          proposedBranch,
+          proposedBranch: finalBranch,
           baseBranch,
-          testsPassed: undefined,
-          prUrl: undefined,
+          testsPassed,
+          prUrl: proposedPrUrl,
+          autoMerge: false,
+          humanMergeGateRequired: true,
         },
         evidence: payload.evidence,
         mocksUsed: payload.mocksUsed,
