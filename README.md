@@ -7,6 +7,7 @@ This repository currently includes:
 - **Milestone 1** — working KYC demo app (`apps/kyc`)
 - **Milestone 2** — shared execution context + agent contracts (`packages/releasedesk-core`)
 - **Milestone 3** — Lead Agent orchestrator (`packages/releasedesk-lead`)
+- **Milestone 4** — specialist agents (`packages/releasedesk-specialists`)
 
 License: [GPL-3.0](./LICENSE).
 
@@ -26,11 +27,12 @@ Open [http://localhost:3000](http://localhost:3000).
 | --- | --- |
 | `npm run dev` | Start the KYC app (Next.js) on port 3000 |
 | `npm run seed` | Load sample applications into the local JSON store |
-| `npm test` | Run KYC + core + lead unit tests |
-| `npm run test:kyc` / `npm run test:core` / `npm run test:lead` | Workspace-scoped tests |
+| `npm test` | Run KYC + core + lead + specialists unit tests |
+| `npm run test:kyc` / `npm run test:core` / `npm run test:lead` / `npm run test:specialists` | Workspace-scoped tests |
 | `npm run build` / `npm start` | Production build and serve KYC |
-| `npm run build:core` / `npm run build:lead` | Compile core / lead packages to `dist/` |
-| `npm run check:release -- --repo owner/name` | On-demand Lead release check (CLI) |
+| `npm run build:core` / `npm run build:lead` / `npm run build:specialists` | Compile packages to `dist/` |
+| `npm run check:release -- --repo owner/name` | On-demand Lead + specialists release check (CLI) |
+| `npm run check:release:stubs -- --repo owner/name` | Same flow with M3 MOCK stub runners |
 
 ## What you can do
 
@@ -56,10 +58,11 @@ Open [http://localhost:3000](http://localhost:3000).
 apps/
   kyc/                      # Northwind Bank KYC (Milestone 1)
 packages/
-  releasedesk-core/         # Shared run context + agent contracts (Milestone 2)
-  releasedesk-lead/         # Lead Agent orchestrator (Milestone 3)
+  releasedesk-core/           # Shared run context + agent contracts (Milestone 2)
+  releasedesk-lead/           # Lead Agent orchestrator (Milestone 3)
+  releasedesk-specialists/    # Change Analyst / Standards / Security / Builder (Milestone 4)
 # later (not in this PR):
-#   specialist runners      # Change Analyst / Standards / Security / Builder (M4)
+#   Cursor Cloud wiring     # Builder → Cloud Agents (M5)
 #   releasedesk/            # Orchestration / UI (M7)
 ```
 
@@ -96,7 +99,19 @@ npm run test:lead
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
 
-No full specialist implementations (M4), Cursor Cloud wiring (M5), PR automation (M6), or Release Desk UI (M7) in this milestone.
+## Milestone 4 — specialist agents
+
+Package: [`packages/releasedesk-specialists`](./packages/releasedesk-specialists/) (`@releasedesk/specialists`).
+
+- Real `AgentRunner` implementations for Change Analyst, Standards, Security, and Builder
+- Injected into Lead via `createSpecialistRunners()` — results written independently onto shared run context
+- Local git / Northwind policy fixtures / sample CVE JSON when live APIs unavailable (`MOCK:` labels)
+- Builder prepares Cursor Cloud Agent handoff shapes (`planned`); full Cloud API wiring is M5
+
+```bash
+npm run test:specialists
+npm run check:release -- --repo vishamathur/mvp-releasedesk --json
+```
 
 ## KYC domain snapshot
 
@@ -106,7 +121,6 @@ No full specialist implementations (M4), Cursor Cloud wiring (M5), PR automation
 
 ## Later milestones (out of scope here)
 
-- Specialist agent runtimes (M4)
 - Cursor Cloud Agents under Builder (M5)
 - Verification loops / PR workflow (M6)
 - Release Desk UI and demo scenarios (M7)
