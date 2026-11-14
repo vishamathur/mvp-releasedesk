@@ -2,8 +2,34 @@ export { createChangeAnalystRunner } from "./change-analyst.js";
 export { createStandardsRunner } from "./standards.js";
 export { createSecurityRunner } from "./security.js";
 export { createBuilderRunner, type CloudAgentHandoff } from "./builder.js";
+export type {
+  CloudAgentHandoffStatus,
+  CloudAgentApiMode,
+} from "./builder-types.js";
 export { createSpecialistRunners, createSpecialistRunnerMap } from "./runners.js";
 export type { SpecialistRunnerOptions } from "./options.js";
+
+export {
+  createMockCloudAgentClient,
+  createRealCloudAgentClient,
+  createUnavailableRealClientStub,
+  resolveCloudAgentClient,
+  resolveCursorApiKey,
+  describeCloudClientMode,
+  dispatchCloudAgentPipeline,
+  type CloudAgentClient,
+  type CloudAgentClientMode,
+  type CloudAgentKind,
+  type CloudAgentDispatchRequest,
+  type CloudAgentDispatchResult,
+  type CloudAgentAuditEvent,
+  type CloudDispatchAttempt,
+  type CloudPipelineOptions,
+  type CloudPipelineResult,
+  type MockCloudAgentClientOptions,
+  type RealCloudAgentClientOptions,
+  type ResolveCloudAgentClientOptions,
+} from "./cloud/index.js";
 
 export {
   collectLocalDiff,
