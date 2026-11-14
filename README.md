@@ -6,6 +6,7 @@ This repository currently includes:
 
 - **Milestone 1** — working KYC demo app (`apps/kyc`)
 - **Milestone 2** — shared execution context + agent contracts (`packages/releasedesk-core`)
+- **Milestone 3** — Lead Agent orchestrator (`packages/releasedesk-lead`)
 
 License: [GPL-3.0](./LICENSE).
 
@@ -25,10 +26,11 @@ Open [http://localhost:3000](http://localhost:3000).
 | --- | --- |
 | `npm run dev` | Start the KYC app (Next.js) on port 3000 |
 | `npm run seed` | Load sample applications into the local JSON store |
-| `npm test` | Run KYC + `@releasedesk/core` unit tests |
-| `npm run test:kyc` / `npm run test:core` | Workspace-scoped tests |
+| `npm test` | Run KYC + core + lead unit tests |
+| `npm run test:kyc` / `npm run test:core` / `npm run test:lead` | Workspace-scoped tests |
 | `npm run build` / `npm start` | Production build and serve KYC |
-| `npm run build:core` | Compile `@releasedesk/core` to `dist/` |
+| `npm run build:core` / `npm run build:lead` | Compile core / lead packages to `dist/` |
+| `npm run check:release -- --repo owner/name` | On-demand Lead release check (CLI) |
 
 ## What you can do
 
@@ -55,9 +57,10 @@ apps/
   kyc/                      # Northwind Bank KYC (Milestone 1)
 packages/
   releasedesk-core/         # Shared run context + agent contracts (Milestone 2)
+  releasedesk-lead/         # Lead Agent orchestrator (Milestone 3)
 # later (not in this PR):
-#   agents/                 # Lead + specialist agent runtimes
-#   releasedesk/            # Orchestration / UI
+#   specialist runners      # Change Analyst / Standards / Security / Builder (M4)
+#   releasedesk/            # Orchestration / UI (M7)
 ```
 
 Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/runtime packages out of `apps/kyc` so release-check tooling can land beside the demo app without a rewrite.
@@ -76,7 +79,24 @@ Package: [`packages/releasedesk-core`](./packages/releasedesk-core/) (`@released
 npm run test:core
 ```
 
-See the [package README](./packages/releasedesk-core/README.md) for how agents will plug in later. No Lead/specialist runners, Cursor Cloud wiring, or Release Desk UI in this milestone.
+See the [package README](./packages/releasedesk-core/README.md) for how agents plug in.
+
+## Milestone 3 — Lead Agent orchestrator
+
+Package: [`packages/releasedesk-lead`](./packages/releasedesk-lead/) (`@releasedesk/lead`).
+
+- Creates unique runs via `@releasedesk/core` and delegates to pluggable specialist `AgentRunner`s
+- Default specialists are **MOCK stubs** that still write real task records, evidence, and audit events
+- Parallel analysis wave; retry/failure handling; remediation + reverification loop structure
+- Human approval gates for merge/release (**not** auto-approved)
+- CLI: `npm run check:release -- --repo vishamathur/mvp-releasedesk`
+
+```bash
+npm run test:lead
+npm run check:release -- --repo vishamathur/mvp-releasedesk --json
+```
+
+No full specialist implementations (M4), Cursor Cloud wiring (M5), PR automation (M6), or Release Desk UI (M7) in this milestone.
 
 ## KYC domain snapshot
 
@@ -86,7 +106,6 @@ See the [package README](./packages/releasedesk-core/README.md) for how agents w
 
 ## Later milestones (out of scope here)
 
-- Lead Agent orchestrator (M3)
 - Specialist agent runtimes (M4)
 - Cursor Cloud Agents under Builder (M5)
 - Verification loops / PR workflow (M6)
