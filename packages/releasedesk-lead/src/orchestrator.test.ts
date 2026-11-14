@@ -10,6 +10,7 @@ import { createFlakyRunner, createDefaultStubRunners } from "./stub-runners.js";
 import type { AgentRunner } from "./agent-runner.js";
 import { assessReadiness } from "./readiness.js";
 import { allReleaseGatesApproved, getPendingGates } from "./approval.js";
+import { createMockPrClient } from "./pr/index.js";
 
 describe("LeadOrchestrator", () => {
   it("create-run → delegate → collect → readiness report (happy path)", async () => {
@@ -327,5 +328,260 @@ describe("recordHumanApproval on live run", () => {
     expect(events).toContain("human.approval_recorded");
     // silence unused
     expect(nowIso()).toBeTruthy();
+  });
+});
+
+describe("Milestone 6 — verification loops + PR workflow", () => {
+  it("fail checkpoint → remediate → pass → pending human approval", async () => {
+    const store = createInMemoryStore();
+    const stubs = createDefaultStubRunners();
+    let securityCalls = 0;
+    let builderCalls = 0;
+
+    const securityRunner: AgentRunner = async (inv) => {
+      securityCalls += 1;
+      if (securityCalls === 1) {
+        return {
+          status: "completed",
+          summary: formatMockNote("Blocking security finding"),
+          payload: {
+            agentRole: "security",
+            findings: [
+              {
+                id: "SEC-BLOCK",
+                severity: "critical",
+                title: "Fixture CVE",
+                summary: formatMockNote("Blocks release"),
+                releaseBlocking: true,
+              },
+            ],
+            releaseBlockingCount: 1,
+            riskLevel: "critical",
+          },
+          evidence: [
+            {
+              kind: "advisory",
+              title: "Blocking",
+              summary: formatMockNote("Injected blocker"),
+              source: "security",
+              mock: { mocked: true as const, mockLabel: "test-security" },
+            },
+          ],
+          mocksUsed: [{ mocked: true as const, mockLabel: "test-security" }],
+        };
+      }
+      return stubs.security(inv);
+    };
+
+    const builderRunner: AgentRunner = async (inv) => {
+      builderCalls += 1;
+      // First builder cycle: tests fail → cloud checkpoint fails → another loop.
+      if (builderCalls === 1) {
+        return {
+          status: "completed",
+          summary: formatMockNote("Builder cycle 1 — tests failed"),
+          payload: {
+            agentRole: "builder",
+            workItems: [
+              { kind: "coding", status: "completed", branch: "MOCK:fix-c1" },
+              { kind: "testing", status: "completed", branch: "MOCK:fix-c1" },
+            ],
+            proposedBranch: "MOCK:fix-c1",
+            proposedPrUrl: "https://github.com/vishamathur/mvp-releasedesk/pull/8101",
+            testsPassed: false,
+            branchMetadata: {
+              proposedBranch: "MOCK:fix-c1",
+              baseBranch: "main",
+              testsPassed: false,
+              prUrl: "https://github.com/vishamathur/mvp-releasedesk/pull/8101",
+              autoMerge: false,
+              humanMergeGateRequired: true,
+            },
+          },
+          evidence: [
+            {
+              kind: "pr_ref",
+              title: "PR c1",
+              summary: formatMockNote("tests failed"),
+              source: "builder",
+              uri: "https://github.com/vishamathur/mvp-releasedesk/pull/8101",
+            },
+          ],
+          mocksUsed: [{ mocked: true as const, mockLabel: "builder-test" }],
+        };
+      }
+      return stubs.builder(inv);
+    };
+
+    const lead = new LeadOrchestrator({
+      store,
+      maxRemediationCycles: 2,
+      enableRemediation: true,
+      prClient: { client: createMockPrClient({ startNumber: 8101 }) },
+      runners: { security: securityRunner, builder: builderRunner },
+    });
+
+    const report = await lead.startOnDemandCheck({
+      goal: "M6 verification loop",
+      target: { repository: "vishamathur/mvp-releasedesk", baseRef: "main" },
+    });
+
+    // Specialist analysis checkpoint failed, then remediation cycles ran.
+    const stages = report.checkpoints.checkpoints.map((c) => `${c.stage}:${c.status}`);
+    expect(stages[0]).toBe("specialist_analysis:failed");
+    expect(report.checkpoints.checkpoints.some((c) => c.stage === "cloud_agents")).toBe(true);
+    expect(
+      report.checkpoints.checkpoints.some(
+        (c) => c.stage === "post_remediation" && c.status === "passed",
+      ),
+    ).toBe(true);
+
+    expect(builderCalls).toBeGreaterThanOrEqual(2);
+    expect(securityCalls).toBeGreaterThanOrEqual(2);
+
+    // PR tracked / polled; never auto-merged.
+    expect(report.pullRequests.pullRequests.length).toBeGreaterThanOrEqual(1);
+    expect(report.pullRequests.pullRequests.every((p) => p.autoMerge === false)).toBe(true);
+    expect(
+      report.pullRequests.pullRequests.every((p) => p.humanMergeGateRequired === true),
+    ).toBe(true);
+
+    // Human gates pending — not auto-approved.
+    expect(report.leadOutput.readiness).toBe("needs_human");
+    expect(getPendingGates(report.approvals).length).toBe(2);
+
+    const actions = report.run.auditTrail.map((e) => e.action);
+    expect(actions).toContain("checkpoint.failed");
+    expect(actions).toContain("checkpoint.passed");
+    expect(actions).toContain("remediation.cycle_started");
+    expect(actions).toContain("pr.tracked");
+    expect(actions).toContain("pr.status_polled");
+    expect(actions).toContain("pr.merge_blocked");
+    expect(actions).toContain("human.approval_requested");
+    expect(actions).not.toContain("human.approval_recorded");
+  });
+
+  it("rejection path yields not_ready with audit-friendly report", async () => {
+    const store = createInMemoryStore();
+    const lead = new LeadOrchestrator({
+      store,
+      enableRemediation: false,
+      prClient: { mode: "mock" },
+    });
+    const report = await lead.startOnDemandCheck({
+      goal: "Rejection path",
+      target: { repository: "vishamathur/mvp-releasedesk", baseRef: "main" },
+    });
+
+    expect(report.checkpoints.checkpoints.some((c) => c.stage === "specialist_analysis")).toBe(
+      true,
+    );
+    expect(report.leadOutput.readiness).toBe("needs_human");
+
+    const releaseGate = report.approvals.gates.find((g) => g.kind === "release")!;
+    const rejected = lead.applyApprovalsToReport(report, [
+      {
+        gateId: releaseGate.id,
+        decision: "rejected",
+        decidedBy: "dm@northwind",
+        notes: "Hold release",
+      },
+    ]);
+    expect(rejected.leadOutput.readiness).toBe("not_ready");
+    expect(rejected.assessment.blockingIssues.some((b) => b.includes("rejected"))).toBe(true);
+  });
+
+  it("records audit events for checkpoints, PR workflow, and approvals", async () => {
+    const store = createInMemoryStore();
+    const lead = new LeadOrchestrator({
+      store,
+      enableRemediation: true,
+      maxRemediationCycles: 1,
+      prClient: { client: createMockPrClient() },
+    });
+
+    // Force remediation via blocking standards on first pass only.
+    const stubs = createDefaultStubRunners();
+    let standardsCalls = 0;
+    const standards: AgentRunner = async (inv) => {
+      standardsCalls += 1;
+      if (standardsCalls === 1) {
+        return {
+          status: "completed",
+          summary: formatMockNote("Non-compliant"),
+          payload: {
+            agentRole: "standards",
+            compliant: false,
+            deviations: [
+              {
+                id: "DEV-1",
+                severity: "high",
+                summary: formatMockNote("Policy gap"),
+                policyRef: "northwind-kyc-baseline",
+              },
+            ],
+            policiesChecked: ["northwind-kyc-baseline"],
+          },
+          evidence: [],
+          mocksUsed: [{ mocked: true as const, mockLabel: "standards-test" }],
+        };
+      }
+      return stubs.standards(inv);
+    };
+
+    const lead2 = new LeadOrchestrator({
+      store: createInMemoryStore(),
+      enableRemediation: true,
+      maxRemediationCycles: 1,
+      prClient: { client: createMockPrClient({ startNumber: 500 }) },
+      runners: { standards },
+    });
+
+    const report = await lead2.startOnDemandCheck({
+      goal: "Audit trail coverage",
+      target: { repository: "vishamathur/mvp-releasedesk", baseRef: "main" },
+    });
+
+    const actions = new Set(report.run.auditTrail.map((e) => e.action));
+    for (const required of [
+      "run.created",
+      "agent.invoked",
+      "mock.integration_used",
+      "checkpoint.failed",
+      "remediation.cycle_started",
+      "checkpoint.passed",
+      "pr.tracked",
+      "pr.status_polled",
+      "pr.merge_blocked",
+      "human.approval_requested",
+      "run.completed",
+    ] as const) {
+      expect(actions.has(required)).toBe(true);
+    }
+
+    // Polling interface works after completion (read-only snapshots).
+    const polled = await lead2.pollPullRequestStatus(report.runId);
+    expect(polled.length).toBeGreaterThanOrEqual(1);
+    expect(polled[0]!.lastStatus?.humanMergeGateRequired).toBe(true);
+
+    // silence unused lead from outer store construction
+    expect(lead).toBeDefined();
+  });
+
+  it("never auto-merges even when human merge gate is approved on live run", async () => {
+    const store = createInMemoryStore();
+    const lead = new LeadOrchestrator({ store, enableRemediation: false });
+    const run = await store.create({
+      goal: "merge gate",
+      target: { repository: "vishamathur/mvp-releasedesk" },
+      metadata: { approvals: { gates: [] }, pullRequests: { pullRequests: [] } },
+    });
+    const gate = await lead.requestApproval(run.runId, "merge", "test merge");
+    const { gate: decided } = await lead.recordHumanApproval(run.runId, gate.id, "approved", {
+      decidedBy: "dm",
+    });
+    expect(decided.status).toBe("approved");
+    const events = (await store.get(run.runId))!.auditTrail.map((e) => e.action);
+    expect(events).toContain("pr.merge_blocked");
   });
 });

@@ -9,6 +9,7 @@ This repository currently includes:
 - **Milestone 3** — Lead Agent orchestrator (`packages/releasedesk-lead`)
 - **Milestone 4** — specialist agents (`packages/releasedesk-specialists`)
 - **Milestone 5** — Builder → Cursor Cloud Agents (Coding / Testing / Review; MOCK by default)
+- **Milestone 6** — Verification checkpoints, remediation loops, PR workflow + human gates
 
 License: [GPL-3.0](./LICENSE).
 
@@ -60,10 +61,9 @@ apps/
   kyc/                      # Northwind Bank KYC (Milestone 1)
 packages/
   releasedesk-core/           # Shared run context + agent contracts (Milestone 2)
-  releasedesk-lead/           # Lead Agent orchestrator (Milestone 3)
+  releasedesk-lead/           # Lead orchestrator + verification/PR workflow (M3 + M6)
   releasedesk-specialists/    # Specialists + Builder Cloud Agents (M4–M5)
 # later (not in this PR):
-#   Verification / PR workflow (M6)
 #   releasedesk/            # Orchestration / UI (M7)
 ```
 
@@ -125,6 +125,18 @@ export RELEASEDESK_CLOUD_CLIENT=real
 
 Cloud Agents never auto-merge — Lead human merge/release gates stay pending. See [`packages/releasedesk-specialists/README.md`](./packages/releasedesk-specialists/README.md).
 
+## Milestone 6 — verification loops + PR workflow
+
+Lead runs **checkpoint verification** after specialist analysis and after Builder/Cloud Agent stages, drives remediation → reverify when checkpoints fail, and tracks PRs via a pluggable GitHub client (**MOCK:** by default; real when `GH_TOKEN` / `GITHUB_TOKEN` is set). Merge and release still require **explicit human approval** — never auto-merge.
+
+```bash
+npm run test:lead
+npm run check:release -- --repo vishamathur/mvp-releasedesk --json
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --json
+```
+
+See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.md).
+
 ## KYC domain snapshot
 
 - Statuses: `draft` → `submitted` → `in_review` → `approved` | `rejected` | `needs_info`
@@ -133,7 +145,6 @@ Cloud Agents never auto-merge — Lead human merge/release gates stay pending. S
 
 ## Later milestones (out of scope here)
 
-- Verification loops / PR workflow (M6)
 - Release Desk UI and demo scenarios (M7)
 
 ## GPL-3.0

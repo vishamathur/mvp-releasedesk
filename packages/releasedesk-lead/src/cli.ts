@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
- * On-demand release check CLI for the Lead Agent.
+ * On-demand release check CLI for the Lead Agent (M6: verification + PR gates).
  *
  * Usage:
- *   npm run check:release -- --repo owner/name [--base main] [--head HEAD] [--goal "..."]
- *   npx tsx packages/releasedesk-lead/src/cli.ts --repo owner/name
+ *   npm run check:release:stubs -- --repo owner/name [--base main] [--head HEAD]
+ *   npx tsx packages/releasedesk-lead/src/cli.ts --repo owner/name --json
  */
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { FileBackedRunContextStore, createInMemoryStore } from "@releasedesk/core";
 import { LeadOrchestrator } from "./orchestrator.js";
+import { resolvePrClient } from "./pr/index.js";
 
 type CliArgs = {
   repo: string;
@@ -20,10 +21,13 @@ type CliArgs = {
   storePath: string;
   json: boolean;
   help: boolean;
+  approve: boolean;
+  reject: boolean;
+  decidedBy: string;
 };
 
 function printHelp(): void {
-  console.log(`Release Desk — Lead Agent on-demand check
+  console.log(`Release Desk — Lead Agent on-demand check (M6)
 
 Usage:
   releasedesk-check --repo <owner/name> [options]
@@ -36,10 +40,14 @@ Options:
   --store memory|file   Persistence (default: memory)
   --store-path <path>   File store path (default: .releasedesk/runs.json)
   --json                Print full JSON report
+  --approve             Apply MOCK in-memory approve of merge+release gates (demo only)
+  --reject              Apply MOCK in-memory reject of release gate (demo only)
+  --decided-by <who>    Actor for --approve/--reject (default: cli)
   -h, --help            Show help
 
-Specialist runners are MOCK stubs in Milestone 3 (labeled MOCK:).
-Human approval gates are requested but not auto-approved.
+Checkpoint verification runs after specialist + cloud-agent stages.
+PR workflow uses MOCK GitHub unless GH_TOKEN/GITHUB_TOKEN is set.
+Human approval gates are requested but never auto-approved / never auto-merged.
 `);
 }
 
@@ -53,6 +61,9 @@ function parseArgs(argv: string[]): CliArgs {
     storePath: ".releasedesk/runs.json",
     json: false,
     help: false,
+    approve: false,
+    reject: false,
+    decidedBy: "cli",
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -91,6 +102,15 @@ function parseArgs(argv: string[]): CliArgs {
       case "--json":
         args.json = true;
         break;
+      case "--approve":
+        args.approve = true;
+        break;
+      case "--reject":
+        args.reject = true;
+        break;
+      case "--decided-by":
+        args.decidedBy = next();
+        break;
       default:
         if (a.startsWith("-")) throw new Error(`Unknown option: ${a}`);
         break;
@@ -111,6 +131,11 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  if (args.approve && args.reject) {
+    console.error("Error: --approve and --reject are mutually exclusive");
+    process.exitCode = 1;
+    return;
+  }
 
   const store =
     args.store === "file"
@@ -121,16 +146,46 @@ async function main(): Promise<void> {
     await mkdir(path.dirname(path.resolve(args.storePath)), { recursive: true });
   }
 
-  const lead = new LeadOrchestrator({ store });
-  const report = await lead.startOnDemandCheck({
+  const prClient = resolvePrClient();
+  const lead = new LeadOrchestrator({
+    store,
+    prClient: { client: prClient },
+  });
+  let report = await lead.startOnDemandCheck({
     goal: args.goal,
     target: {
       repository: args.repo,
       baseRef: args.base,
       headRef: args.head,
     },
-    trigger: { requestedBy: "cli", notes: "On-demand check via releasedesk-check CLI" },
+    trigger: { requestedBy: "cli", notes: "On-demand check via releasedesk-check CLI (M6)" },
   });
+
+  if (args.approve) {
+    const decisions = report.approvals.gates
+      .filter((g) => g.status === "pending")
+      .map((g) => ({
+        gateId: g.id,
+        decision: "approved" as const,
+        decidedBy: args.decidedBy,
+        notes: "CLI --approve (in-memory only; no git merge)",
+      }));
+    report = lead.applyApprovalsToReport(report, decisions);
+  } else if (args.reject) {
+    const release = report.approvals.gates.find(
+      (g) => g.kind === "release" && g.status === "pending",
+    );
+    if (release) {
+      report = lead.applyApprovalsToReport(report, [
+        {
+          gateId: release.id,
+          decision: "rejected",
+          decidedBy: args.decidedBy,
+          notes: "CLI --reject (in-memory only)",
+        },
+      ]);
+    }
+  }
 
   if (args.json) {
     console.log(
@@ -142,6 +197,10 @@ async function main(): Promise<void> {
           remediationRecommended: report.leadOutput.remediationRecommended,
           delegations: report.delegations,
           approvals: report.approvals,
+          checkpoints: report.checkpoints,
+          pullRequests: report.pullRequests,
+          prClientMode: prClient.mode,
+          autoMerge: false,
           tasks: report.run.tasks.map((t) => ({
             id: t.id,
             name: t.name,
@@ -149,6 +208,7 @@ async function main(): Promise<void> {
             status: t.status,
           })),
           auditTrailSize: report.run.auditTrail.length,
+          auditActions: [...new Set(report.run.auditTrail.map((e) => e.action))],
           summary: report.leadOutput.summary,
         },
         null,
@@ -161,7 +221,21 @@ async function main(): Promise<void> {
   console.log(`Run:        ${report.runId}`);
   console.log(`Status:     ${report.run.status}`);
   console.log(`Readiness:  ${report.leadOutput.readiness}`);
+  console.log(`PR client:  ${prClient.mode}`);
   console.log(`Summary:    ${report.leadOutput.summary}`);
+  console.log(`Checkpoints:`);
+  for (const c of report.checkpoints.checkpoints) {
+    console.log(`  - ${c.stage} [cycle ${c.cycle}]: ${c.status}`);
+  }
+  console.log(`Pull requests:`);
+  if (report.pullRequests.pullRequests.length === 0) {
+    console.log(`  (none)`);
+  }
+  for (const p of report.pullRequests.pullRequests) {
+    console.log(
+      `  - #${p.prNumber} ${p.url} (autoMerge=false, checks=${p.lastStatus?.checkStatus ?? "n/a"})`,
+    );
+  }
   console.log(`Delegations:${report.delegations.length}`);
   for (const d of report.delegations) {
     console.log(`  - ${d.agentRole} (${d.taskId}): ${d.rationale}`);
@@ -176,7 +250,10 @@ async function main(): Promise<void> {
   }
   console.log(`Audit events: ${report.run.auditTrail.length}`);
   console.log(
-    "\nNote: specialist results are MOCK stubs in Milestone 3. Human gates are pending (not auto-approved).",
+    "\nNote: never auto-merges. Use --approve/--reject for in-memory gate demos only.",
+  );
+  console.log(
+    "Full check with specialists: npm run check:release -- --repo owner/name --json",
   );
 }
 

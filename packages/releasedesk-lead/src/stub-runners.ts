@@ -134,10 +134,13 @@ export const stubBuilderRunner: AgentRunner = async (
   const goals = (inv.task.input?.remediationGoals as string[] | undefined) ?? [
     "Address specialist findings",
   ];
+  const cycle = (inv.task.input?.remediationCycle as number | undefined) ?? 1;
   const mock = createMockMeta(
     "builder-stub",
-    "Fixture remediation; Cursor Cloud Agents not wired (M5)",
+    "Fixture remediation with MOCK PR metadata (M6)",
   );
+  const proposedBranch = `MOCK:cursor/stub-remediation-c${cycle}`;
+  const proposedPrUrl = `https://github.com/vishamathur/mvp-releasedesk/pull/${8000 + cycle}`;
   const evidence = [
     mockEvidence(
       "Remediation plan (stub)",
@@ -146,26 +149,54 @@ export const stubBuilderRunner: AgentRunner = async (
       "artifact",
       "builder-stub",
     ),
+    {
+      kind: "pr_ref" as const,
+      title: "MOCK proposed PR",
+      summary: formatMockNote(`Stub PR ${proposedPrUrl}`),
+      source: "builder" as const,
+      uri: proposedPrUrl,
+      mock: createMockMeta("github-pr", "Stub Builder PR URL"),
+    },
   ];
   return {
     status: "completed",
-    summary: formatMockNote("Builder remediation planned (stub); no Cursor Cloud dispatch"),
+    summary: formatMockNote(
+      `Builder remediation complete (stub); testsPassed=true; PR ${proposedPrUrl}`,
+    ),
     payload: {
       agentRole: "builder",
       workItems: [
         {
           kind: "coding",
-          status: "planned",
-          notes: formatMockNote("Coding agent not dispatched (M5)"),
+          status: "completed",
+          branch: proposedBranch,
+          prUrl: proposedPrUrl,
+          notes: formatMockNote("Coding stub completed"),
         },
         {
           kind: "testing",
-          status: "planned",
-          notes: formatMockNote("Testing agent not dispatched (M5)"),
+          status: "completed",
+          branch: proposedBranch,
+          notes: formatMockNote("Testing stub completed; testsPassed=true"),
+        },
+        {
+          kind: "review",
+          status: "completed",
+          branch: proposedBranch,
+          notes: formatMockNote("Review stub completed"),
         },
       ],
-      proposedBranch: "MOCK:cursor/stub-remediation",
-      testsPassed: undefined,
+      proposedBranch,
+      proposedPrUrl,
+      testsPassed: true,
+      branchMetadata: {
+        proposedBranch,
+        baseBranch: "main",
+        testsPassed: true,
+        prUrl: proposedPrUrl,
+        autoMerge: false,
+        humanMergeGateRequired: true,
+      },
       evidence: evidence.map((e) => createEvidenceItem(e)),
       mocksUsed: [mock],
     },

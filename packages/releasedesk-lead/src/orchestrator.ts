@@ -33,6 +33,26 @@ import {
   replyAsLead,
   type DmSession,
 } from "./dm-interface.js";
+import {
+  checkpointNeedsRemediation,
+  evaluateCheckpoint,
+  parseCheckpointRecord,
+  type CheckpointRecord,
+  type CheckpointResult,
+  type CheckpointStage,
+} from "./verification.js";
+import {
+  describePrClientMode,
+  openAndTrackPullRequest,
+  parsePullRequestRecord,
+  pollTrackedPullRequest,
+  resolvePrClient,
+  trackExistingPullRequest,
+  type PrWorkflowClient,
+  type PullRequestRecord,
+  type ResolvePrClientOptions,
+  type TrackedPullRequest,
+} from "./pr/index.js";
 
 type LeadDelegation = {
   taskId: string;
@@ -67,6 +87,8 @@ export type ReleaseCheckReport = {
   assessment: ReadinessAssessment;
   delegations: LeadDelegation[];
   approvals: ApprovalRecord;
+  checkpoints: CheckpointRecord;
+  pullRequests: PullRequestRecord;
   dmSession: DmSession;
 };
 
@@ -74,12 +96,16 @@ export type LeadOrchestratorOptions = {
   store: RunContextStore;
   /** Defaults to MOCK stub runners for all specialists. */
   runners?: AgentRunnerMap;
-  /** Max builder → reverify cycles after the analysis wave (default 1). */
+  /** Max builder → reverify cycles after the analysis wave (default 2 for M6 loops). */
   maxRemediationCycles?: number;
   /** Per-task retry budget (default 2 attempts total). */
   defaultMaxAttempts?: number;
   /** When false, never schedule builder even if findings recommend it (default true). */
   enableRemediation?: boolean;
+  /** PR workflow client options (MOCK when no GH token). */
+  prClient?: ResolvePrClientOptions;
+  /** When false, skip opening/tracking PRs (default true). */
+  enablePrWorkflow?: boolean;
 };
 
 const ANALYSIS_ROLES: SpecialistRole[] = ["change_analyst", "standards", "security"];
@@ -97,6 +123,8 @@ export class LeadOrchestrator {
   private readonly maxRemediationCycles: number;
   private readonly defaultMaxAttempts: number;
   private readonly enableRemediation: boolean;
+  private readonly enablePrWorkflow: boolean;
+  private readonly prClient: PrWorkflowClient;
   private dmSession: DmSession;
 
   constructor(options: LeadOrchestratorOptions) {
@@ -105,9 +133,11 @@ export class LeadOrchestrator {
       ...createDefaultStubRunners(),
       ...options.runners,
     };
-    this.maxRemediationCycles = options.maxRemediationCycles ?? 1;
+    this.maxRemediationCycles = options.maxRemediationCycles ?? 2;
     this.defaultMaxAttempts = options.defaultMaxAttempts ?? 2;
     this.enableRemediation = options.enableRemediation ?? true;
+    this.enablePrWorkflow = options.enablePrWorkflow ?? true;
+    this.prClient = resolvePrClient(options.prClient);
     this.dmSession = createDmSession();
   }
 
@@ -125,6 +155,10 @@ export class LeadOrchestrator {
 
   getDmSession(): DmSession {
     return this.dmSession;
+  }
+
+  getPrClient(): PrWorkflowClient {
+    return this.prClient;
   }
 
   async startOnDemandCheck(input: Omit<StartReleaseCheckInput, "trigger"> & {
@@ -158,8 +192,9 @@ export class LeadOrchestrator {
   }
 
   /**
-   * Full path: create run → delegate specialists → collect results →
-   * optional remediation/reverify → human approval gate → readiness report.
+   * Full path: create run → delegate specialists → checkpoint verify →
+   * remediation/reverify loops → PR track/poll → human approval gates → readiness.
+   * Never auto-merges.
    */
   async startReleaseCheck(input: StartReleaseCheckInput): Promise<ReleaseCheckReport> {
     const trigger = input.trigger ?? { kind: "on_demand" as const };
@@ -183,6 +218,11 @@ export class LeadOrchestrator {
         trigger,
         leadAgent: "lead",
         approvals: { gates: [] } satisfies ApprovalRecord,
+        checkpoints: { checkpoints: [] } satisfies CheckpointRecord,
+        pullRequests: { pullRequests: [] } satisfies PullRequestRecord,
+        prClientMode: this.prClient.mode,
+        prClientDescription: describePrClientMode(this.prClient),
+        autoMerge: false,
         ...(input.metadata ?? {}),
       },
     });
@@ -192,8 +232,22 @@ export class LeadOrchestrator {
       action: "agent.invoked",
       message: "Lead Agent starting release check orchestration",
       actor: { kind: "agent", agentRole: "lead" },
-      details: { trigger, target: input.target },
+      details: {
+        trigger,
+        target: input.target,
+        prClientMode: this.prClient.mode,
+      },
     });
+
+    if (this.prClient.mode === "mock") {
+      await this.store.appendAudit({
+        runId: run.runId,
+        action: "mock.integration_used",
+        message: describePrClientMode(this.prClient),
+        actor: { kind: "system" },
+        details: { integration: "github-pr", mode: "mock" },
+      });
+    }
 
     // Wave 1: analysis specialists in parallel (no inter-dependencies).
     const delegations: LeadDelegation[] = [];
@@ -214,6 +268,9 @@ export class LeadOrchestrator {
 
     await this.dispatchUntilIdle(run.runId, runners);
 
+    // Checkpoint after specialist analysis stage.
+    let analysisCheckpoint = await this.runCheckpoint(run.runId, "specialist_analysis", 0);
+
     let cycle = 0;
     while (cycle < this.maxRemediationCycles && this.enableRemediation) {
       const current = await this.requireRun(run.runId);
@@ -223,12 +280,39 @@ export class LeadOrchestrator {
         considerRemediation: true,
       });
 
-      if (!assessment.remediationRecommended) break;
+      const checkpoints = parseCheckpointRecord(current.metadata.checkpoints).checkpoints;
+      const latestCheckpoint = checkpoints[checkpoints.length - 1] ?? analysisCheckpoint;
+
+      // After a remediation cycle, a passed post_remediation checkpoint ends the loop.
+      // Further cycles only continue when the latest checkpoint still needs remediation
+      // (e.g. testsPassed=false) — not merely because change_analyst impact is "high".
+      if (cycle > 0) {
+        if (
+          latestCheckpoint.stage === "post_remediation" &&
+          latestCheckpoint.status === "passed"
+        ) {
+          break;
+        }
+        if (!checkpointNeedsRemediation(latestCheckpoint)) {
+          break;
+        }
+      } else {
+        const needsRemediation =
+          assessment.remediationRecommended ||
+          checkpointNeedsRemediation(analysisCheckpoint);
+        if (!needsRemediation) break;
+      }
 
       cycle += 1;
-      const goals = assessment.blockingIssues.length
-        ? assessment.blockingIssues
-        : ["Address specialist findings before release"];
+      const goals = this.buildRemediationGoals(assessment, analysisCheckpoint, current);
+
+      await this.store.appendAudit({
+        runId: run.runId,
+        action: "remediation.cycle_started",
+        message: `Remediation cycle ${cycle} started`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: { cycle, goals },
+      });
 
       const { task: builderTask } = await this.store.addTask(run.runId, {
         name: `${ROLE_TASK_NAME.builder} (cycle ${cycle})`,
@@ -239,6 +323,7 @@ export class LeadOrchestrator {
           remediationGoals: goals,
           baseBranch: input.target.baseRef ?? "main",
           relatedFindings: this.collectRelatedFindings(current.tasks),
+          remediationCycle: cycle,
         },
       });
       delegations.push({
@@ -249,9 +334,19 @@ export class LeadOrchestrator {
 
       await this.dispatchUntilIdle(run.runId, runners);
 
-      // Reverification after remediation — standards + security, parallel.
+      // Checkpoint after cloud-agent / builder stage.
+      const cloudCheckpoint = await this.runCheckpoint(run.runId, "cloud_agents", cycle);
+
+      // Track / open PR from builder output (never merge).
+      if (this.enablePrWorkflow) {
+        await this.syncPullRequestFromBuilder(run.runId, input, builderTask.id);
+      }
+
+      // If cloud checkpoint fails remediably and we have cycles left, continue
+      // after reverify so the next loop can rebuild — still reverify first.
       const reverifyRoles: SpecialistRole[] = ["standards", "security"];
       for (const role of reverifyRoles) {
+        const afterBuilder = await this.requireRun(run.runId);
         const { task } = await this.store.addTask(run.runId, {
           name: `Reverify ${ROLE_TASK_NAME[role]} (cycle ${cycle})`,
           agentRole: role,
@@ -259,9 +354,10 @@ export class LeadOrchestrator {
           dependsOn: [builderTask.id],
           retry: { attempt: 0, maxAttempts: this.defaultMaxAttempts },
           input: {
-            ...this.buildSpecialistInput(role, input, current),
+            ...this.buildSpecialistInput(role, input, afterBuilder),
             reverify: true,
             remediationCycle: cycle,
+            priorCheckpointId: cloudCheckpoint.id,
           },
         });
         delegations.push({
@@ -273,18 +369,32 @@ export class LeadOrchestrator {
 
       await this.store.refreshReadyTasks(run.runId);
       await this.dispatchUntilIdle(run.runId, runners);
+
+      analysisCheckpoint = await this.runCheckpoint(run.runId, "post_remediation", cycle);
     }
 
-    // Human approval gates — modeled, never auto-approved.
+    // Final PR status poll (interface for UI / gates).
+    if (this.enablePrWorkflow) {
+      await this.pollAllTrackedPullRequests(run.runId);
+    }
+
+    // Human approval gates — modeled, never auto-approved / never auto-merged.
     await this.requestApproval(run.runId, "release", "Release decision requires human approval");
-    await this.requestApproval(run.runId, "merge", "Merge decision requires human approval");
+    await this.requestApproval(
+      run.runId,
+      "merge",
+      "Merge decision requires human approval (never auto-merge)",
+    );
 
     const finalRun = await this.requireRun(run.runId);
     const approvals = parseApprovalRecord(finalRun.metadata.approvals);
+    const checkpoints = parseCheckpointRecord(finalRun.metadata.checkpoints);
+    const pullRequests = parsePullRequestRecord(finalRun.metadata.pullRequests);
     const assessment = assessReadiness({
       tasks: finalRun.tasks,
       approvals,
       considerRemediation: this.enableRemediation,
+      checkpoints,
     });
 
     const leadTaskId =
@@ -314,7 +424,12 @@ export class LeadOrchestrator {
       remediationRecommended: assessment.remediationRecommended,
     });
 
-    await this.store.completeTask(run.runId, leadTaskId, leadOutput as unknown as Record<string, unknown>);
+    await this.store.completeTask(run.runId, leadTaskId, {
+      ...(leadOutput as unknown as Record<string, unknown>),
+      checkpoints,
+      pullRequests,
+      autoMerge: false,
+    });
 
     const completed = await this.store.complete(
       run.runId,
@@ -333,6 +448,8 @@ export class LeadOrchestrator {
       assessment,
       delegations,
       approvals,
+      checkpoints,
+      pullRequests,
       dmSession: this.dmSession,
     };
   }
@@ -366,14 +483,9 @@ export class LeadOrchestrator {
     opts?: { decidedBy?: string; notes?: string },
   ): Promise<{ run: RunContext; gate: ApprovalGate; assessment: ReadinessAssessment }> {
     const run = await this.requireRun(runId);
-    // Terminal runs: still allow recording approval against metadata via a careful path.
-    // Store.update refuses terminal runs — so we only support approval while running,
-    // OR before complete. For completed runs, callers should approve before complete
-    // in interactive flows. Here we support post-hoc by re-opening metadata only if
-    // the run is still mutable; otherwise throw a clear error.
     if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") {
       throw new Error(
-        `Run ${runId} is ${run.status}; record approvals before the Lead completes the run, or use recordApprovalOnReport`,
+        `Run ${runId} is ${run.status}; record approvals before the Lead completes the run, or use applyApprovalsToReport`,
       );
     }
 
@@ -398,10 +510,23 @@ export class LeadOrchestrator {
       details: { gateId, decision, kind: updated.kind },
     });
 
+    // Explicit merge-blocked audit when merge is approved still does not merge.
+    if (updated.kind === "merge" && decision === "approved") {
+      await this.store.appendAudit({
+        runId,
+        action: "pr.merge_blocked",
+        message:
+          "Merge approved by human gate — actual git merge is out of band (Release Desk never auto-merges)",
+        actor: { kind: "system" },
+        details: { gateId, autoMerge: false },
+      });
+    }
+
     const next = await this.requireRun(runId);
     const assessment = assessReadiness({
       tasks: next.tasks,
       approvals: record,
+      checkpoints: parseCheckpointRecord(next.metadata.checkpoints),
     });
     return { run: next, gate: updated, assessment };
   }
@@ -431,6 +556,7 @@ export class LeadOrchestrator {
     const assessment = assessReadiness({
       tasks: report.run.tasks,
       approvals,
+      checkpoints: report.checkpoints,
     });
     const leadOutput = LeadAgentOutputSchema.parse({
       ...report.leadOutput,
@@ -443,12 +569,263 @@ export class LeadOrchestrator {
     return { ...report, approvals, assessment, leadOutput };
   }
 
+  /** Poll status for all tracked PRs (public status-polling interface). */
+  async pollPullRequestStatus(
+    runId: string,
+    prNumber?: number,
+  ): Promise<TrackedPullRequest[]> {
+    const run = await this.requireRun(runId);
+    if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") {
+      // Allow polling metadata via client without mutating terminal run —
+      // return refreshed snapshots without store write.
+      const record = parsePullRequestRecord(run.metadata.pullRequests);
+      const targets = prNumber
+        ? record.pullRequests.filter((p) => p.prNumber === prNumber)
+        : record.pullRequests;
+      const updated: TrackedPullRequest[] = [];
+      for (const tracked of targets) {
+        updated.push(await pollTrackedPullRequest(this.prClient, tracked));
+      }
+      return updated;
+    }
+    await this.pollAllTrackedPullRequests(runId, prNumber);
+    const next = await this.requireRun(runId);
+    return parsePullRequestRecord(next.metadata.pullRequests).pullRequests;
+  }
+
   // --- internals ---
 
   private async requireRun(runId: string): Promise<RunContext> {
     const run = await this.store.get(runId);
     if (!run) throw new Error(`Run ${runId} not found`);
     return run;
+  }
+
+  private async runCheckpoint(
+    runId: string,
+    stage: CheckpointStage,
+    cycle: number,
+  ): Promise<CheckpointResult> {
+    const run = await this.requireRun(runId);
+    const result = evaluateCheckpoint({
+      stage,
+      tasks: run.tasks,
+      cycle,
+      approvals: parseApprovalRecord(run.metadata.approvals),
+    });
+
+    const record = parseCheckpointRecord(run.metadata.checkpoints);
+    record.checkpoints.push(result);
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, checkpoints: record },
+    });
+
+    await this.store.appendAudit({
+      runId,
+      action: result.status === "passed" ? "checkpoint.passed" : "checkpoint.failed",
+      message: result.summary,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: {
+        checkpointId: result.id,
+        stage: result.stage,
+        cycle: result.cycle,
+        issues: result.issues,
+        evidence: result.evidence,
+      },
+    });
+
+    return result;
+  }
+
+  private buildRemediationGoals(
+    assessment: ReadinessAssessment,
+    checkpoint: CheckpointResult,
+    run: RunContext,
+  ): string[] {
+    const goals: string[] = [];
+    if (assessment.blockingIssues.length) {
+      goals.push(...assessment.blockingIssues);
+    }
+    for (const issue of checkpoint.issues.filter((i) => i.remediable)) {
+      if (!goals.includes(issue.message)) goals.push(issue.message);
+    }
+    // Include failed cloud tests from latest builder if present.
+    const builders = run.tasks.filter((t) => t.agentRole === "builder");
+    const latestBuilder = builders[builders.length - 1];
+    if (latestBuilder?.output?.testsPassed === false) {
+      const msg = "Re-run / fix failing tests from Cloud Agent testing stage";
+      if (!goals.includes(msg)) goals.push(msg);
+    }
+    if (goals.length === 0) {
+      goals.push("Address specialist findings before release");
+    }
+    return goals;
+  }
+
+  private async syncPullRequestFromBuilder(
+    runId: string,
+    input: StartReleaseCheckInput,
+    builderTaskId: string,
+  ): Promise<void> {
+    const run = await this.requireRun(runId);
+    const builder = run.tasks.find((t) => t.id === builderTaskId);
+    if (!builder || builder.status !== "completed") return;
+
+    const out = builder.output ?? {};
+    const proposedPrUrl = asString(out.proposedPrUrl);
+    const proposedBranch =
+      asString(out.proposedBranch) ??
+      asString((out.branchMetadata as { proposedBranch?: unknown } | undefined)?.proposedBranch);
+    const baseBranch =
+      asString((out.branchMetadata as { baseBranch?: unknown } | undefined)?.baseBranch) ??
+      input.target.baseRef ??
+      "main";
+
+    const record = parsePullRequestRecord(run.metadata.pullRequests);
+    let tracked: TrackedPullRequest;
+
+    try {
+      if (proposedPrUrl) {
+        tracked = await trackExistingPullRequest(this.prClient, {
+          repository: input.target.repository,
+          prUrl: proposedPrUrl,
+          ...(proposedBranch ? { head: proposedBranch } : {}),
+          base: baseBranch,
+          title: `Release Desk remediation — ${input.goal}`,
+          source: "builder",
+        });
+        await this.store.appendAudit({
+          runId,
+          action: "pr.tracked",
+          message: `Tracked Builder PR ${tracked.url}`,
+          actor: { kind: "agent", agentRole: "lead" },
+          details: {
+            prNumber: tracked.prNumber,
+            url: tracked.url,
+            clientMode: tracked.clientMode,
+            autoMerge: false,
+          },
+        });
+      } else if (proposedBranch) {
+        tracked = await openAndTrackPullRequest(this.prClient, {
+          repository: input.target.repository,
+          title: `[Release Desk] ${input.goal}`,
+          body: [
+            `Automated remediation PR opened by Lead (client=${this.prClient.mode}).`,
+            "",
+            "**Never auto-merged.** Human merge + release approval gates required.",
+            "",
+            `Builder task: ${builderTaskId}`,
+            ...(this.prClient.mode === "mock" ? [formatMockNote("MOCK GitHub PR")] : []),
+          ].join("\n"),
+          head: proposedBranch,
+          base: baseBranch,
+          source: "lead",
+        });
+        await this.store.appendAudit({
+          runId,
+          action: "pr.opened",
+          message: `Opened PR ${tracked.url} for branch ${proposedBranch}`,
+          actor: { kind: "agent", agentRole: "lead" },
+          details: {
+            prNumber: tracked.prNumber,
+            url: tracked.url,
+            head: proposedBranch,
+            base: baseBranch,
+            clientMode: tracked.clientMode,
+            autoMerge: false,
+          },
+        });
+      } else {
+        return;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.store.appendAudit({
+        runId,
+        action: "pr.merge_blocked",
+        message: `PR workflow failed (non-fatal): ${message}`,
+        actor: { kind: "system" },
+        details: { error: message, autoMerge: false },
+      });
+      return;
+    }
+
+    // Refuse any attempt to auto-merge via client.
+    try {
+      await this.prClient.mergePullRequest(tracked.repository, tracked.prNumber);
+    } catch {
+      await this.store.appendAudit({
+        runId,
+        action: "pr.merge_blocked",
+        message: `Auto-merge refused for PR #${tracked.prNumber}`,
+        actor: { kind: "system" },
+        details: {
+          prNumber: tracked.prNumber,
+          url: tracked.url,
+          autoMerge: false,
+          humanMergeGateRequired: true,
+        },
+      });
+    }
+
+    const polled = await pollTrackedPullRequest(this.prClient, tracked);
+    await this.store.appendAudit({
+      runId,
+      action: "pr.status_polled",
+      message: `Polled PR #${polled.prNumber}: ${polled.lastStatus?.checkSummary ?? "ok"}`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: {
+        prNumber: polled.prNumber,
+        status: polled.lastStatus,
+        autoMerge: false,
+      },
+    });
+
+    // Replace if same number already tracked, else append.
+    const idx = record.pullRequests.findIndex((p) => p.prNumber === polled.prNumber);
+    if (idx >= 0) record.pullRequests[idx] = polled;
+    else record.pullRequests.push(polled);
+
+    const latest = await this.requireRun(runId);
+    await this.store.update(runId, {
+      metadata: { ...latest.metadata, pullRequests: record },
+    });
+  }
+
+  private async pollAllTrackedPullRequests(runId: string, prNumber?: number): Promise<void> {
+    const run = await this.requireRun(runId);
+    const record = parsePullRequestRecord(run.metadata.pullRequests);
+    if (record.pullRequests.length === 0) return;
+
+    const updated: TrackedPullRequest[] = [];
+    for (const tracked of record.pullRequests) {
+      if (prNumber !== undefined && tracked.prNumber !== prNumber) {
+        updated.push(tracked);
+        continue;
+      }
+      const polled = await pollTrackedPullRequest(this.prClient, tracked);
+      updated.push(polled);
+      await this.store.appendAudit({
+        runId,
+        action: "pr.status_polled",
+        message: `Polled PR #${polled.prNumber}: ${polled.lastStatus?.checkSummary ?? "ok"}`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: {
+          prNumber: polled.prNumber,
+          status: polled.lastStatus,
+          autoMerge: false,
+        },
+      });
+    }
+
+    const latest = await this.requireRun(runId);
+    await this.store.update(runId, {
+      metadata: {
+        ...latest.metadata,
+        pullRequests: { pullRequests: updated },
+      },
+    });
   }
 
   private buildSpecialistInput(
@@ -535,7 +912,6 @@ export class LeadOrchestrator {
           (t.status === "ready" || t.status === "pending" || t.status === "retrying"),
       );
 
-      // Also pick up retrying tasks that listReadyTasks may not include.
       const retrying = run.tasks.filter(
         (t) => isSpecialistRole(t.agentRole) && t.status === "retrying",
       );
@@ -545,7 +921,6 @@ export class LeadOrchestrator {
 
       if (toRun.length === 0) return;
 
-      // Start serially (store is not concurrency-safe), then run agents in parallel.
       const startedTasks: TaskRecord[] = [];
       for (const task of toRun) {
         if (!isSpecialistRole(task.agentRole)) continue;
@@ -590,7 +965,6 @@ export class LeadOrchestrator {
         }),
       );
 
-      // Persist results serially.
       for (const { started, result } of settled) {
         if (!result) continue;
         await this.recordTaskResult(runId, started, result);

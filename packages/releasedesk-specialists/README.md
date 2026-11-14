@@ -141,13 +141,15 @@ packages/releasedesk-specialists/
   README.md
 ```
 
-## Milestone 6 handoff — verification loops / PR workflow
+## Milestone 6 — consumed by Lead
 
-Builder now records PR metadata (`proposedPrUrl`, handoff `metadata.prUrl`, `pr_ref` evidence) and test outcomes from Cloud Agents. **M6 should:**
+Builder `proposedPrUrl` / `testsPassed` / `pr_ref` evidence feed Lead checkpoint verification and PR tracking in `@releasedesk/lead` (MOCK GitHub or real via `GH_TOKEN`/`GITHUB_TOKEN`). Human merge/release gates remain authoritative — never auto-merge.
 
-1. Drive verification / reverification loops using `testsPassed` + specialist reverify wave.
-2. Surface PR workflow (status, review comments) beyond metadata recording — still no auto-merge.
-3. Keep Lead human gates authoritative for merge/release.
-4. Optionally wire live Cloud Agent webhooks instead of poll-only.
+## Milestone 7 handoff — Release Desk UI
 
-Out of scope here: Release Desk UI (M7), SPLX red teaming.
+1. Render Lead `checkpoints`, `pullRequests`, `approvals`, and audit trail in the UI.
+2. Demo: fail checkpoint → remediate → pass → pending human approval; rejection path.
+3. Poll PR status via `lead.pollPullRequestStatus(runId)`.
+4. Do not call merge APIs from the UI — gate decisions only.
+
+Out of scope here: SPLX red teaming.

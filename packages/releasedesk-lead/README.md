@@ -1,10 +1,10 @@
 # `@releasedesk/lead`
 
-Milestone 3 — **Lead Agent orchestrator** for Release Desk.
+Lead Agent orchestrator for Release Desk (Milestones 3 + 6).
 
-Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default), records independent task results/evidence/failures, orchestrates remediation + reverification, models human approval gates, and consolidates release readiness.
+Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default), runs **checkpoint verification** after specialist and cloud-agent stages, drives **remediation → reverify** loops, tracks **PR workflow** (MOCK GitHub or real via token), models **human approval gates** (never auto-merge), and consolidates release readiness with a full audit trail.
 
-Default runners remain MOCK stubs. Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for Milestone 4+ (Builder Cloud Agents in M5). PR automation (M6) and Release Desk UI (M7) remain out of scope here.
+Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for real specialists + Builder Cloud Agents. Release Desk UI is Milestone 7.
 
 ## Install / test
 
@@ -20,29 +20,59 @@ npm run build:lead
 ## On-demand check (CLI)
 
 ```bash
-npm run check:release -- --repo vishamathur/mvp-releasedesk --base main --head HEAD
+# Stubs (this package)
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
+
+# Demo human gates in-memory (no git merge)
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --json
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --reject --json
+
+# Full specialists path (root alias → @releasedesk/specialists)
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
+
+### Full check with gates
+
+1. Run `npm run check:release -- --repo vishamathur/mvp-releasedesk --json`
+2. Inspect `checkpoints`, `pullRequests`, and pending `approvals`
+3. Apply human decisions via `applyApprovalsToReport` / CLI `--approve|--reject` (in-memory) — **never auto-merges**
 
 File-backed store:
 
 ```bash
-npm run check:release -- --repo vishamathur/mvp-releasedesk --store file --store-path .releasedesk/runs.json
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --store file --store-path .releasedesk/runs.json
 ```
+
+## PR workflow (MOCK vs real GitHub)
+
+| Mode | Env |
+| --- | --- |
+| MOCK (default) | unset `GH_TOKEN` / `GITHUB_TOKEN` |
+| real | `GH_TOKEN` or `GITHUB_TOKEN` set |
+
+```ts
+import {
+  LeadOrchestrator,
+  createMockPrClient,
+  resolvePrClient,
+} from "@releasedesk/lead";
+
+new LeadOrchestrator({
+  store,
+  prClient: { client: createMockPrClient() }, // tests
+  // or omit → resolvePrClient() from env
+});
+```
+
+`mergePullRequest` always throws. Lead records `pr.merge_blocked` and requires the human merge gate.
 
 ## Programmatic API
 
 ```ts
 import { createInMemoryStore } from "@releasedesk/core";
-import { LeadOrchestrator, createDefaultStubRunners } from "@releasedesk/lead";
+import { LeadOrchestrator } from "@releasedesk/lead";
 
-const store = createInMemoryStore();
-const lead = new LeadOrchestrator({
-  store,
-  // Optional: inject real/specialist runners (defaults = MOCK stubs)
-  runners: createDefaultStubRunners(),
-});
-
+const lead = new LeadOrchestrator({ store: createInMemoryStore() });
 const report = await lead.startOnDemandCheck({
   goal: "Release readiness for Northwind KYC",
   target: {
@@ -53,39 +83,21 @@ const report = await lead.startOnDemandCheck({
 });
 
 console.log(report.runId, report.leadOutput.readiness);
+console.log(report.checkpoints, report.pullRequests, report.approvals);
 ```
-
-### Pluggable `AgentRunner`
-
-```ts
-import type { AgentRunner } from "@releasedesk/lead";
-
-const mySecurity: AgentRunner = async ({ runId, taskId, task, run }) => ({
-  status: "completed",
-  summary: "Security review complete",
-  payload: {
-    agentRole: "security",
-    findings: [],
-    releaseBlockingCount: 0,
-    riskLevel: "none",
-  },
-  evidence: [/* CreateEvidenceInput */],
-});
-```
-
-Runners **must not** mutate the store. The Lead starts/completes/fails tasks and appends evidence so results stay independently recorded on the run context.
 
 ## What this package does
 
 | Concern | Behavior |
 | --- | --- |
 | Unique run IDs | Via `@releasedesk/core` store / `run_` ids |
-| Parallel dispatch | Analysis wave (`change_analyst`, `standards`, `security`) via `Promise.all` |
-| Task status + evidence | Real store mutations; stubs still write evidence labeled `MOCK:` |
-| Retry / failure | `failTask` + retry budget; flaky runners covered in tests |
-| Remediation loop | Optional builder task + standards/security reverify |
-| Human gates | `merge` + `release` approvals requested; **never** auto-approved |
-| DM interface | Text primary; voice stub returns `MOCK:` messages |
+| Parallel dispatch | Analysis wave via `Promise.all` |
+| Checkpoint verification | After `specialist_analysis`, `cloud_agents`, `post_remediation` |
+| Remediation loop | Builder + standards/security reverify when checkpoints fail |
+| PR workflow | Open/track/poll; MOCK or real GitHub; never auto-merge |
+| Task status + evidence | Real store mutations; stubs labeled `MOCK:` |
+| Retry / failure | `failTask` + retry budget; recorded in audit |
+| Human gates | `merge` + `release`; **never** auto-approved |
 | Readiness | `ready` \| `not_ready` \| `needs_human` \| `unknown` |
 
 ## Layout
@@ -93,21 +105,17 @@ Runners **must not** mutate the store. The Lead starts/completes/fails tasks and
 ```
 packages/releasedesk-lead/
   src/
-    agent-runner.ts    # Pluggable runner interface
-    stub-runners.ts    # MOCK specialist stubs
-    approval.ts        # Human approval gate model
-    readiness.ts       # Consolidated readiness assessment
-    dm-interface.ts    # Text + MOCK voice
-    orchestrator.ts    # LeadOrchestrator
-    cli.ts             # On-demand CLI
+    agent-runner.ts, stub-runners.ts, approval.ts, readiness.ts
+    verification.ts       # Checkpoint evaluation (M6)
+    pr/                   # GitHub PR client MOCK + real (M6)
+    dm-interface.ts, orchestrator.ts, cli.ts, index.ts
     *.test.ts
   README.md
 ```
 
-## Handoff notes for Milestone 4 (specialists)
+## Handoff notes for Milestone 7 (UI)
 
-1. Implement real runners that satisfy `AgentRunner` and validate I/O with `@releasedesk/core` schemas (`ChangeAnalyst*`, `Standards*`, `Security*`, `Builder*`).
-2. Inject them into `LeadOrchestrator` via `runners: { change_analyst, standards, security, builder }`.
-3. Keep writing evidence through the result object (Lead persists it); label any remaining mocks with `MOCK:` / `mocked: true`.
-4. Builder may return `workItems` as `planned` until Cursor Cloud wiring (M5).
-5. Prefer replacing stubs one role at a time — tests accept partial `runners` maps.
+1. Surface `report.checkpoints`, `report.pullRequests`, and `report.approvals` in the Release Desk UI.
+2. Use `lead.pollPullRequestStatus(runId)` for live PR status panels.
+3. Wire human approve/reject controls to `applyApprovalsToReport` / `recordHumanApproval` — never call merge APIs.
+4. Demo scenarios: fail checkpoint → remediate → pass → pending approval; rejection path; audit timeline.
