@@ -11,8 +11,11 @@
   "scripts": {
     "dev": "npm run dev -w @northwind/kyc",
     "build": "npm run build -w @northwind/kyc",
+    "build:core": "npm run build -w @releasedesk/core",
     "start": "npm run start -w @northwind/kyc",
-    "test": "npm run test -w @northwind/kyc",
+    "test": "npm run test -w @northwind/kyc && npm run test -w @releasedesk/core",
+    "test:kyc": "npm run test -w @northwind/kyc",
+    "test:core": "npm run test -w @releasedesk/core",
     "lint": "npm run lint -w @northwind/kyc",
     "seed": "npm run seed -w @northwind/kyc"
   },
