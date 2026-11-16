@@ -285,9 +285,36 @@ export async function startOnDemandCheck(input?: {
       notes: "Started from Release Desk UI",
     },
   });
-  const desk = wrapReport(report);
+  // Attach #14 iteration gate so Challenge Trigger / on-demand runs are demoable end-to-end.
+  const iterationGate = createPendingIterationGateDemo();
+  const deskBase = wrapReport(report);
+  const desk: DeskReport = {
+    ...deskBase,
+    iterationGate,
+    updatedAt: nowIso(),
+    report: {
+      ...deskBase.report,
+      leadOutput: {
+        ...deskBase.report.leadOutput,
+        readiness: "needs_human",
+        summary: formatIterationGateSummary(iterationGate.iterationId, "pending"),
+        blockingIssues: [
+          ...deskBase.report.leadOutput.blockingIssues.filter(
+            (b) => !b.startsWith("Iteration hard gate:"),
+          ),
+          `Iteration hard gate: ${iterationGate.iterationId} awaiting red_team or security approval`,
+        ],
+      },
+    },
+  };
   await writeDeskReport(desk);
-  return { desk, view: report, list: toListItem(desk) };
+  const view = viewReport(desk);
+  return {
+    desk,
+    view,
+    list: toListItem({ ...desk, report: view }),
+    iterationGate: recomputeIterationGate(iterationGate),
+  };
 }
 
 export async function runDemoScenario(scenarioId: DemoScenarioId) {

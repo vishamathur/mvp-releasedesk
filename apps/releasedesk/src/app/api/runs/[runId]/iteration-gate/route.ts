@@ -1,9 +1,30 @@
 import { NextResponse } from "next/server";
-import { applyIterationGateDecision } from "@/lib/desk";
+import { applyIterationGateDecision, getRun } from "@/lib/desk";
 
 export const runtime = "nodejs";
 
 type Props = { params: Promise<{ runId: string }> };
+
+/** GET — current run-scoped iteration gate (red_team|security) when present. */
+export async function GET(_request: Request, { params }: Props) {
+  const { runId } = await params;
+  const data = await getRun(runId);
+  if (!data) {
+    return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  }
+  if (!data.iterationGate) {
+    return NextResponse.json(
+      { error: `Run ${runId} has no iteration gate demo state`, runId },
+      { status: 404 },
+    );
+  }
+  return NextResponse.json({
+    runId,
+    iterationGate: data.iterationGate,
+    readiness: data.view.leadOutput.readiness,
+    blockingIssues: data.view.leadOutput.blockingIssues,
+  });
+}
 
 export async function POST(request: Request, { params }: Props) {
   const { runId } = await params;
