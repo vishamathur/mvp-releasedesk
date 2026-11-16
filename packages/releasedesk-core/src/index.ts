@@ -70,6 +70,21 @@ export {
 } from "./run-context.js";
 
 export {
+  MANDATORY_ANALYSIS_ROLES,
+  MANDATORY_SECURITY_ROLE,
+  SECURITY_TASK_KIND,
+  SecurityParticipationStatusSchema,
+  SecurityParticipationGateSchema,
+  evaluateSecurityParticipation,
+  hasRecordedSecurityResult,
+  securityParticipationSatisfied,
+  assertMandatoryAnalysisRoles,
+  type MandatoryAnalysisRole,
+  type SecurityParticipationStatus,
+  type SecurityParticipationGate,
+} from "./gates.js";
+
+export {
   RunContextError,
   InMemoryRunContextStore,
   FileBackedRunContextStore,

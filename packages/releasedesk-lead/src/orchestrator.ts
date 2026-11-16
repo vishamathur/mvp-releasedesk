@@ -1,8 +1,13 @@
 import {
+  assertMandatoryAnalysisRoles,
+  evaluateSecurityParticipation,
   formatMockNote,
   LeadAgentOutputSchema,
   listReadyTasks,
+  MANDATORY_ANALYSIS_ROLES,
+  MANDATORY_SECURITY_ROLE,
   nowIso,
+  SECURITY_TASK_KIND,
   type LeadAgentOutput,
   type RunContext,
   type RunContextStore,
@@ -121,7 +126,12 @@ export type LeadOrchestratorOptions = {
   enablePrWorkflow?: boolean;
 };
 
-const ANALYSIS_ROLES: SpecialistRole[] = ["change_analyst", "standards", "security"];
+/**
+ * Analysis wave for every change / release check.
+ * Sourced from core `MANDATORY_ANALYSIS_ROLES` — Security is never optional.
+ */
+const ANALYSIS_ROLES: SpecialistRole[] = [...MANDATORY_ANALYSIS_ROLES];
+assertMandatoryAnalysisRoles(ANALYSIS_ROLES);
 
 const ROLE_TASK_NAME: Record<SpecialistRole, string> = {
   change_analyst: "Change analysis",
@@ -264,7 +274,7 @@ export class LeadOrchestrator {
       });
     }
 
-    // Wave 1: analysis specialists in parallel (no inter-dependencies).
+    // Wave 1: mandatory analysis specialists in parallel (Security always included).
     const delegations: LeadDelegation[] = [];
     for (const role of ANALYSIS_ROLES) {
       const { task } = await this.store.addTask(run.runId, {
@@ -272,19 +282,41 @@ export class LeadOrchestrator {
         agentRole: role,
         status: "ready",
         retry: { attempt: 0, maxAttempts: this.defaultMaxAttempts },
-        input: this.buildSpecialistInput(role, input, undefined),
+        input: {
+          ...this.buildSpecialistInput(role, input, undefined),
+          ...(role === MANDATORY_SECURITY_ROLE
+            ? { taskKind: SECURITY_TASK_KIND, mandatory: true }
+            : {}),
+        },
       });
       delegations.push({
         taskId: task.id,
         agentRole: role,
-        rationale: `Parallel analysis wave — ${ROLE_TASK_NAME[role]}`,
+        rationale:
+          role === MANDATORY_SECURITY_ROLE
+            ? `Mandatory Security participation — ${ROLE_TASK_NAME[role]} (no skip)`
+            : `Parallel analysis wave — ${ROLE_TASK_NAME[role]}`,
       });
     }
+
+    await this.store.appendAudit({
+      runId: run.runId,
+      action: "agent.invoked",
+      message:
+        "Lead routed mandatory Security specialist for change/release check (no low-risk skip)",
+      actor: { kind: "agent", agentRole: "lead" },
+      details: {
+        mandatoryRoles: [...ANALYSIS_ROLES],
+        securityTaskKind: SECURITY_TASK_KIND,
+        skipAllowed: false,
+      },
+    });
 
     await this.dispatchUntilIdle(run.runId, runners);
 
     // Checkpoint after specialist analysis stage.
     let analysisCheckpoint = await this.runCheckpoint(run.runId, "specialist_analysis", 0);
+    await this.recordSecurityGate(run.runId);
 
     let cycle = 0;
     while (cycle < this.maxRemediationCycles && this.enableRemediation) {
@@ -360,7 +392,7 @@ export class LeadOrchestrator {
 
       // If cloud checkpoint fails remediably and we have cycles left, continue
       // after reverify so the next loop can rebuild — still reverify first.
-      const reverifyRoles: SpecialistRole[] = ["standards", "security"];
+      const reverifyRoles: SpecialistRole[] = ["standards", MANDATORY_SECURITY_ROLE];
       for (const role of reverifyRoles) {
         const afterBuilder = await this.requireRun(run.runId);
         const { task } = await this.store.addTask(run.runId, {
@@ -374,6 +406,9 @@ export class LeadOrchestrator {
             reverify: true,
             remediationCycle: cycle,
             priorCheckpointId: cloudCheckpoint.id,
+            ...(role === MANDATORY_SECURITY_ROLE
+              ? { taskKind: SECURITY_TASK_KIND, mandatory: true }
+              : {}),
           },
         });
         delegations.push({
@@ -393,6 +428,9 @@ export class LeadOrchestrator {
     if (this.enablePrWorkflow) {
       await this.pollAllTrackedPullRequests(run.runId);
     }
+
+    // Security must have a recorded result before human approval gates.
+    await this.recordSecurityGate(run.runId);
 
     // Feature checklist sign-offs for AI-produced code — before merge/release gates.
     await this.requestFeatureSignOffsForNewFeatures(run.runId);
@@ -804,6 +842,25 @@ export class LeadOrchestrator {
     const run = await this.store.get(runId);
     if (!run) throw new Error(`Run ${runId} not found`);
     return run;
+  }
+
+  /** Persist mandatory Security participation gate evidence on the run. */
+  private async recordSecurityGate(runId: string): Promise<void> {
+    const run = await this.requireRun(runId);
+    const gate = evaluateSecurityParticipation(run.tasks);
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, securityGate: gate },
+    });
+    await this.store.appendAudit({
+      runId,
+      action: gate.satisfied ? "security.gate_evaluated" : "security.gate_blocked",
+      message: gate.satisfied
+        ? `Mandatory Security gate satisfied (task ${gate.taskId ?? "unknown"})`
+        : (gate.blockingIssue ?? "Mandatory Security gate blocked readiness"),
+      actor: { kind: "agent", agentRole: "lead" },
+      details: { ...gate, skipAllowed: false },
+      ...(gate.taskId !== undefined ? { taskId: gate.taskId } : {}),
+    });
   }
 
   private async runCheckpoint(

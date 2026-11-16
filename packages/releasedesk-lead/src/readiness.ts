@@ -1,8 +1,10 @@
 import {
   allFeatureSignOffsComplete,
+  evaluateSecurityParticipation,
   getIncompleteChecklists,
   type FeatureSignOffRecord,
   type LeadAgentOutput,
+  type SecurityParticipationGate,
   type TaskRecord,
 } from "@releasedesk/core";
 import {
@@ -26,6 +28,8 @@ export type ReadinessAssessment = {
   remediationRecommended: boolean;
   specialists: SpecialistSnapshot[];
   summary: string;
+  /** Mandatory Security participation gate — never skippable for low risk. */
+  securityGate: SecurityParticipationGate;
 };
 
 /** Structural checkpoint trail (avoids circular import with verification.ts). */
@@ -99,6 +103,12 @@ export function assessReadiness(input: {
   const blockingIssues: string[] = [];
   let remediationRecommended = false;
 
+  // Mandatory Security: block readiness if Security did not run or left no result.
+  const securityGate = evaluateSecurityParticipation(input.tasks);
+  if (!securityGate.satisfied && securityGate.blockingIssue) {
+    blockingIssues.push(securityGate.blockingIssue);
+  }
+
   for (const task of specialistTasks) {
     if (task.status === "failed" || task.status === "cancelled") {
       blockingIssues.push(`Task ${task.name} (${task.agentRole}) ended as ${task.status}`);
@@ -126,7 +136,7 @@ export function assessReadiness(input: {
       }
     }
 
-    if (task.agentRole === "security") {
+    if (task.agentRole === "security" && securityGate.satisfied) {
       const blockingCount = asNumber(out.releaseBlockingCount) ?? 0;
       const risk = asString(out.riskLevel);
       if (blockingCount > 0) {
@@ -179,6 +189,9 @@ export function assessReadiness(input: {
 
   if (anyGateRejected(approvals)) {
     readiness = "not_ready";
+  } else if (!securityGate.satisfied) {
+    // Mandatory Security: never ready / needs_human without a recorded Security result.
+    readiness = "not_ready";
   } else if (
     blockingIssues.some((b) => b.includes("ended as failed") || b.includes("ended as cancelled"))
   ) {
@@ -220,6 +233,7 @@ export function assessReadiness(input: {
 
   const summaryParts = [
     `Specialists: ${allSpecialists.filter((s) => s.status === "completed").length}/${allSpecialists.length} completed`,
+    `Security gate: ${securityGate.status}`,
     blockingIssues.length ? `Blocking: ${blockingIssues.length}` : "No blocking issues",
     incompleteFeatures.length
       ? `Pending feature sign-offs: ${incompleteFeatures.length}`
@@ -234,5 +248,6 @@ export function assessReadiness(input: {
     remediationRecommended,
     specialists: snapshots,
     summary: summaryParts.join(". "),
+    securityGate,
   };
 }

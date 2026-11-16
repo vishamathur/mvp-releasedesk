@@ -1,4 +1,9 @@
-import { nowIso, type TaskRecord } from "@releasedesk/core";
+import {
+  evaluateSecurityParticipation,
+  MANDATORY_ANALYSIS_ROLES,
+  nowIso,
+  type TaskRecord,
+} from "@releasedesk/core";
 import { assessReadiness, latestTasksByRole } from "./readiness.js";
 import type { ApprovalRecord } from "./approval.js";
 
@@ -96,13 +101,13 @@ export function evaluateCheckpoint(input: {
   let proposedPrUrl: string | undefined;
 
   if (input.stage === "specialist_analysis") {
-    for (const role of ["change_analyst", "standards", "security"] as const) {
+    for (const role of MANDATORY_ANALYSIS_ROLES) {
       const task = latest.find((t) => t.agentRole === role);
       if (!task) {
         issues.push({
           code: "missing_specialist",
           message: `Missing ${role} result for specialist analysis checkpoint`,
-          remediable: false,
+          remediable: role !== "security",
         });
         continue;
       }
@@ -115,8 +120,18 @@ export function evaluateCheckpoint(input: {
       }
     }
 
+    const securityGate = evaluateSecurityParticipation(input.tasks);
+    if (!securityGate.satisfied && securityGate.blockingIssue) {
+      issues.push({
+        code: "mandatory_security_missing",
+        message: securityGate.blockingIssue,
+        remediable: securityGate.status === "incomplete" || securityGate.status === "failed",
+      });
+    }
+
     for (const issue of assessment.blockingIssues) {
       if (issue.startsWith("Security:") || issue.startsWith("Standards:")) {
+        if (issues.some((i) => i.message === issue)) continue;
         issues.push({
           code: "blocking_finding",
           message: issue,

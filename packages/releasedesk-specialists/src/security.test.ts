@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createInMemoryStore } from "@releasedesk/core";
+import { createInMemoryStore, MANDATORY_SECURITY_ROLE } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createSecurityRunner } from "./security.js";
 import { correlateAdvisories, loadAdvisoryCorpus } from "./advisories.js";
 import { defaultWorkspaceRoot, sampleAdvisoriesPath } from "./paths.js";
+import { createSpecialistRunners, DEFAULT_SPECIALIST_ROLES } from "./runners.js";
 
 async function invocation(
   input: Record<string, unknown>,
@@ -28,6 +29,17 @@ async function invocation(
     task,
   };
 }
+
+describe("default specialist set", () => {
+  it("always includes Security runner (mandatory on every change)", () => {
+    expect(DEFAULT_SPECIALIST_ROLES).toContain(MANDATORY_SECURITY_ROLE);
+    const runners = createSpecialistRunners({ skipGrok: true });
+    expect(typeof runners.security).toBe("function");
+    expect(Object.keys(runners).sort()).toEqual(
+      ["builder", "change_analyst", "security", "standards"].sort(),
+    );
+  });
+});
 
 describe("SecurityRunner", () => {
   it("loads sample advisories and correlates informational next advisory", async () => {

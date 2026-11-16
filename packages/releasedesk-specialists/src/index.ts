@@ -6,7 +6,11 @@ export type {
   CloudAgentHandoffStatus,
   CloudAgentApiMode,
 } from "./builder-types.js";
-export { createSpecialistRunners, createSpecialistRunnerMap } from "./runners.js";
+export {
+  createSpecialistRunners,
+  createSpecialistRunnerMap,
+  DEFAULT_SPECIALIST_ROLES,
+} from "./runners.js";
 export type { SpecialistRunnerOptions } from "./options.js";
 
 export {
