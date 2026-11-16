@@ -35,8 +35,8 @@ import {
   scoreReleaseRisk,
   summarizeReleaseFindings,
 } from "@releasedesk/specialists";
-import { getIntakeList, type IntakeListResponse } from "./intake.js";
-import { runGrokReleaseIntel, type GrokReleaseIntelResult } from "./grok-release-intel.js";
+import { getIntakeList, type IntakeListResponse } from "./intake";
+import { runGrokReleaseIntel, type GrokReleaseIntelResult } from "./grok-release-intel";
 
 export type ControlPlaneStageId =
   | "intake"
