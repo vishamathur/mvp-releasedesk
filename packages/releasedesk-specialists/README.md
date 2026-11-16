@@ -57,8 +57,9 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | --- | --- |
 | **Change Analyst** | Local `git diff` / `git log` for `base...head`; impact heuristics; release-notes draft. Fixture notes if git empty/unavailable (`MOCK:`). |
 | **Standards** | Loads in-repo Northwind policy markdown; evaluates deviations with evidence (`policy_ref`). |
-| **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
+| **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. Distinct from AI Red Teaming. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
+| **AI Red Teaming** | MITRE ATLAS + OWASP LLM Top 10 guardrail on AI/prompt touchpoints. Uses shared `@releasedesk/core` `AiRedTeamingProvider` (`runProbes` / `healthCheck`; `RELEASEDESK_AI_RED_TEAM_PROVIDER=custom|zscaler`). Flags Lead in real time; post-Builder + hard block (drafts exempt). |
 
 Optional Grok enrichment via `XAI_API_KEY` / `GROK_API_KEY`. Without credentials, local analysis still runs; Grok calls are skipped or `MOCK:`-labeled.
 

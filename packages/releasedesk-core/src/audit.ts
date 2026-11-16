@@ -50,6 +50,14 @@ export const AuditActionSchema = z.enum([
   "security.gate_blocked",
   /** Customer intake — Lead started from dual-approved backlog item */
   "intake.lead_started_from_queue",
+  /** AI Red Teaming — realtime Lead flags + ATLAS/OWASP hard block */
+  "ai_red_teaming.guardrail_started",
+  "ai_red_teaming.guardrail_completed",
+  "ai_red_teaming.flagged_lead",
+  "ai_red_teaming.remediation_routed",
+  "ai_red_teaming.hard_block_evaluated",
+  "ai_red_teaming.hard_block_blocked",
+  "ai_red_teaming.hard_block_exempt_draft",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;

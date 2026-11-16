@@ -128,6 +128,81 @@ export const stubSecurityRunner: AgentRunner = async (
   };
 };
 
+export const stubAiRedTeamingRunner: AgentRunner = async (
+  inv: AgentRunInvocation,
+): Promise<AgentRunResult> => {
+  const touchpoint =
+    (inv.task.input?.touchpoint as string | undefined) ?? "sdlc_ai_prompt";
+  const passKind =
+    (inv.task.input?.passKind as string | undefined) ?? "guardrail";
+  const inject = Array.isArray(inv.task.input?.injectFindings)
+    ? (inv.task.input?.injectFindings as Array<Record<string, unknown>>)
+    : [];
+  const findings = inject.map((f, i) => ({
+    id: String(f.id ?? `stub_ai_rt_${i + 1}`),
+    severity: (f.severity as string) ?? "medium",
+    title: String(f.title ?? "Stub AI Red Teaming finding"),
+    summary: String(f.summary ?? "Injected stub finding"),
+    framework: (f.framework as string) ?? "both",
+    category: (f.category as string) ?? "other",
+    releaseBlocking: Boolean(f.releaseBlocking),
+    touchpoint,
+    ...(typeof f.atlasTechnique === "string"
+      ? { atlasTechnique: f.atlasTechnique }
+      : {}),
+    ...(typeof f.owaspLlmId === "string" ? { owaspLlmId: f.owaspLlmId } : {}),
+  }));
+  const releaseBlockingCount = findings.filter((f) => f.releaseBlocking).length;
+  const flagLeadRealtime = releaseBlockingCount > 0;
+  const subjectMeta =
+    inv.task.input?.subjectMeta && typeof inv.task.input.subjectMeta === "object"
+      ? (inv.task.input.subjectMeta as { prDraft?: boolean; reviewReady?: boolean })
+      : {};
+  const prDraft = subjectMeta.prDraft === true;
+  const reviewReady =
+    subjectMeta.reviewReady === true || (!prDraft && passKind === "hard_block");
+  const hardBlockRecommended =
+    passKind === "hard_block" && releaseBlockingCount > 0 && reviewReady && !prDraft;
+  const mock = createMockMeta(
+    "ai-red-teaming-stub",
+    "Fixture AI Red Teaming pass; no live ATLAS/OWASP API",
+  );
+  const evidence = [
+    mockEvidence(
+      "AI Red Teaming (stub)",
+      findings.length === 0
+        ? `Clean ${passKind} pass @ ${touchpoint}`
+        : `${findings.length} finding(s) @ ${touchpoint}`,
+      "ai_red_teaming",
+      "finding",
+      "ai-red-teaming-stub",
+    ),
+  ];
+  return {
+    status: "completed",
+    summary: formatMockNote(
+      findings.length === 0
+        ? `AI Red Teaming ${passKind} complete (stub) — clean`
+        : `AI Red Teaming ${passKind} complete (stub) — ${releaseBlockingCount} blocking; flagLead=${flagLeadRealtime}`,
+    ),
+    payload: {
+      agentRole: "ai_red_teaming",
+      touchpoint,
+      passKind,
+      findings,
+      releaseBlockingCount,
+      riskLevel: releaseBlockingCount > 0 ? "high" : "none",
+      frameworksApplied: ["mitre_atlas", "owasp_llm"],
+      flagLeadRealtime,
+      hardBlockRecommended,
+      evidence: evidence.map((e) => createEvidenceItem(e)),
+      mocksUsed: [mock],
+    },
+    evidence,
+    mocksUsed: [mock],
+  };
+};
+
 export const stubBuilderRunner: AgentRunner = async (
   inv: AgentRunInvocation,
 ): Promise<AgentRunResult> => {
@@ -205,16 +280,20 @@ export const stubBuilderRunner: AgentRunner = async (
   };
 };
 
-/** Default stub specialist set — Security is always included (mandatory). */
+/** Default stub specialist set — Security + AI Red Teaming included. */
 export function createDefaultStubRunners(): Record<SpecialistRole, AgentRunner> {
   const runners: Record<SpecialistRole, AgentRunner> = {
     change_analyst: stubChangeAnalystRunner,
     standards: stubStandardsRunner,
     security: stubSecurityRunner,
     builder: stubBuilderRunner,
+    ai_red_teaming: stubAiRedTeamingRunner,
   };
   if (!runners.security) {
     throw new Error("Security stub runner missing — mandatory on every change");
+  }
+  if (!runners.ai_red_teaming) {
+    throw new Error("AI Red Teaming stub runner missing");
   }
   return runners;
 }

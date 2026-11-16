@@ -1,3 +1,7 @@
+import type {
+  AiRedTeamProviderName,
+  AiRedTeamingProvider,
+} from "@releasedesk/core";
 import type { GrokClientOptions } from "./grok.js";
 import type { ComponentRef } from "./advisories.js";
 import type { CloudAgentClient } from "./cloud/types.js";
@@ -38,4 +42,12 @@ export type SpecialistRunnerOptions = {
    * Default false — M5 dispatches via MOCK or real client.
    */
   skipCloudDispatch?: boolean;
+  /**
+   * Injected AI Red Teaming provider (wins over env).
+   * Must implement shared `@releasedesk/core` `AiRedTeamingProvider`
+   * (`runProbes` / `healthCheck`) — same contract as custom + Zscaler.
+   */
+  aiRedTeamingProvider?: AiRedTeamingProvider;
+  /** Override `RELEASEDESK_AI_RED_TEAM_PROVIDER` (`custom` | `zscaler`). */
+  aiRedTeamingProviderName?: AiRedTeamProviderName;
 };

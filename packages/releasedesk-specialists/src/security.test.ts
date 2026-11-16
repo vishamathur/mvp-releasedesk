@@ -36,7 +36,7 @@ describe("default specialist set", () => {
     const runners = createSpecialistRunners({ skipGrok: true });
     expect(typeof runners.security).toBe("function");
     expect(Object.keys(runners).sort()).toEqual(
-      ["builder", "change_analyst", "security", "standards"].sort(),
+      ["ai_red_teaming", "builder", "change_analyst", "security", "standards"].sort(),
     );
   });
 });

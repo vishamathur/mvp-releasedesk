@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AiRedTeamingAgentInputSchema,
+  AiRedTeamingAgentOutputSchema,
   BuilderAgentInputSchema,
   BuilderAgentOutputSchema,
   ChangeAnalystInputSchema,
@@ -201,6 +203,41 @@ describe("agent contract schemas", () => {
       proposedBranch: "cursor/fix-retention-8f1e",
     });
     expect(output.workItems[0]?.kind).toBe("coding");
+  });
+
+  it("parses AI Red Teaming input/output", () => {
+    AiRedTeamingAgentInputSchema.parse({
+      runId,
+      taskId,
+      agentRole: "ai_red_teaming",
+      invokedAt,
+      repository: "vishamathur/mvp-releasedesk",
+      touchpoint: "cloud_coding",
+      passKind: "guardrail",
+      subjectText: "Implement remediation without leaking prompts",
+      subjectMeta: { sourceAgent: "builder", reviewReady: false },
+    });
+
+    const output = AiRedTeamingAgentOutputSchema.parse({
+      runId,
+      taskId,
+      agentRole: "ai_red_teaming",
+      status: "completed",
+      completedAt,
+      summary: "AI Red Teaming guardrail clean",
+      evidence: [],
+      mocksUsed: [],
+      touchpoint: "cloud_coding",
+      passKind: "guardrail",
+      findings: [],
+      releaseBlockingCount: 0,
+      riskLevel: "none",
+      frameworksApplied: ["mitre_atlas", "owasp_llm"],
+      flagLeadRealtime: false,
+      hardBlockRecommended: false,
+    });
+    expect(output.agentRole).toBe("ai_red_teaming");
+    expect(output.frameworksApplied).toContain("mitre_atlas");
   });
 
   it("rejects mismatched agentRole on Lead output", () => {

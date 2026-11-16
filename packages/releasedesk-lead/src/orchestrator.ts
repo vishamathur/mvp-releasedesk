@@ -1,5 +1,8 @@
 import {
+  AI_RED_TEAMING_ROLE,
+  AI_RED_TEAMING_TASK_KIND,
   assertMandatoryAnalysisRoles,
+  evaluateAiRedTeamingHardBlock,
   evaluateSecurityParticipation,
   formatMockNote,
   LeadAgentOutputSchema,
@@ -7,7 +10,11 @@ import {
   MANDATORY_ANALYSIS_ROLES,
   MANDATORY_SECURITY_ROLE,
   nowIso,
+  parseAiRedTeamingFlagRecord,
   SECURITY_TASK_KIND,
+  type AiRedTeamingLeadFlag,
+  type AiRedTeamingPassKind,
+  type AiRedTeamingTouchpoint,
   type LeadAgentOutput,
   type RunContext,
   type RunContextStore,
@@ -138,7 +145,19 @@ const ROLE_TASK_NAME: Record<SpecialistRole, string> = {
   standards: "Standards compliance",
   security: "Security review",
   builder: "Remediation (builder)",
+  ai_red_teaming: "AI Red Teaming",
 };
+
+/** Specialists / Cloud stages that produce AI model/prompt output → guardrail. */
+const AI_OUTPUT_TOUCHPOINTS: AiRedTeamingTouchpoint[] = [
+  "change_analyst",
+  "standards",
+  "security",
+  "builder",
+  "cloud_coding",
+  "cloud_testing",
+  "cloud_review",
+];
 
 export class LeadOrchestrator {
   private readonly store: RunContextStore;
@@ -245,6 +264,7 @@ export class LeadOrchestrator {
         featureSignOffs: { checklists: [] } satisfies FeatureSignOffRecord,
         checkpoints: { checkpoints: [] } satisfies CheckpointRecord,
         pullRequests: { pullRequests: [] } satisfies PullRequestRecord,
+        aiRedTeamingFlags: { flags: [] },
         prClientMode: this.prClient.mode,
         prClientDescription: describePrClientMode(this.prClient),
         autoMerge: false,
@@ -314,6 +334,15 @@ export class LeadOrchestrator {
 
     await this.dispatchUntilIdle(run.runId, runners);
 
+    // Cross-cutting AI Red Teaming guardrails on analysis-wave AI outputs.
+    // Findings flag Lead in real time so remediation can route before continuing.
+    const analysisGuardrailFlags = await this.runAiRedTeamingGuardrailsForAnalysisWave(
+      run.runId,
+      runners,
+      delegations,
+      input,
+    );
+
     // Checkpoint after specialist analysis stage.
     let analysisCheckpoint = await this.runCheckpoint(run.runId, "specialist_analysis", 0);
     await this.recordSecurityGate(run.runId);
@@ -321,11 +350,14 @@ export class LeadOrchestrator {
     let cycle = 0;
     while (cycle < this.maxRemediationCycles && this.enableRemediation) {
       const current = await this.requireRun(run.runId);
+      const prState = this.resolvePrDraftState(current);
       const assessment = assessReadiness({
         tasks: current.tasks,
         approvals: parseApprovalRecord(current.metadata.approvals),
         featureSignOffs: parseFeatureSignOffRecord(current.metadata.featureSignOffs),
         considerRemediation: true,
+        prDraft: prState.prDraft,
+        reviewReady: prState.reviewReady,
       });
 
       const checkpoints = parseCheckpointRecord(current.metadata.checkpoints).checkpoints;
@@ -347,12 +379,17 @@ export class LeadOrchestrator {
       } else {
         const needsRemediation =
           assessment.remediationRecommended ||
-          checkpointNeedsRemediation(analysisCheckpoint);
+          checkpointNeedsRemediation(analysisCheckpoint) ||
+          analysisGuardrailFlags.length > 0;
         if (!needsRemediation) break;
       }
 
       cycle += 1;
       const goals = this.buildRemediationGoals(assessment, analysisCheckpoint, current);
+      for (const flag of analysisGuardrailFlags) {
+        const msg = `AI Red Teaming realtime: ${flag.summary}`;
+        if (!goals.includes(msg)) goals.push(msg);
+      }
 
       await this.store.appendAudit({
         runId: run.runId,
@@ -382,6 +419,16 @@ export class LeadOrchestrator {
 
       await this.dispatchUntilIdle(run.runId, runners);
 
+      // AI Red Teaming on Builder + Cloud Agent (Coding/Testing/Review) prompts/outputs.
+      await this.runAiRedTeamingGuardrailsForBuilderWave(
+        run.runId,
+        runners,
+        delegations,
+        input,
+        builderTask.id,
+        cycle,
+      );
+
       // Checkpoint after cloud-agent / builder stage.
       const cloudCheckpoint = await this.runCheckpoint(run.runId, "cloud_agents", cycle);
 
@@ -389,6 +436,16 @@ export class LeadOrchestrator {
       if (this.enablePrWorkflow) {
         await this.syncPullRequestFromBuilder(run.runId, input, builderTask.id);
       }
+
+      // Dedicated post-Builder AI Red Teaming pass, then ATLAS/OWASP hard block.
+      await this.runDedicatedPostBuilderAiRedTeaming(
+        run.runId,
+        runners,
+        delegations,
+        input,
+        cycle,
+      );
+      await this.recordAiRedTeamingHardBlock(run.runId);
 
       // If cloud checkpoint fails remediably and we have cycles left, continue
       // after reverify so the next loop can rebuild — still reverify first.
@@ -421,7 +478,22 @@ export class LeadOrchestrator {
       await this.store.refreshReadyTasks(run.runId);
       await this.dispatchUntilIdle(run.runId, runners);
 
+      // Guardrail on reverify AI outputs (Standards / Security).
+      await this.runAiRedTeamingGuardrailsForAnalysisWave(
+        run.runId,
+        runners,
+        delegations,
+        input,
+        { onlyRoles: ["standards", "security"], labelSuffix: `reverify-c${cycle}` },
+      );
+
       analysisCheckpoint = await this.runCheckpoint(run.runId, "post_remediation", cycle);
+    }
+
+    // When no remediation cycle ran, still run dedicated post-Builder-style pass
+    // only if builder already present; otherwise hard-block evaluates analysis flags.
+    if (cycle === 0) {
+      await this.recordAiRedTeamingHardBlock(run.runId);
     }
 
     // Final PR status poll (interface for UI / gates).
@@ -431,6 +503,7 @@ export class LeadOrchestrator {
 
     // Security must have a recorded result before human approval gates.
     await this.recordSecurityGate(run.runId);
+    await this.recordAiRedTeamingHardBlock(run.runId);
 
     // Feature checklist sign-offs for AI-produced code — before merge/release gates.
     await this.requestFeatureSignOffsForNewFeatures(run.runId);
@@ -448,12 +521,15 @@ export class LeadOrchestrator {
     const featureSignOffs = parseFeatureSignOffRecord(finalRun.metadata.featureSignOffs);
     const checkpoints = parseCheckpointRecord(finalRun.metadata.checkpoints);
     const pullRequests = parsePullRequestRecord(finalRun.metadata.pullRequests);
+    const finalPrState = this.resolvePrDraftState(finalRun);
     const assessment = assessReadiness({
       tasks: finalRun.tasks,
       approvals,
       featureSignOffs,
       considerRemediation: this.enableRemediation,
       checkpoints,
+      prDraft: finalPrState.prDraft,
+      reviewReady: finalPrState.reviewReady,
     });
 
     const leadTaskId =
@@ -860,6 +936,380 @@ export class LeadOrchestrator {
       actor: { kind: "agent", agentRole: "lead" },
       details: { ...gate, skipAllowed: false },
       ...(gate.taskId !== undefined ? { taskId: gate.taskId } : {}),
+    });
+  }
+
+  /** Draft vs review-ready PR state for AI Red Teaming hard-block exemption. */
+  private resolvePrDraftState(run: RunContext): { prDraft: boolean; reviewReady: boolean } {
+    const prs = parsePullRequestRecord(run.metadata.pullRequests).pullRequests;
+    if (prs.length === 0) {
+      // No PR yet — treat as not review-ready (hard block not forced).
+      return { prDraft: false, reviewReady: false };
+    }
+    const latest = prs[prs.length - 1]!;
+    const draft = latest.lastStatus?.raw?.draft === true;
+    // TrackedPullRequest doesn't always carry draft; infer review-ready when open + not draft meta.
+    const prDraft = draft === true;
+    return { prDraft, reviewReady: !prDraft };
+  }
+
+  /**
+   * Persist ATLAS/OWASP hard-block gate. Draft PRs are exempt; review-ready PRs block.
+   */
+  private async recordAiRedTeamingHardBlock(runId: string): Promise<void> {
+    const run = await this.requireRun(runId);
+    const prState = this.resolvePrDraftState(run);
+    const gate = evaluateAiRedTeamingHardBlock({
+      tasks: run.tasks,
+      prDraft: prState.prDraft,
+      reviewReady: prState.reviewReady,
+    });
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, aiRedTeamingHardBlock: gate },
+    });
+    const action = gate.blocked
+      ? "ai_red_teaming.hard_block_blocked"
+      : gate.status === "exempt_draft"
+        ? "ai_red_teaming.hard_block_exempt_draft"
+        : "ai_red_teaming.hard_block_evaluated";
+    await this.store.appendAudit({
+      runId,
+      action,
+      message: gate.blocked
+        ? (gate.blockingIssue ?? "AI Red Teaming hard-blocked review-ready PR")
+        : gate.status === "exempt_draft"
+          ? (gate.blockingIssue ?? "AI Red Teaming findings present — draft PR exempt")
+          : `AI Red Teaming hard block ${gate.status}`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: { ...gate },
+      ...(gate.taskId !== undefined ? { taskId: gate.taskId } : {}),
+    });
+  }
+
+  /**
+   * Flag Lead in real time when AI Red Teaming finds issues mid-flow.
+   * Persists flag metadata + audit so remediation can route before continuing.
+   */
+  private async flagLeadRealtimeFromAiRedTeaming(input: {
+    runId: string;
+    taskId: string;
+    touchpoint: AiRedTeamingTouchpoint;
+    passKind: AiRedTeamingPassKind;
+    summary: string;
+    findingIds: string[];
+    releaseBlockingCount: number;
+  }): Promise<AiRedTeamingLeadFlag> {
+    const run = await this.requireRun(input.runId);
+    const record = parseAiRedTeamingFlagRecord(run.metadata.aiRedTeamingFlags);
+    const flag: AiRedTeamingLeadFlag = {
+      id: `ai_rt_flag_${record.flags.length + 1}_${Date.now()}`,
+      at: nowIso(),
+      touchpoint: input.touchpoint,
+      passKind: input.passKind,
+      taskId: input.taskId,
+      findingIds: input.findingIds,
+      releaseBlockingCount: input.releaseBlockingCount,
+      summary: input.summary,
+      remediationRouted: false,
+    };
+    record.flags.push(flag);
+    await this.store.update(input.runId, {
+      metadata: { ...run.metadata, aiRedTeamingFlags: record },
+    });
+    await this.store.appendAudit({
+      runId: input.runId,
+      action: "ai_red_teaming.flagged_lead",
+      message: `AI Red Teaming flagged Lead realtime @ ${input.touchpoint}: ${input.summary}`,
+      actor: { kind: "agent", agentRole: AI_RED_TEAMING_ROLE },
+      taskId: input.taskId,
+      details: { ...flag },
+    });
+    this.dmSession = replyAsLead(
+      this.dmSession,
+      `AI Red Teaming realtime flag @ ${input.touchpoint} — routing remediation before continuing`,
+    );
+    return flag;
+  }
+
+  private async markAiRedTeamingFlagRemediationRouted(
+    runId: string,
+    flagId: string,
+  ): Promise<void> {
+    const run = await this.requireRun(runId);
+    const record = parseAiRedTeamingFlagRecord(run.metadata.aiRedTeamingFlags);
+    const idx = record.flags.findIndex((f) => f.id === flagId);
+    if (idx < 0) return;
+    record.flags[idx] = { ...record.flags[idx]!, remediationRouted: true };
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, aiRedTeamingFlags: record },
+    });
+    await this.store.appendAudit({
+      runId,
+      action: "ai_red_teaming.remediation_routed",
+      message: `Lead routed remediation for AI Red Teaming flag ${flagId}`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: { flagId },
+    });
+  }
+
+  private subjectTextFromTask(task: TaskRecord): string {
+    const out = task.output ?? {};
+    const parts = [
+      asString(out.summary),
+      asString(out.releaseNotesDraft),
+      asString(task.input?.prompt),
+      JSON.stringify(out.findings ?? []),
+      JSON.stringify(out.workItems ?? []),
+    ].filter(Boolean);
+    return parts.join("\n");
+  }
+
+  /**
+   * Schedule + dispatch one AI Red Teaming pass; flag Lead realtime on findings.
+   */
+  private async runAiRedTeamingPass(opts: {
+    runId: string;
+    runners: Record<SpecialistRole, AgentRunner>;
+    delegations: LeadDelegation[];
+    input: StartReleaseCheckInput;
+    touchpoint: AiRedTeamingTouchpoint;
+    passKind: AiRedTeamingPassKind;
+    subjectText: string;
+    subjectMeta?: Record<string, unknown>;
+    nameSuffix?: string;
+    injectFindings?: unknown[];
+  }): Promise<{ taskId: string; flagged: boolean; flag?: AiRedTeamingLeadFlag }> {
+    const {
+      runId,
+      runners,
+      delegations,
+      input,
+      touchpoint,
+      passKind,
+      subjectText,
+      subjectMeta,
+      nameSuffix,
+      injectFindings,
+    } = opts;
+
+    await this.store.appendAudit({
+      runId,
+      action: "ai_red_teaming.guardrail_started",
+      message: `AI Red Teaming ${passKind} starting @ ${touchpoint}`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: { touchpoint, passKind, taskKind: AI_RED_TEAMING_TASK_KIND },
+    });
+
+    const { task } = await this.store.addTask(runId, {
+      name: nameSuffix
+        ? `AI Red Teaming (${passKind}/${touchpoint}/${nameSuffix})`
+        : `AI Red Teaming (${passKind}/${touchpoint})`,
+      agentRole: AI_RED_TEAMING_ROLE,
+      status: "ready",
+      retry: { attempt: 0, maxAttempts: this.defaultMaxAttempts },
+      input: {
+        repository: input.target.repository,
+        touchpoint,
+        passKind,
+        subjectText,
+        subjectMeta: subjectMeta ?? {},
+        taskKind: AI_RED_TEAMING_TASK_KIND,
+        ...(injectFindings ? { injectFindings } : {}),
+      },
+    });
+    delegations.push({
+      taskId: task.id,
+      agentRole: AI_RED_TEAMING_ROLE,
+      rationale: `AI Red Teaming ${passKind} @ ${touchpoint}`,
+    });
+
+    await this.dispatchUntilIdle(runId, runners);
+
+    const after = await this.requireRun(runId);
+    const completed = after.tasks.find((t) => t.id === task.id);
+    const out = completed?.output ?? {};
+    const releaseBlockingCount =
+      typeof out.releaseBlockingCount === "number" ? out.releaseBlockingCount : 0;
+    const flagLeadRealtime = out.flagLeadRealtime === true || releaseBlockingCount > 0;
+    const findings = Array.isArray(out.findings) ? out.findings : [];
+    const findingIds = findings
+      .map((f) => (f && typeof f === "object" ? (f as { id?: unknown }).id : undefined))
+      .filter((id): id is string => typeof id === "string");
+
+    await this.store.appendAudit({
+      runId,
+      action: "ai_red_teaming.guardrail_completed",
+      message: asString(out.summary) ?? `AI Red Teaming ${passKind} @ ${touchpoint} completed`,
+      actor: { kind: "agent", agentRole: AI_RED_TEAMING_ROLE },
+      taskId: task.id,
+      details: {
+        touchpoint,
+        passKind,
+        releaseBlockingCount,
+        flagLeadRealtime,
+        hardBlockRecommended: out.hardBlockRecommended === true,
+      },
+    });
+
+    if (!flagLeadRealtime) {
+      return { taskId: task.id, flagged: false };
+    }
+
+    const flag = await this.flagLeadRealtimeFromAiRedTeaming({
+      runId,
+      taskId: task.id,
+      touchpoint,
+      passKind,
+      summary:
+        asString(out.summary) ??
+        `AI Red Teaming: ${releaseBlockingCount} release-blocking finding(s) @ ${touchpoint}`,
+      findingIds,
+      releaseBlockingCount,
+    });
+    await this.markAiRedTeamingFlagRemediationRouted(runId, flag.id);
+    return { taskId: task.id, flagged: true, flag };
+  }
+
+  /** Guardrails on analysis-wave (or reverify) AI specialist outputs. */
+  private async runAiRedTeamingGuardrailsForAnalysisWave(
+    runId: string,
+    runners: Record<SpecialistRole, AgentRunner>,
+    delegations: LeadDelegation[],
+    input: StartReleaseCheckInput,
+    opts?: { onlyRoles?: Array<"change_analyst" | "standards" | "security">; labelSuffix?: string },
+  ): Promise<AiRedTeamingLeadFlag[]> {
+    const run = await this.requireRun(runId);
+    const roles = opts?.onlyRoles ?? ["change_analyst", "standards", "security"];
+    const flags: AiRedTeamingLeadFlag[] = [];
+    for (const role of roles) {
+      if (!AI_OUTPUT_TOUCHPOINTS.includes(role)) continue;
+      const task = [...run.tasks]
+        .reverse()
+        .find((t) => t.agentRole === role && t.status === "completed");
+      if (!task) continue;
+      const result = await this.runAiRedTeamingPass({
+        runId,
+        runners,
+        delegations,
+        input,
+        touchpoint: role,
+        passKind: "guardrail",
+        subjectText: this.subjectTextFromTask(task),
+        subjectMeta: { sourceAgent: role },
+        ...(opts?.labelSuffix ? { nameSuffix: opts.labelSuffix } : {}),
+      });
+      if (result.flag) flags.push(result.flag);
+    }
+    return flags;
+  }
+
+  /** Guardrails on Builder + Cloud Coding/Testing/Review AI prompts/outputs. */
+  private async runAiRedTeamingGuardrailsForBuilderWave(
+    runId: string,
+    runners: Record<SpecialistRole, AgentRunner>,
+    delegations: LeadDelegation[],
+    input: StartReleaseCheckInput,
+    builderTaskId: string,
+    cycle: number,
+  ): Promise<AiRedTeamingLeadFlag[]> {
+    const run = await this.requireRun(runId);
+    const builder = run.tasks.find((t) => t.id === builderTaskId);
+    const flags: AiRedTeamingLeadFlag[] = [];
+    if (builder && builder.status === "completed") {
+      const builderResult = await this.runAiRedTeamingPass({
+        runId,
+        runners,
+        delegations,
+        input,
+        touchpoint: "builder",
+        passKind: "guardrail",
+        subjectText: this.subjectTextFromTask(builder),
+        subjectMeta: { sourceAgent: "builder" },
+        nameSuffix: `c${cycle}`,
+      });
+      if (builderResult.flag) flags.push(builderResult.flag);
+
+      const workItems = Array.isArray(builder.output?.workItems)
+        ? builder.output!.workItems
+        : [];
+      for (const item of workItems) {
+        if (!item || typeof item !== "object") continue;
+        const kind = (item as { kind?: unknown }).kind;
+        const touchpoint: AiRedTeamingTouchpoint | undefined =
+          kind === "coding"
+            ? "cloud_coding"
+            : kind === "testing"
+              ? "cloud_testing"
+              : kind === "review"
+                ? "cloud_review"
+                : undefined;
+        if (!touchpoint) continue;
+        const notes = asString((item as { notes?: unknown }).notes) ?? "";
+        const prompt = asString((item as { prompt?: unknown }).prompt) ?? notes;
+        const cloudResult = await this.runAiRedTeamingPass({
+          runId,
+          runners,
+          delegations,
+          input,
+          touchpoint,
+          passKind: "guardrail",
+          subjectText: prompt || JSON.stringify(item),
+          subjectMeta: { sourceAgent: `cloud:${kind}` },
+          nameSuffix: `c${cycle}`,
+        });
+        if (cloudResult.flag) flags.push(cloudResult.flag);
+      }
+    }
+    return flags;
+  }
+
+  /** Dedicated post-Builder AI Red Teaming pass (before ATLAS/OWASP hard block). */
+  private async runDedicatedPostBuilderAiRedTeaming(
+    runId: string,
+    runners: Record<SpecialistRole, AgentRunner>,
+    delegations: LeadDelegation[],
+    input: StartReleaseCheckInput,
+    cycle: number,
+  ): Promise<void> {
+    const run = await this.requireRun(runId);
+    const prState = this.resolvePrDraftState(run);
+    const builders = run.tasks.filter((t) => t.agentRole === "builder" && t.status === "completed");
+    const latestBuilder = builders[builders.length - 1];
+    const subjectText = latestBuilder
+      ? this.subjectTextFromTask(latestBuilder)
+      : `Post-builder AI Red Teaming for ${input.target.repository}`;
+
+    await this.runAiRedTeamingPass({
+      runId,
+      runners,
+      delegations,
+      input,
+      touchpoint: "post_builder",
+      passKind: "post_builder",
+      subjectText,
+      subjectMeta: {
+        sourceAgent: "builder",
+        prDraft: prState.prDraft,
+        reviewReady: prState.reviewReady,
+      },
+      nameSuffix: `c${cycle}`,
+    });
+
+    // Explicit hard-block evaluation pass (same specialist; passKind=hard_block).
+    await this.runAiRedTeamingPass({
+      runId,
+      runners,
+      delegations,
+      input,
+      touchpoint: "post_builder",
+      passKind: "hard_block",
+      subjectText,
+      subjectMeta: {
+        sourceAgent: "builder",
+        prDraft: prState.prDraft,
+        reviewReady: prState.reviewReady,
+      },
+      nameSuffix: `hard-block-c${cycle}`,
     });
   }
 

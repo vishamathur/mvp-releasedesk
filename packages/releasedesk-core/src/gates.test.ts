@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createTaskRecord } from "./task.js";
 import { createRunId } from "./ids.js";
 import {
+  AI_RED_TEAMING_ROLE,
   MANDATORY_ANALYSIS_ROLES,
   MANDATORY_SECURITY_ROLE,
   SECURITY_TASK_KIND,
   assertMandatoryAnalysisRoles,
+  collectAiRedTeamingBlockingCount,
+  evaluateAiRedTeamingHardBlock,
   evaluateSecurityParticipation,
+  hasRealtimeAiRedTeamingFlags,
   hasRecordedSecurityResult,
   securityParticipationSatisfied,
 } from "./gates.js";
@@ -112,5 +116,83 @@ describe("mandatory Security gate contracts", () => {
       status: "failed" as const,
     };
     expect(evaluateSecurityParticipation([failed]).status).toBe("failed");
+  });
+});
+
+describe("AI Red Teaming hard block + realtime flags", () => {
+  function completedAiRedTask(opts: {
+    passKind: "guardrail" | "post_builder" | "hard_block";
+    releaseBlockingCount: number;
+    flagLeadRealtime?: boolean;
+  }) {
+    const task = createTaskRecord({
+      runId,
+      name: "AI Red Teaming",
+      agentRole: "ai_red_teaming",
+      status: "completed",
+    });
+    return {
+      ...task,
+      status: "completed" as const,
+      completedAt: new Date().toISOString(),
+      output: {
+        agentRole: AI_RED_TEAMING_ROLE,
+        passKind: opts.passKind,
+        touchpoint: "post_builder",
+        releaseBlockingCount: opts.releaseBlockingCount,
+        riskLevel: opts.releaseBlockingCount > 0 ? "high" : "none",
+        findings: [],
+        flagLeadRealtime: opts.flagLeadRealtime ?? opts.releaseBlockingCount > 0,
+        hardBlockRecommended: opts.passKind === "hard_block" && opts.releaseBlockingCount > 0,
+        summary: "AI Red Teaming pass",
+      },
+      evidence: [],
+    };
+  }
+
+  it("clears hard block when no release-blocking findings", () => {
+    const gate = evaluateAiRedTeamingHardBlock({
+      tasks: [completedAiRedTask({ passKind: "hard_block", releaseBlockingCount: 0 })],
+      prDraft: false,
+      reviewReady: true,
+    });
+    expect(gate.label).toBe("AI Red Teaming");
+    expect(gate.status).toBe("clear");
+    expect(gate.blocked).toBe(false);
+  });
+
+  it("hard-blocks review-ready PRs with ATLAS/OWASP findings", () => {
+    const gate = evaluateAiRedTeamingHardBlock({
+      tasks: [completedAiRedTask({ passKind: "post_builder", releaseBlockingCount: 2 })],
+      prDraft: false,
+      reviewReady: true,
+    });
+    expect(gate.status).toBe("blocked");
+    expect(gate.blocked).toBe(true);
+    expect(gate.blockingIssue).toMatch(/AI Red Teaming/);
+    expect(gate.frameworks).toEqual(["mitre_atlas", "owasp_llm"]);
+  });
+
+  it("exempts draft PRs from hard block", () => {
+    const gate = evaluateAiRedTeamingHardBlock({
+      tasks: [completedAiRedTask({ passKind: "hard_block", releaseBlockingCount: 3 })],
+      prDraft: true,
+      reviewReady: false,
+    });
+    expect(gate.status).toBe("exempt_draft");
+    expect(gate.blocked).toBe(false);
+    expect(gate.draftExempt).toBe(true);
+  });
+
+  it("detects realtime Lead flags from AI Red Teaming passes", () => {
+    const tasks = [
+      completedAiRedTask({
+        passKind: "guardrail",
+        releaseBlockingCount: 1,
+        flagLeadRealtime: true,
+      }),
+    ];
+    expect(hasRealtimeAiRedTeamingFlags(tasks)).toBe(true);
+    expect(collectAiRedTeamingBlockingCount(tasks)).toBe(1);
   });
 });

@@ -117,10 +117,11 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 
 Package: [`packages/releasedesk-specialists`](./packages/releasedesk-specialists/) (`@releasedesk/specialists`).
 
-- Real `AgentRunner` implementations for Change Analyst, Standards, Security, and Builder
+- Real `AgentRunner` implementations for Change Analyst, Standards, Security, Builder, and **AI Red Teaming**
 - Injected into Lead via `createSpecialistRunners()` — results written independently onto shared run context
 - Local git / Northwind policy fixtures / sample CVE JSON when live APIs unavailable (`MOCK:` labels)
 - Builder prepares Cursor Cloud Agent handoffs and (M5) dispatches Coding → Testing ∥ Review
+- AI Red Teaming: cross-cutting ATLAS/OWASP guardrails + realtime Lead flags; reuses shared `AiRedTeamingProvider` from core (`custom` | `zscaler`)
 
 ```bash
 npm run test:specialists

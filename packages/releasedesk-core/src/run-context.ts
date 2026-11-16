@@ -85,4 +85,5 @@ export const SPECIALIST_ROLES = [
   AgentRoleSchema.enum.standards,
   AgentRoleSchema.enum.security,
   AgentRoleSchema.enum.builder,
+  AgentRoleSchema.enum.ai_red_teaming,
 ] as const;
