@@ -80,6 +80,16 @@ export {
 } from "./grok.js";
 
 export {
+  classifyReleaseFindings,
+  extractReleaseActions,
+  scoreReleaseRisk,
+  summarizeReleaseFindings,
+  type ReleaseFindingInput,
+  type GrokIntelOptions,
+  type GrokIntelResult,
+} from "./grok-api-intel.js";
+
+export {
   packageRoot,
   fixturesDir,
   policiesDir,

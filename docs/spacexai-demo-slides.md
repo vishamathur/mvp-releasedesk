@@ -3,6 +3,8 @@
 Use as speaker notes / paste into any deck. **≤3 minutes total**, then live system.  
 Brief: two slides mandatory; most time live; expect live bot edits.
 
+**Live control plane (enterprise path):** `npm run desk` → http://localhost:3001/control · `npm run demo:control-plane`
+
 ---
 
 ## Slide 1 — Problem statement and assumptions

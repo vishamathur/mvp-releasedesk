@@ -1,9 +1,12 @@
 /**
- * Grok API release intel — one shipped Desk module (classify + summarize).
+ * Grok API release intel — shipped Desk module (classify + extract + score + summarize).
  *
  * Live key: RELEASEDESK_GROK_API_KEY_LEAD only.
  * Shared XAI_API_KEY / GROK_API_KEY are never consulted.
  * Absent key → MOCK-labeled fallback.
+ *
+ * Specialist ship twin: packages/releasedesk-specialists/src/grok-api-intel.ts
+ * (Builder exclusive key) — Cursor Coding agent hardens both.
  */
 
 import { GROK_API_KEY_ENV, resolveAgentGrokApiKey } from "@releasedesk/core";
@@ -33,6 +36,8 @@ export type GrokReleaseIntelResult = {
   keyPresent: boolean;
   model: string;
   classify: { category: string; confidence: number };
+  extract: string[];
+  score: { level: "low" | "medium" | "high" | "critical"; rationale: string };
   summarize: string;
   trustCheck: GrokIntelTrustCheck;
   mocked: boolean;
@@ -76,6 +81,8 @@ function trustNotes(extra: string[]): GrokIntelTrustCheck {
 
 export function trustCheckGrokIntelPayload(payload: {
   classify?: { category?: unknown; confidence?: unknown };
+  extract?: unknown;
+  score?: { level?: unknown; rationale?: unknown };
   summarize?: unknown;
 }): { ok: true; confidence: number } | { ok: false; reason: string } {
   if (!payload.classify || payload.summarize == null) {
@@ -87,6 +94,15 @@ export function trustCheckGrokIntelPayload(payload: {
   const confidence = Number(payload.classify.confidence);
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     return { ok: false, reason: "classify.confidence out of range [0,1]" };
+  }
+  if (payload.extract !== undefined && !Array.isArray(payload.extract)) {
+    return { ok: false, reason: "extract must be string[]" };
+  }
+  if (payload.score) {
+    const level = String(payload.score.level ?? "");
+    if (!["low", "medium", "high", "critical"].includes(level)) {
+      return { ok: false, reason: "score.level invalid" };
+    }
   }
   if (typeof payload.summarize !== "string" || !payload.summarize.trim()) {
     return { ok: false, reason: "summarize invalid" };
@@ -106,6 +122,13 @@ function mockIntel(input: GrokReleaseIntelInput): GrokReleaseIntelResult {
     classify: {
       category: severe.length ? "security_or_compliance_hold" : "routine_release_candidate",
       confidence: 0.62,
+    },
+    extract: input.findings.slice(0, 3).map((f) => `Remediate: ${f.text}`),
+    score: {
+      level: severe.length ? "high" : input.findings.length ? "medium" : "low",
+      rationale: severe.length
+        ? "Blocking severity present in findings"
+        : "No high/critical findings in sample",
     },
     summarize: `MOCK: ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); ${severe.length} high/critical. Human gates still required.`,
     trustCheck: trustNotes([
@@ -130,9 +153,12 @@ function parseIntelJson(text: string): Partial<GrokReleaseIntelResult> | null {
 
 export async function runGrokReleaseIntel(
   input: GrokReleaseIntelInput,
-  opts?: { fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv },
+  opts?: {
+    fetchImpl?: typeof fetch;
+    env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  },
 ): Promise<GrokReleaseIntelResult> {
-  const env = opts?.env ?? process.env;
+  const env = (opts?.env ?? process.env) as NodeJS.ProcessEnv;
   const apiKey = resolveAgentGrokApiKey(INTEL_ROLE, env);
   if (!apiKey) return mockIntel(input);
 
@@ -144,7 +170,7 @@ export async function runGrokReleaseIntel(
     keyPresent: true,
   });
   const system =
-    "You are Release Desk Grok intel. Return ONLY JSON: classify{category,confidence 0-1}, summarize (string). Do not approve merges.";
+    "You are Release Desk Grok intel. Return ONLY JSON: classify{category,confidence 0-1}, extract(string[]), score{level:low|medium|high|critical,rationale}, summarize(string). Do not approve merges.";
 
   try {
     const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
@@ -194,6 +220,16 @@ export async function runGrokReleaseIntel(
       return fallback;
     }
 
+    const extract = Array.isArray(parsed.extract)
+      ? parsed.extract.map((x) => String(x)).filter(Boolean)
+      : [];
+    const scoreLevel = String(
+      (parsed.score as { level?: string } | undefined)?.level ?? "medium",
+    ) as "low" | "medium" | "high" | "critical";
+    const scoreRationale = String(
+      (parsed.score as { rationale?: string } | undefined)?.rationale ?? "Grok score",
+    );
+
     return {
       mode: "live",
       label: "LIVE",
@@ -203,6 +239,8 @@ export async function runGrokReleaseIntel(
         category: String(parsed.classify!.category),
         confidence: trusted.confidence,
       },
+      extract,
+      score: { level: scoreLevel, rationale: scoreRationale },
       summarize: String(parsed.summarize),
       trustCheck: trustNotes([
         `LIVE Grok API via exclusive ${INTEL_KEY_ENV}`,
