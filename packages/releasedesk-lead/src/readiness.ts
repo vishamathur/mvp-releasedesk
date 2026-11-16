@@ -1,4 +1,8 @@
-import type { LeadAgentOutput, TaskRecord } from "@releasedesk/core";
+import {
+  evaluateSecurityParticipation,
+  type LeadAgentOutput,
+  type TaskRecord,
+} from "@releasedesk/core";
 import {
   allReleaseGatesApproved,
   anyGateRejected,
@@ -87,6 +91,11 @@ export function assessReadiness(input: {
   const blockingIssues: string[] = [];
   let remediationRecommended = false;
 
+  const securityParticipation = evaluateSecurityParticipation(input.tasks);
+  for (const issue of securityParticipation.blockingIssues) {
+    if (!blockingIssues.includes(issue)) blockingIssues.push(issue);
+  }
+
   for (const task of specialistTasks) {
     if (task.status === "failed" || task.status === "cancelled") {
       blockingIssues.push(`Task ${task.name} (${task.agentRole}) ended as ${task.status}`);
@@ -173,7 +182,8 @@ export function assessReadiness(input: {
   } else if (allReleaseGatesApproved(approvals) && blockingIssues.length === 0) {
     readiness = "ready";
   } else if (specialistTasks.length === 0) {
-    readiness = "unknown";
+    // Missing mandatory Security (or other blockers) must not look "unknown".
+    readiness = blockingIssues.length > 0 ? "not_ready" : "unknown";
   } else if (
     specialistTasks
       .filter((t) => t.agentRole !== "builder")
