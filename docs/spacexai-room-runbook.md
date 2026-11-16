@@ -75,17 +75,19 @@ Leave buffer for a live bot persona edit + Q&A.
 
 ---
 
-## Architecture ↔ live map (Slide 2)
+## Architecture ↔ live map (Slide 2 — full workflow)
 
-| Slide box | Live surface |
+| Stage | Live surface |
 | --- | --- |
-| Customer ER · CostEstimate · priority backlog | Intake panel / `/control` · `@releasedesk/core` intake · dual cost+queue approvals |
-| Fairness → `approved_for_dev` → Lead | Lead starts only from dual-approved queue items |
-| Grok Bots Lead→CA→Std→Sec→Bld | `grok-bots/definitions/*` + `/agents` + `/desk` GrokBotsPanel |
-| Cursor Coding ships | Builder → Coding; code in `apps/releasedesk/src/lib/grok-release-intel.ts` |
-| Grok API classify/extract/score/summarize | `POST /api/grok/release-intel` + run panel + `/mvp` |
-| Iteration gate red_team\|security | `/mvp` gate + run `IterationApprovalGate` |
-| Merge + release → **back to Lead** | Run page ApprovalGates — readiness/result closes the circle |
+| 1 Intake ER · finance · priority | `/control` stage 1 · intake dual cost+queue · fairness backlog |
+| 2 Grok Bots Lead→CA→Std→Sec→Bld | `/agents` · `/desk` · `grok-bots/definitions/*` |
+| 3 ATLAS / OWASP AI Red Team | `/control` ATLAS panel · `checkpoint-gate.ts` |
+| 4 Cursor Coding ∥ Testing ∥ Review + NHI | Builder handoff · exclusive `RELEASEDESK_CURSOR_API_KEY_*` |
+| 5 Grok API classify/extract/score/summarize | `grok-release-intel.ts` · `POST /api/grok/release-intel` |
+| 6 Iteration → feature sign-off → merge/release | Run gates · readiness **back to Lead** |
+| 7 Portfolio · token slices · NHI | `/mvp` · `/control` stage 7 · `token-budget.ts` |
+
+Full Mermaid: [`architecture-mermaid.md`](./architecture-mermaid.md)
 
 ---
 

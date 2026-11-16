@@ -37,21 +37,21 @@ Canonical store copy also lives at the Project docs store.
 
 ## Slide 2 — Architecture / workflow
 
-**Title:** Customer intake → Lead → Grok Bot → Cursor → Grok API → back to Lead
+**Title:** Full SDLC control plane → back to Lead
 
-**One-liner:** Multi-customer ER + finance + priority feed Lead; bots and Cursor ship Grok intel; humans gate iteration/merge/release; readiness closes the circle back to Lead.
+**One-liner:** Customer ER + finance + priority → Lead + specialists → ATLAS/OWASP → Cursor Coding/Testing/Review → Grok API → human gates → readiness + tokens/NHI back to Lead. Full workflow — nothing dropped.
 
 ```mermaid
 flowchart TB
-  subgraph Intake["Customer ER · finance · priority"]
+  subgraph Intake["1 · Multi-customer intake · ER · finance · priority"]
     Cust["Customer<br/>unique customerId"]
     Req["CustomerRequest<br/>priorityHint"]
     Cost["CostEstimate<br/>finance · keyed by customerId"]
-    Queue["Weighted backlog<br/>fairness interleave"]
+    Queue["Weighted multi-customer backlog<br/>fairness interleave"]
     Views["Per-customer views"]
     CostGate["Human cost approval"]
     QGate["Human queue approval"]
-    RePri["Re-prioritize<br/>+ quick sign-off"]
+    RePri["Re-prioritize + quick sign-off"]
     Cust -->|1..*| Req
     Req -->|1..1| Cost
     Req --> Queue
@@ -62,11 +62,11 @@ flowchart TB
     QGate --> RePri
   end
 
-  subgraph GrokBots["Grok Bots"]
-    Lead["Lead Bot<br/>orchestrates"]
+  subgraph GrokBots["2 · Grok Bots"]
+    Lead["Lead Bot · orchestrates"]
     CA["Change Analyst"]
     Std["Standards"]
-    Sec["Security · mandatory"]
+    Sec["Security · mandatory every change"]
     Bld["Builder"]
     Lead --> CA
     Lead --> Std
@@ -74,41 +74,85 @@ flowchart TB
     Sec --> Bld
   end
 
-  subgraph CursorLane["Cursor cloud agent"]
-    Agent["Coding · Testing · Review<br/>exclusive NHI keys"]
-    Repo["Ships real repo change"]
-    Agent --> Repo
+  subgraph RedTeam["3 · ATLAS / OWASP · AI Red Teaming"]
+    AIRed["AI Red Teaming<br/>all AI/prompt touchpoints"]
+    Zscal["Zscaler provider · optional MOCK"]
+    Collapsed["Collapsed gate<br/>pre_release + post_remediation"]
+    SideQ["Remediation side-queue<br/>non-blocking"]
+    Atlas["ATLAS / OWASP LLM Top 10<br/>hard-block review-ready PRs"]
+    AIRed --> Collapsed
+    AIRed -.-> Zscal
+    Collapsed -.-> SideQ
+    Collapsed --> Atlas
   end
 
-  subgraph GrokAPI["Grok API"]
-    Intel["Classify / extract / score / summarize<br/>+ trustCheck"]
+  subgraph CursorLane["4 · Cursor cloud agents · exclusive NHI"]
+    Coding["Coding · ships repo change"]
+    Testing["Testing · verifies · never merge"]
+    Review["Review · reviews · never merge"]
+    NHI["NHI keys<br/>RELEASEDESK_CURSOR_API_KEY_*"]
+    Coding --- NHI
+    Testing --- NHI
+    Review --- NHI
   end
 
-  subgraph Humans["Human gates"]
+  subgraph GrokAPI["5 · Grok API · shipped code"]
+    Intel["Classify / extract / score / summarize"]
+    Trust["trustCheck<br/>humanGateStillRequired · noAutoApprove"]
+    LeadKey["NHI · RELEASEDESK_GROK_API_KEY_LEAD"]
+    Intel --> Trust
+    Trust --- LeadKey
+  end
+
+  subgraph Humans["6 · Human gates"]
     Iter["Iteration gate<br/>red_team OR security"]
-    Merge["Merge + release approval"]
+    FeatSO["Feature sign-off checklist"]
+    Merge["Human merge approval"]
+    Rel["Human release approval"]
+    Iter --> FeatSO --> Merge --> Rel
+  end
+
+  subgraph Efficiency["7 · Token efficiency · portfolio"]
+    Portfolio["DEMO_PORTFOLIO<br/>Northwind · Contoso · Fabrikam"]
+    Slice["Role context slices<br/>vs full-run packing"]
+    Margin["Token = invoice line item<br/>ITS margin"]
+    Portfolio --- Slice --- Margin
+  end
+
+  subgraph APP["App · Northwind KYC"]
+    KYC["KYC UI + API + domain"]
   end
 
   RePri -->|"approved_for_dev only"| Lead
-  Bld -->|"hand off + context"| Agent
-  Repo --> Intel
-  Intel --> Iter
-  Iter -->|approve| Merge
-  Iter -->|reject| Blocked["Blocked — no ship"]
-  Merge -->|"readiness / result"| Lead
+  CA & Std & Sec & Bld -.->|AI output| AIRed
+  AIRed -.->|realtime flags| Lead
+  Bld -->|"hand off + context"| Coding
+  Coding --> Testing
+  Coding --> Review
+  SideQ -.->|async remediate| Coding
+  Coding -->|"ships"| Intel
+  Coding & Testing & Review -.->|prompts| AIRed
+  Atlas --> Iter
+  Trust --> Iter
+  Rel -->|"readiness / result"| Lead
   Intel -.->|"structured intel"| Lead
+  Slice -.->|lean prompts| Lead
+  CA -.-> KYC
+  Sec -.-> KYC
+  Coding ==>|build + verify| KYC
+  Rel -.->|gate release of| KYC
 ```
 
 **On-slide callouts**
-1. **Intake ER** — Customer → Request → CostEstimate (`customerId`); dual cost + queue approvals; fairness priority before Lead
-2. **Grok Bot lane** — Lead · Change Analyst · Standards · Security · Builder
-3. **Cursor → Grok API** — Coding ships; Testing∥Review never merge; classify/extract/score/summarize + trustCheck
-4. **Full circle** — merge/release result and intel feed **back to Lead**; never auto-merge
+1. **Intake** — Customer ER · CostEstimate finance · dual approvals · fairness priority → Lead  
+2. **Bots + ATLAS** — Lead·CA·Standards·Security·Builder; collapsed AI Red Team; hard-block review-ready PRs  
+3. **Cursor + Grok API** — Coding ships; Testing∥Review never merge; classify/extract/score/summarize + trustCheck; exclusive NHI  
+4. **Full circle** — iteration → feature sign-off → merge/release → readiness + token slices **back to Lead**
 
-**Live map:** `/control` · `/mvp` · `/agents` · `/desk` → intake + run gates + `grok-release-intel.ts`
+**Live map:** `/control` (7 stages) · `/mvp` · `/agents` · `/desk` · [`architecture-mermaid.md`](./architecture-mermaid.md)
 
 **Spoken (≤60s):**  
-“Customers enter with requests, cost estimates, and priority. Finance and queue humans both approve — then fairness-ordered work hits Lead. Lead sequences specialists; Builder hands to Cursor; shipped code calls Grok API. Iteration and merge stay human. Readiness closes the circle back to Lead. Now we open the live system.”
+“Full stack: customers, cost, and priority into Lead; specialists and ATLAS; Cursor Coding ships while Testing and Review stay independent; Grok API intel; humans on iteration and merge. Readiness and token efficiency close the circle back to Lead. Now we open `/control`.”
 
 ---
 

@@ -2,68 +2,120 @@
 
 Last updated: 2026-11-17 (Asia/Calcutta)
 
-Multi-customer intake with dual approvals; four specialists; mandatory Security with ATLAS/OWASP hard blockers on review-ready (non-draft) PRs; optional Zscaler AI Red Teaming provider; human checklist + merge/release; feedback to Lead.
+**Full SDLC control plane** — do not drop stages for slide brevity. Multi-customer ER + finance + priority fairness feed Lead; Grok Bots + Cursor Coding/Testing/Review; ATLAS/OWASP; Grok API intel; token efficiency; NHI exclusive keys; human gates; readiness closes the circle back to Lead.
+
+Canonical Slide 2 copy: [`spacexai-demo-slides.md`](./spacexai-demo-slides.md). Live surface: `/control`.
 
 ```mermaid
-flowchart LR
-  subgraph SDLC["SDLC · Release Desk"]
-    Cust["Customers · unique customerId"]
-    Req["Customer requests"]
-    Cost["Cost estimate · keyed by customerId"]
-    Queue["Weighted multi-customer backlog"]
+flowchart TB
+  subgraph Intake["1 · Multi-customer intake · ER · finance · priority"]
+    Cust["Customer<br/>unique customerId"]
+    Req["CustomerRequest<br/>priorityHint"]
+    Cost["CostEstimate<br/>finance · keyed by customerId"]
+    Queue["Weighted multi-customer backlog<br/>fairness interleave"]
     Views["Per-customer views"]
-    CostApprove["Human cost approval"]
-    QApprove["Human queue approval"]
-    RePri["Re-prioritize + sign-off"]
-    Lead["Lead Agent"]
+    CostGate["Human cost approval"]
+    QGate["Human queue approval"]
+    RePri["Re-prioritize + quick sign-off"]
+    Cust -->|1..*| Req
+    Req -->|1..1| Cost
+    Req --> Queue
+    Queue --> Views
+    Cost --> CostGate
+    Queue --> QGate
+    CostGate --> RePri
+    QGate --> RePri
+  end
+
+  subgraph GrokBots["2 · Grok Bots"]
+    Lead["Lead Bot · orchestrates"]
     CA["Change Analyst"]
-    ST["Standards"]
-    SE["Security"]
-    BU["Builder"]
-    AIRed["AI Red Teaming · all AI/prompt touchpoints"]
+    Std["Standards"]
+    Sec["Security · mandatory every change"]
+    Bld["Builder"]
+    Lead --> CA
+    Lead --> Std
+    Lead --> Sec
+    Sec --> Bld
+  end
+
+  subgraph RedTeam["3 · ATLAS / OWASP · AI Red Teaming"]
+    AIRed["AI Red Teaming<br/>all AI/prompt touchpoints"]
     Zscal["Zscaler provider · optional MOCK"]
-    Gate["Collapsed AI Red Team gate<br/>pre+post in one pass"]
-    SideQ["Remediation side-queue · non-blocking"]
-    Atlas["ATLAS / OWASP LLM Top 10<br/>hard block · review-ready PRs only"]
-    Cloud["Cloud Agents"]
-    Verify["Checkpoints + remediate"]
-    FeatSO["Developer sign-off checklist"]
+    Collapsed["Collapsed gate<br/>pre_release + post_remediation"]
+    SideQ["Remediation side-queue<br/>non-blocking"]
+    Atlas["ATLAS / OWASP LLM Top 10<br/>hard-block review-ready PRs"]
+    AIRed --> Collapsed
+    AIRed -.-> Zscal
+    Collapsed -.-> SideQ
+    Collapsed --> Atlas
+  end
+
+  subgraph CursorLane["4 · Cursor cloud agents · exclusive NHI"]
+    Coding["Coding · ships repo change"]
+    Testing["Testing · verifies · never merge"]
+    Review["Review · reviews · never merge"]
+    NHI["NHI keys<br/>RELEASEDESK_CURSOR_API_KEY_*"]
+    Coding --- NHI
+    Testing --- NHI
+    Review --- NHI
+  end
+
+  subgraph GrokAPI["5 · Grok API · shipped code"]
+    Intel["Classify / extract / score / summarize"]
+    Trust["trustCheck<br/>humanGateStillRequired · noAutoApprove"]
+    LeadKey["NHI · RELEASEDESK_GROK_API_KEY_LEAD"]
+    Intel --> Trust
+    Trust --- LeadKey
+  end
+
+  subgraph Humans["6 · Human gates"]
+    Iter["Iteration gate<br/>red_team OR security"]
+    FeatSO["Feature sign-off checklist"]
     Merge["Human merge approval"]
     Rel["Human release approval"]
+    Iter --> FeatSO --> Merge --> Rel
+  end
+
+  subgraph Efficiency["7 · Token efficiency · portfolio"]
+    Portfolio["DEMO_PORTFOLIO<br/>Northwind · Contoso · Fabrikam"]
+    Slice["Role context slices<br/>vs full-run packing"]
+    Margin["Token = invoice line item<br/>ITS margin"]
+    Portfolio --- Slice --- Margin
   end
 
   subgraph APP["App · Northwind KYC"]
     KYC["KYC UI + API + domain"]
   end
 
-  Cust --> Req
-  Req --> Cost
-  Req --> Queue
-  Queue --> Views
-  Cost --> CostApprove
-  Queue --> QApprove
-  CostApprove --> RePri
-  QApprove --> RePri
-  RePri --> Lead
-  Lead --> CA --> ST --> SE --> BU --> AIRed --> Gate
-  AIRed -.-> Zscal
-  Gate -.->|Zscaler/MCP context| Zscal
-  Gate -->|red_team OR security approval| Atlas
-  Gate -.-> SideQ
-  SideQ -.->|async remediate| Cloud
-  Atlas --> Cloud --> Verify --> FeatSO --> Merge --> Rel
-  CA -.->|AI output| AIRed
-  ST -.->|AI output| AIRed
-  SE -.->|AI output| AIRed
-  BU -.->|AI output| AIRed
-  Cloud -.->|Coding/Testing/Review prompts| AIRed
+  RePri -->|"approved_for_dev only"| Lead
+  CA & Std & Sec & Bld -.->|AI output| AIRed
   AIRed -.->|realtime flags| Lead
-  CA -.->|analyze| KYC
-  SE -.->|guardrails on| KYC
-  AIRed -.->|AI/ML red team on| KYC
-  Cloud ==>|build + verify| KYC
+  Bld -->|"hand off + context"| Coding
+  Coding --> Testing
+  Coding --> Review
+  SideQ -.->|async remediate| Coding
+  Coding -->|"ships"| Intel
+  Coding & Testing & Review -.->|prompts| AIRed
+  Atlas --> Iter
+  Trust --> Iter
+  Rel -->|"readiness / result"| Lead
+  Intel -.->|"structured intel"| Lead
+  Slice -.->|lean prompts| Lead
+  CA -.-> KYC
+  Sec -.-> KYC
+  Coding ==>|build + verify| KYC
   Rel -.->|gate release of| KYC
-  Rel -->|result| Lead
 ```
 
-Dashed `Zscal` = optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` stub (MOCK without credentials). Collapsed gate runs pre-release + post-remediation in one pass; remediation is a non-blocking side-queue; every iteration needs **red_team or security** approval. See [`zscaler-ai-red-teaming-provider.md`](./zscaler-ai-red-teaming-provider.md).
+## Narrative (match `/control` stages)
+
+1. **Intake** — Customer ER, CostEstimate finance, dual human approvals, fairness priority  
+2. **Grok Bots** — Lead + CA + Standards + Security + Builder  
+3. **ATLAS / OWASP** — collapsed AI Red Team gate; hard-block review-ready PRs  
+4. **Cursor** — Coding ships; Testing ∥ Review never merge; exclusive NHI  
+5. **Grok API** — classify / extract / score / summarize + trustCheck  
+6. **Human gates** — iteration (`red_team|security`) → feature sign-off → merge → release  
+7. **Portfolio · tokens · NHI** — multi-customer agility, slice savings, exclusive keys  
+
+Dashed Zscaler = optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` (MOCK without credentials). Never auto-merge.

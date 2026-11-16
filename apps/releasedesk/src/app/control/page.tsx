@@ -41,14 +41,21 @@ export default function ControlPlanePage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            One runnable path for SpaceXAI: Grok Bots Lead+specialists → Cursor cloud agents ship
-            real code that calls Grok API → human gates. Intake, ATLAS/OWASP, iteration gate,
-            merge/release, multi-customer portfolio, token efficiency, NHI keys.
+            Full SDLC circle: Customer ER → cost/finance dual approval → fairness priority → Lead →
+            CA/Standards/Security/Builder → ATLAS/OWASP → Cursor Coding (ships) ∥ Testing ∥ Review →
+            Grok API classify/extract/score/summarize → iteration + feature sign-off + merge/release →
+            readiness, token slices, and NHI status back to Lead. Nothing dropped.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" className="btn-primary" disabled={pending} onClick={load}>
               {pending ? "Refreshing…" : snap ? "Re-run control plane" : "Run control plane"}
             </button>
+            <Link href="/mvp" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
+              MVP surface
+            </Link>
+            <Link href="/agents" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
+              Agents
+            </Link>
             <Link href="/desk" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
               Showcase desk
             </Link>
