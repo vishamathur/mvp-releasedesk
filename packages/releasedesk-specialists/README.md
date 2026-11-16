@@ -77,14 +77,18 @@ Results land on the Builder task output / evidence / `cloudAgentAudit` trail in 
 | Mode | How to enable | CI |
 | --- | --- | --- |
 | **MOCK** (default) | unset `RELEASEDESK_CLOUD_CLIENT`, or set `=mock` | Passes without Cursor credentials |
-| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** `CURSOR_API_KEY` (or `CURSOR_SERVICE_ACCOUNT_KEY`) | Not required for CI |
+| **real** (NHI preferred) | `RELEASEDESK_CLOUD_CLIENT=real` + per-agent `RELEASEDESK_CURSOR_API_KEY_*` in **Cursor Dashboard** | Not required for CI |
+| **real** (legacy) | `RELEASEDESK_CLOUD_CLIENT=real` **and** shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` | Local/dev fallback |
+
+Named NHI secrets (no external vault): [`docs/nhi-cursor-secrets.md`](../../docs/nhi-cursor-secrets.md).
 
 ```bash
 # Default / CI — MOCK client (same interface as real)
 npm run test:specialists
 
-# Opt-in live Cursor Cloud Agents API
-export CURSOR_API_KEY=...          # Dashboard → API Keys
+# Opt-in live Cursor Cloud Agents API (prefer Dashboard NHI secrets;
+# shell shared key is legacy fallback only)
+export CURSOR_API_KEY=...          # or RELEASEDESK_CURSOR_API_KEY_CODING / _TESTING / _REVIEW
 export RELEASEDESK_CLOUD_CLIENT=real
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```

@@ -7,7 +7,8 @@ Capability map: [`docs/cursor-maximized-architecture.md`](./docs/cursor-maximize
 Cursor SDLC operator notes (Testing vs Verification + on-demand Desk): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
 Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).  
 Intake dual gates: [`docs/customer-intake.md`](./docs/customer-intake.md).  
-Cursor-maximized deploy checklist (env, Apps, MOCK vs real, Zscaler): [`docs/deployment-checklist.md`](./docs/deployment-checklist.md).
+Cursor-maximized deploy checklist (env, Apps, MOCK vs real, Zscaler): [`docs/deployment-checklist.md`](./docs/deployment-checklist.md).  
+Per-agent **NHI** secrets (Cursor Dashboard / Apps — no external vault): [`docs/nhi-cursor-secrets.md`](./docs/nhi-cursor-secrets.md).
 
 ### Architecture model (operators)
 
@@ -17,6 +18,7 @@ Cursor-maximized deploy checklist (env, Apps, MOCK vs real, Zscaler): [`docs/dep
 | Lead + specialists + AI Red Teaming | In-process Node `AgentRunner`s (MOCK stubs or specialists package) | Ephemeral **Cloud Agents** |
 | Coding / Testing / Review | **Cloud Agents** under Builder (`MOCK` default) | Unchanged |
 | Lead trigger | Desk UI / CLI **on-demand only** after dual intake approvals — **no** backlog scheduler | Same + optional Automations |
+| Credentials (real mode) | Optional shared `CURSOR_API_KEY` | Per-agent **NHI** named secrets in Cursor Dashboard / Apps |
 
 License: [GPL-3.0](./LICENSE).
 

@@ -25,7 +25,8 @@ Operator checklist to run **mvp-releasedesk** with maximum Cursor coverage and m
 | --- | --- | --- |
 | `RELEASEDESK_CLOUD_CLIENT` | unset / `mock` | Cloud Agents client |
 | `RELEASEDESK_AI_RED_TEAM_PROVIDER` | unset / `custom` | AI Red Teaming backend |
-| `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` | unset | Live Cloud Agents |
+| `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` | unset | Legacy shared live Cloud Agents key (discouraged vs NHI) |
+| `RELEASEDESK_CURSOR_API_KEY_*` (per agent) | unset | NHI named secrets — see [`nhi-cursor-secrets.md`](./nhi-cursor-secrets.md) |
 | `GH_TOKEN` / `GITHUB_TOKEN` | unset | Real GitHub PR client |
 | `XAI_API_KEY` / `GROK_API_KEY` | unset | Optional Grok enrichment |
 | `ZSCALER_AI_RED_TEAM_API_KEY` / `ZSCALER_AIRT_API_KEY` / `AIGUARD_API_KEY` | unset | Zscaler stub only |
@@ -34,12 +35,13 @@ Operator checklist to run **mvp-releasedesk** with maximum Cursor coverage and m
 
 | Variable | Effect |
 | --- | --- |
-| `CURSOR_API_KEY` **or** `CURSOR_SERVICE_ACCOUNT_KEY` + `RELEASEDESK_CLOUD_CLIENT=real` | Live Cloud Agents |
+| Per-agent `RELEASEDESK_CURSOR_API_KEY_*` + `RELEASEDESK_CLOUD_CLIENT=real` | Live Cloud Agents with **NHI** (preferred) |
+| `CURSOR_API_KEY` **or** `CURSOR_SERVICE_ACCOUNT_KEY` + `RELEASEDESK_CLOUD_CLIENT=real` | Live Cloud Agents (legacy shared fallback) |
 | `GH_TOKEN` **or** `GITHUB_TOKEN` | Real GitHub PR open/track/poll (**merge still refused**) |
 | `XAI_API_KEY` **or** `GROK_API_KEY` | Optional Grok; else local/`MOCK` |
 | `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` | Zscaler **stub** (see below) |
 
-**Secrets:** never commit `.env`; bind via Cursor Apps / dashboard; do not paste keys into chat.
+**Secrets:** never commit `.env`; bind via **Cursor Dashboard** — Cloud Agent environment **Runtime Secrets** and/or **Apps** dashboard secrets (team/personal). Prefer per-agent NHI names over a single shared key. Do not paste keys into chat. Full list: [`nhi-cursor-secrets.md`](./nhi-cursor-secrets.md).
 
 ---
 
@@ -48,18 +50,21 @@ Operator checklist to run **mvp-releasedesk** with maximum Cursor coverage and m
 | Mode | Env | Creds | Use |
 | --- | --- | --- | --- |
 | **MOCK** (default) | unset or `=mock` | None | CI, demos, local MVP |
-| **real** | `RELEASEDESK_CLOUD_CLIENT=real` | `CURSOR_API_KEY` or `CURSOR_SERVICE_ACCOUNT_KEY` | Live agents |
+| **real** (NHI preferred) | `RELEASEDESK_CLOUD_CLIENT=real` | Per-agent `RELEASEDESK_CURSOR_API_KEY_*` in Cursor Dashboard | Live agents |
+| **real** (legacy) | `RELEASEDESK_CLOUD_CLIENT=real` | Shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` | Local/dev only |
 
 ```bash
 # MOCK
 unset RELEASEDESK_CLOUD_CLIENT CURSOR_API_KEY
 
-# Real
+# Real — prefer Dashboard NHI secrets (names in nhi-cursor-secrets.md);
+# local shell fallback (discouraged for multi-agent attribution):
 export CURSOR_API_KEY=...
 export RELEASEDESK_CLOUD_CLIENT=real
 ```
 
 - [ ] CI uses MOCK
+- [ ] Real envs use **Cursor Dashboard** secrets (NHI names), not committed files
 - [ ] Agents never auto-merge (Lead human gates)
 - [ ] Durable run store available when multi-VM Cloud Agents share state
 
@@ -79,6 +84,7 @@ Per app:
 - [ ] Cloud Agent checkout + `npm install` / builds
 - [ ] Preview URL healthy
 - [ ] No secrets in tree; publish via Cursor Apps (`publish-app`, `project_dir` = app folder)
+- [ ] Apps dashboard secrets use the same NHI **names** if Desk dispatches Cloud Agents
 - [ ] Visibility: private or team for internal ops
 - [ ] Optional Apps Postgres for durable Desk context
 - [ ] Desk → Lead **on-demand only** after dual human approval

@@ -7,7 +7,7 @@ Sources: [Cloud Agent best practices](https://cursor.com/docs/cloud-agent/best-p
 ## Summary of recommendations
 
 1. **Locally testable repos** — Agents need the same ability as humans to run and debug locally; avoid hard dependencies on unreachable external services.
-2. **Secrets + egress** — Provide secrets via dashboard; whitelist required network destinations; prefer OIDC over long-lived keys for cloud roles.
+2. **Secrets + egress** — Provide secrets via **Cursor Dashboard** (Cloud Agent environment Runtime Secrets and/or Apps dashboard secrets); whitelist required network destinations; prefer OIDC over long-lived keys for cloud roles. Release Desk uses **per-agent NHI** secret names — see [`nhi-cursor-secrets.md`](./nhi-cursor-secrets.md) (no external vault for MVP).
 3. **Environment snapshots** — Put installable deps/codegen/fixtures in install scripts; keep long-running services (DB, docker, servers) in startup; commit `.cursor/environment.json`.
 4. **Context via AGENTS.md + skills** — Document how to run/debug services and when to use each skill so agents can test changes effectively.
 5. **Tools / MCP** — Give agents the same systems humans use; iterate tooling so models use it reliably.
@@ -47,6 +47,6 @@ Cursor-maximized target: Lead/specialists/AI Red Teaming become ephemeral Cloud 
 ## How this maps to Cursor Cloud Agents
 
 - Keep the repo **locally runnable** (`npm test`, seed, desk UI) so Testing Cloud Agents can execute the same suites humans use.
-- Prefer MOCK Cloud Agent clients in CI; enable real Coding/Testing/Review only when `CURSOR_API_KEY` (or service account) is present.
+- Prefer MOCK Cloud Agent clients in CI; enable real agents only when Dashboard **NHI** secrets (or legacy shared `CURSOR_API_KEY`) are present — see [`nhi-cursor-secrets.md`](./nhi-cursor-secrets.md).
 - Use Automations for PR/CI follow-ups and optional Desk→Lead triggers; keep merge/release as human gates in Release Desk (never auto-merge).
 - Do not run an always-on Lead daemon — on-demand only.
