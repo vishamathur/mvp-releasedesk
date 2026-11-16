@@ -4,7 +4,8 @@
 
 Architecture diagram: [`docs/architecture-mermaid.md`](./docs/architecture-mermaid.md).  
 Cursor SDLC operator notes (Testing vs Verification): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
-Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).
+Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).  
+Agent token optimization (six areas + estimates): [`docs/token-optimization-plan.md`](./docs/token-optimization-plan.md).
 
 License: [GPL-3.0](./LICENSE).
 
