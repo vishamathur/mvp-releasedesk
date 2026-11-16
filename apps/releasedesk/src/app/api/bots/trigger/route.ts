@@ -43,8 +43,8 @@ export async function POST(request: Request) {
     handoffs: [
       "Lead → Change Analyst / Standards / Security (parallel)",
       "Lead → Builder (if remediation)",
-      "Builder → Cursor Coding/Testing/Review (Cloud Agents)",
-      "Shipped path → Grok API release intel (classify/extract/score/summarize)",
+      "Builder → Cursor Coding (ships Grok intel) → Testing ∥ Review (never merge)",
+      "Shipped path → Grok API release intel (classify + summarize + trustCheck)",
       "Human: iteration gate (red_team|security) → feature sign-off → merge → release",
     ],
     runId: started.view.runId,

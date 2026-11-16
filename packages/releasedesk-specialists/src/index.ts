@@ -19,6 +19,7 @@ export {
   createUnavailableRealClientStub,
   resolveCloudAgentClient,
   resolveCursorApiKey,
+  resolveCursorApiKeyForAgent,
   describeCloudClientMode,
   dispatchCloudAgentPipeline,
   type CloudAgentClient,
@@ -63,7 +64,13 @@ export {
 } from "./advisories.js";
 
 export { discoverNpmComponents } from "./components.js";
-export { grokComplete, resolveGrokApiKey, type GrokCompleteResult } from "./grok.js";
+export {
+  grokComplete,
+  resolveGrokApiKey,
+  resolveGrokApiKeyForAgent,
+  type GrokCompleteResult,
+  type GrokClientOptions,
+} from "./grok.js";
 
 export {
   packageRoot,

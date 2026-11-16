@@ -33,7 +33,7 @@ const lead = new LeadOrchestrator({
   store,
   runners: createSpecialistRunners({
     workspaceRoot: process.cwd(),
-    skipGrok: !process.env.XAI_API_KEY,
+    skipGrok: !process.env.RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST,
     // Cloud Agents: omit to use MOCK client (CI-safe).
     // cloudClient: createMockCloudAgentClient(),
   }),
@@ -60,14 +60,14 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
-Optional Grok enrichment via `XAI_API_KEY` / `GROK_API_KEY`. Without credentials, local analysis still runs; Grok calls are skipped or `MOCK:`-labeled.
+Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). Without the agent’s key, local analysis still runs; Grok calls are `MOCK:`-labeled.
 
 ## Cursor Cloud Agents (Milestone 5)
 
-Builder plans three handoffs (`coding`, `testing`, `review`), then runs:
+Builder plans three handoffs with clear boundaries, then runs:
 
-1. **Coding** (sequential, with retries)
-2. **Testing** and **Review** in parallel after Coding completes
+1. **Coding** (sequential, with retries) — **ships** repo changes (Grok release-intel path)
+2. **Testing** and **Review** in parallel after Coding completes — **verify** / **review** only; never merge
 
 Results land on the Builder task output / evidence / `cloudAgentAudit` trail in the shared run context. Lead human **merge** and **release** gates remain pending — Cloud Agents must not merge.
 
@@ -76,14 +76,18 @@ Results land on the Builder task output / evidence / `cloudAgentAudit` trail in 
 | Mode | How to enable | CI |
 | --- | --- | --- |
 | **MOCK** (default) | unset `RELEASEDESK_CLOUD_CLIENT`, or set `=mock` | Passes without Cursor credentials |
-| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** `CURSOR_API_KEY` (or `CURSOR_SERVICE_ACCOUNT_KEY`) | Not required for CI |
+| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` | Not required for CI |
+
+Shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` are **never** used.
 
 ```bash
 # Default / CI — MOCK client (same interface as real)
 npm run test:specialists
 
-# Opt-in live Cursor Cloud Agents API
-export CURSOR_API_KEY=...          # Dashboard → API Keys
+# Opt-in live Cursor Cloud Agents (per-agent exclusive keys)
+export RELEASEDESK_CURSOR_API_KEY_CODING=...
+export RELEASEDESK_CURSOR_API_KEY_TESTING=...
+export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
 export RELEASEDESK_CLOUD_CLIENT=real
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
@@ -103,10 +107,10 @@ createBuilderRunner({
   cloudMaxAttempts: 2,
 });
 
-// Pluggable real client when credentials exist:
+// Per-kind exclusive keys:
 resolveCloudAgentClient({
   mode: "real",
-  real: { apiKey: process.env.CURSOR_API_KEY },
+  env: process.env, // reads RELEASEDESK_CURSOR_API_KEY_CODING|TESTING|REVIEW
 });
 ```
 

@@ -127,6 +127,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
         `Security risk narrative for ${repository}. Findings: ${JSON.stringify(findings)}`,
         {
           ...options.grok,
+          agentRole: options.grok?.agentRole ?? "security",
           fallback:
             findings.length === 0
               ? "No correlated advisories in fixture scan."

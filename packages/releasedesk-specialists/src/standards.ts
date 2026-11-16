@@ -110,6 +110,7 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
         `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
         {
           ...options.grok,
+          agentRole: options.grok?.agentRole ?? "standards",
           fallback: deviations.map((d) => d.summary).join("; "),
         },
       );

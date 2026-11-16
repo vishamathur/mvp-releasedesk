@@ -69,6 +69,7 @@ function planHandoffs(args: {
     allEvidenceIds,
   } = args;
 
+  // Coding ships Grok API path; Testing verifies; Review reviews — never merge.
   return [
     {
       agentKind: "coding",
@@ -77,6 +78,8 @@ function planHandoffs(args: {
       prompt: [
         `Implement remediation for ${repository}.`,
         ...remediationGoals.map((g) => `- ${g}`),
+        `Follow repo AGENTS.md, .cursor/rules/releasedesk-grok-api.mdc, and skill ship-grok-release-intel.`,
+        `Prefer extending apps/releasedesk/src/lib/grok-release-intel.ts (classify + summarize + trustCheck).`,
         `Follow the implementation instructions prepared by Builder.`,
         `Commit on ${proposedBranch}.`,
         `Do NOT merge — human approval required.`,
@@ -87,6 +90,7 @@ function planHandoffs(args: {
       acceptanceCriteria: [
         "Changes compile / typecheck",
         "Unit tests added or updated for the fix",
+        "Grok release-intel path present (MOCK without exclusive Lead key)",
         "No secrets introduced",
         "PR opened but not merged",
       ],
@@ -101,13 +105,18 @@ function planHandoffs(args: {
       handoffId: `handoff_testing_${taskId}`,
       status: "planned",
       prompt: [
-        `Independently verify remediation on ${proposedBranch}.`,
-        `Run npm test and report failures with evidence.`,
+        `Independently VERIFY remediation on ${proposedBranch} (Testing Cloud Agent).`,
+        `Run npm test / desk+core suites and report failures with evidence.`,
+        `Do NOT implement new product features; do NOT merge.`,
       ].join("\n"),
       repository,
       baseBranch,
       proposedBranch,
-      acceptanceCriteria: ["All required test suites pass", "Failures attached as evidence"],
+      acceptanceCriteria: [
+        "All required test suites pass",
+        "Failures attached as evidence",
+        "No merge — human gate required",
+      ],
       relatedEvidenceIds: allEvidenceIds,
       metadata: {
         branch: proposedBranch,
@@ -120,8 +129,9 @@ function planHandoffs(args: {
       handoffId: `handoff_review_${taskId}`,
       status: "planned",
       prompt: [
-        `Independently review the remediation PR for ${repository}.`,
-        `Check policy/security regressions; do not approve merge.`,
+        `Independently REVIEW the remediation PR for ${repository} (Review Cloud Agent).`,
+        `Check policy/security regressions and Grok intel trustCheck presence.`,
+        `Do NOT approve merge; humans own merge/release gates.`,
       ].join("\n"),
       repository,
       baseBranch,
@@ -205,6 +215,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         `Refine remediation plan for ${repository}: ${remediationGoals.join("; ")}`,
         {
           ...options.grok,
+          agentRole: options.grok?.agentRole ?? "builder",
           fallback: implementationInstructions,
         },
       );

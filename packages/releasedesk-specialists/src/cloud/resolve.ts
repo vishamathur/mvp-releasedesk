@@ -1,17 +1,21 @@
+import {
+  CURSOR_API_KEY_ENV,
+  resolveAgentCursorApiKey,
+  type CursorKeyedAgentId,
+} from "@releasedesk/core";
 import { createMockCloudAgentClient } from "./mock-client.js";
 import {
   createRealCloudAgentClient,
   createUnavailableRealClientStub,
-  resolveCursorApiKey,
   type RealCloudAgentClientOptions,
 } from "./real-client.js";
-import type { CloudAgentClient, CloudAgentClientMode } from "./types.js";
+import type { CloudAgentClient, CloudAgentClientMode, CloudAgentKind } from "./types.js";
 
 export type ResolveCloudAgentClientOptions = {
   /**
    * Force mode. When omitted / `auto`:
-   * - only `RELEASEDESK_CLOUD_CLIENT=real` + API key → real
-   * - otherwise → mock (CI-safe default; presence of a key alone is not enough)
+   * - only `RELEASEDESK_CLOUD_CLIENT=real` + ≥1 exclusive Coding/Testing/Review key → real
+   * - otherwise → mock (CI-safe default)
    */
   mode?: CloudAgentClientMode | "auto";
   env?: NodeJS.ProcessEnv;
@@ -20,16 +24,51 @@ export type ResolveCloudAgentClientOptions = {
   client?: CloudAgentClient;
 };
 
+/** Map CloudAgentKind → exclusive Cursor agent id. */
+export function cursorAgentIdForKind(kind: CloudAgentKind): CursorKeyedAgentId {
+  if (kind === "coding") return "coding";
+  if (kind === "testing") return "testing";
+  return "review";
+}
+
+/**
+ * Resolve exclusive Cursor API key for one Cloud Agent id.
+ * Never falls back to CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY.
+ */
+export function resolveCursorApiKeyForAgent(
+  agentId: CursorKeyedAgentId,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return resolveAgentCursorApiKey(agentId, env);
+}
+
+/**
+ * @deprecated Shared CURSOR_* keys are not used on the SDLC path.
+ * Always returns undefined — use {@link resolveCursorApiKeyForAgent}.
+ */
+export function resolveCursorApiKey(_env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return undefined;
+}
+
+function anyExclusiveCloudKeyPresent(env: NodeJS.ProcessEnv): boolean {
+  return (
+    Boolean(resolveCursorApiKeyForAgent("coding", env)) ||
+    Boolean(resolveCursorApiKeyForAgent("testing", env)) ||
+    Boolean(resolveCursorApiKeyForAgent("review", env))
+  );
+}
+
 /**
  * Select MOCK vs real Cursor Cloud Agent client.
  *
  * Enable real:
- *   export CURSOR_API_KEY=...   # or CURSOR_SERVICE_ACCOUNT_KEY
+ *   export RELEASEDESK_CURSOR_API_KEY_CODING=...
+ *   export RELEASEDESK_CURSOR_API_KEY_TESTING=...
+ *   export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
  *   export RELEASEDESK_CLOUD_CLIENT=real
  *
- * Force MOCK (default / CI):
- *   unset RELEASEDESK_CLOUD_CLIENT
- *   # or export RELEASEDESK_CLOUD_CLIENT=mock
+ * Each kind uses its own exclusive key at dispatch time.
+ * Shared CURSOR_API_KEY is never consulted.
  */
 export function resolveCloudAgentClient(
   options: ResolveCloudAgentClientOptions = {},
@@ -39,27 +78,33 @@ export function resolveCloudAgentClient(
   const env = options.env ?? process.env;
   const raw = options.mode ?? env.RELEASEDESK_CLOUD_CLIENT ?? "mock";
   const requested = String(raw).toLowerCase() as CloudAgentClientMode | "auto";
-  const apiKey = options.real?.apiKey ?? resolveCursorApiKey(env);
-
-  // CI-safe: real only when explicitly requested (mode/env=real).
   const wantReal = requested === "real";
 
   if (!wantReal) {
     return createMockCloudAgentClient();
   }
 
-  if (!apiKey) {
-    return createUnavailableRealClientStub();
+  // Explicit single-key override (tests / injection) — still not a shared env fallback.
+  if (options.real?.apiKey) {
+    return createRealCloudAgentClient({
+      ...options.real,
+      apiKey: options.real.apiKey,
+    });
+  }
+
+  if (!anyExclusiveCloudKeyPresent(env)) {
+    return createUnavailableRealClientStub("RELEASEDESK_CURSOR_API_KEY_CODING");
   }
 
   return createRealCloudAgentClient({
     ...options.real,
-    apiKey,
+    resolveApiKeyForKind: (kind) =>
+      resolveCursorApiKeyForAgent(cursorAgentIdForKind(kind), env),
   });
 }
 
 export function describeCloudClientMode(client: CloudAgentClient): string {
   return client.mode === "mock"
     ? "MOCK: cursor-cloud-agents (no live Cursor credentials required)"
-    : "real cursor-cloud-agents (CURSOR_API_KEY)";
+    : `real cursor-cloud-agents (per-agent ${CURSOR_API_KEY_ENV.coding} / ${CURSOR_API_KEY_ENV.testing} / ${CURSOR_API_KEY_ENV.review})`;
 }

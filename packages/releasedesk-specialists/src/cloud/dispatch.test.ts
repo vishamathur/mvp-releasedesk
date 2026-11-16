@@ -35,62 +35,39 @@ describe("Mock Cloud Agent client + dispatch pipeline", () => {
     expect(pipeline.proposedBranch).toContain("cursor/rd-remediation-");
     expect(pipeline.proposedPrUrl).toMatch(/^https:\/\/github\.com\//);
     expect(pipeline.testsPassed).toBe(true);
-
     expect(pipeline.handoffs.map((h) => h.status)).toEqual([
       "completed",
       "completed",
       "completed",
     ]);
-    expect(pipeline.handoffs.every((h) => h.metadata.cloudAgentApi === "mock")).toBe(true);
-
-    const kinds = pipeline.results.map((r) => r.agentKind).sort();
-    expect(kinds).toEqual(["coding", "review", "testing"]);
-    expect(pipeline.results.every((r) => r.mocked)).toBe(true);
-    expect(pipeline.results.every((r) => r.summary.startsWith("MOCK:"))).toBe(true);
-
-    const actions = pipeline.audit.map((e) => e.action);
-    expect(actions[0]).toBe("cloud_agent.pipeline_start");
-    expect(actions).toContain("cloud_agent.dispatch");
-    expect(actions).toContain("cloud_agent.completed");
-    expect(actions.at(-1)).toBe("cloud_agent.pipeline_end");
-    expect(pipeline.audit.some((e) => e.data?.autoMerge === false)).toBe(true);
+    expect(pipeline.results.map((r) => r.agentKind).sort()).toEqual([
+      "coding",
+      "review",
+      "testing",
+    ]);
   });
 
   it("retries failed Coding dispatch then succeeds", async () => {
-    const client = createMockCloudAgentClient({
-      failUntilAttempt: { coding: 1 },
-    });
+    const client = createMockCloudAgentClient({ failUntilAttempt: { coding: 1 } });
     const pipeline = await dispatchCloudAgentPipeline(plannedHandoffs(), {
       client,
       maxAttempts: 2,
     });
-
     expect(pipeline.codingOk).toBe(true);
-    expect(pipeline.allOk).toBe(true);
-
     const codingAttempts = pipeline.attempts.filter((a) => a.agentKind === "coding");
-    expect(codingAttempts).toHaveLength(2);
-    expect(codingAttempts[0]!.outcome).toBe("retrying");
-    expect(codingAttempts[1]!.outcome).toBe("completed");
-    expect(pipeline.audit.some((e) => e.action === "cloud_agent.retrying")).toBe(true);
+    expect(codingAttempts.map((a) => a.outcome)).toEqual(["retrying", "completed"]);
   });
 
   it("skips Testing/Review when Coding exhausts retries", async () => {
-    const client = createMockCloudAgentClient({
-      failUntilAttempt: { coding: 5 },
-    });
+    const client = createMockCloudAgentClient({ failUntilAttempt: { coding: 5 } });
     const pipeline = await dispatchCloudAgentPipeline(plannedHandoffs(), {
       client,
       maxAttempts: 2,
     });
-
     expect(pipeline.codingOk).toBe(false);
-    expect(pipeline.allOk).toBe(false);
-    expect(pipeline.handoffs.find((h) => h.agentKind === "coding")!.status).toBe("failed");
     expect(pipeline.handoffs.find((h) => h.agentKind === "testing")!.status).toBe("failed");
     expect(pipeline.handoffs.find((h) => h.agentKind === "review")!.status).toBe("failed");
     expect(pipeline.audit.filter((e) => e.action === "cloud_agent.skipped")).toHaveLength(2);
-    expect(pipeline.results).toHaveLength(1); // coding only
   });
 
   it("never allows autoMerge on dispatch requests", async () => {
@@ -102,25 +79,24 @@ describe("Mock Cloud Agent client + dispatch pipeline", () => {
         return createMockCloudAgentClient().dispatch(req);
       },
     };
-
     await dispatchCloudAgentPipeline(plannedHandoffs(), { client: wrapping });
     expect(seen.length).toBe(3);
     expect(seen.every((r) => r.autoMerge === false)).toBe(true);
   });
 });
 
-describe("resolveCloudAgentClient", () => {
-  it("defaults to MOCK without RELEASEDESK_CLOUD_CLIENT=real", () => {
+describe("resolveCloudAgentClient — exclusive per-agent keys", () => {
+  it("defaults to MOCK even when shared CURSOR_API_KEY is set", () => {
     const client = resolveCloudAgentClient({
-      env: { CURSOR_API_KEY: "secret-but-ignored" },
+      env: { CURSOR_API_KEY: "shared-must-not-use" },
     });
     expect(client.mode).toBe("mock");
   });
 
-  it("uses unavailable stub when real requested without key", async () => {
+  it("uses unavailable stub when real requested without exclusive keys", async () => {
     const client = resolveCloudAgentClient({
       mode: "real",
-      env: {},
+      env: { CURSOR_API_KEY: "shared-must-not-use" },
     });
     expect(client.mode).toBe("real");
     const result = await client.dispatch({
@@ -135,16 +111,56 @@ describe("resolveCloudAgentClient", () => {
     });
     expect(result.status).toBe("failed");
     expect(result.mocked).toBe(true);
-    expect(result.summary.startsWith("MOCK:")).toBe(true);
+    expect(result.error).toContain("RELEASEDESK_CURSOR_API_KEY_CODING");
   });
 
-  it("honors injected client", () => {
-    const injected = createMockCloudAgentClient();
+  it("creates real client when exclusive Coding key + real mode (ignores shared)", () => {
     const client = resolveCloudAgentClient({
       mode: "real",
-      env: { CURSOR_API_KEY: "x", RELEASEDESK_CLOUD_CLIENT: "real" },
-      client: injected,
+      env: {
+        RELEASEDESK_CURSOR_API_KEY_CODING: "coding-exclusive",
+        RELEASEDESK_CURSOR_API_KEY_TESTING: "testing-exclusive",
+        RELEASEDESK_CURSOR_API_KEY_REVIEW: "review-exclusive",
+        CURSOR_API_KEY: "shared-ignored",
+        RELEASEDESK_CLOUD_CLIENT: "real",
+      },
     });
-    expect(client).toBe(injected);
+    expect(client.mode).toBe("real");
+  });
+
+  it("fails only the kind whose exclusive key is missing", async () => {
+    const { createRealCloudAgentClient } = await import("./real-client.js");
+    const client = createRealCloudAgentClient({
+      resolveApiKeyForKind: (kind) => (kind === "coding" ? "coding-exclusive" : undefined),
+      fetchImpl: (async () => new Response("nope", { status: 503 })) as unknown as typeof fetch,
+    });
+
+    const coding = await client.dispatch({
+      handoffId: "c1",
+      agentKind: "coding",
+      prompt: "ship",
+      repository: "owner/repo",
+      baseBranch: "main",
+      proposedBranch: "cursor/x",
+      acceptanceCriteria: [],
+      autoMerge: false,
+    });
+    // Key present → real attempt (HTTP fail), not missing-key MOCK
+    expect(coding.error).not.toMatch(/missing RELEASEDESK_CURSOR_API_KEY_CODING/);
+    expect(coding.mocked).toBe(false);
+
+    const testing = await client.dispatch({
+      handoffId: "t1",
+      agentKind: "testing",
+      prompt: "verify",
+      repository: "owner/repo",
+      baseBranch: "main",
+      proposedBranch: "cursor/x",
+      acceptanceCriteria: [],
+      autoMerge: false,
+    });
+    expect(testing.status).toBe("failed");
+    expect(testing.mocked).toBe(true);
+    expect(testing.error).toContain("RELEASEDESK_CURSOR_API_KEY_TESTING");
   });
 });

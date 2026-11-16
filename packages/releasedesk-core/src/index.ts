@@ -297,3 +297,35 @@ export {
   type ReorderBacklogInput,
   type BacklogViewItem,
 } from "./intake.js";
+
+export {
+  GROK_API_KEY_ENV,
+  CURSOR_API_KEY_ENV,
+  FORBIDDEN_SHARED_KEY_ENV,
+  resolveAgentGrokApiKey,
+  resolveAgentCursorApiKey,
+  describeAgentGrokCredential,
+  describeAgentCursorCredential,
+  listRequiredAgentApiKeyEnvVars,
+  listAgentCredentialStatuses,
+  type GrokKeyedAgentRole,
+  type CursorKeyedAgentId,
+  type AgentCredentialStatus,
+} from "./agent-credentials.js";
+
+export {
+  SDLC_AGENT_DEFINITIONS,
+  SDLC_LEAD_AGENT,
+  SDLC_CHANGE_ANALYST_AGENT,
+  SDLC_STANDARDS_AGENT,
+  SDLC_SECURITY_AGENT,
+  SDLC_BUILDER_AGENT,
+  SDLC_CODING_AGENT,
+  SDLC_TESTING_AGENT,
+  SDLC_REVIEW_AGENT,
+  getSdlcAgentDefinition,
+  assertExclusiveApiKeys,
+  type SdlcRequirement,
+  type SdlcAgentRuntime,
+  type SdlcAgentDefinition,
+} from "./sdlc-agents.js";

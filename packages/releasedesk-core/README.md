@@ -26,9 +26,49 @@ npm run typecheck -w @releasedesk/core
 | Run context | `run-context` | Goal, target repo refs, tasks, audit trail, status |
 | Store | `store` | `InMemoryRunContextStore` and `FileBackedRunContextStore` |
 | Agent contracts | `agents/*` | Lead, Change Analyst, Standards, Security, Builder I/O |
+| Per-agent API keys | `agent-credentials` | Exclusive `RELEASEDESK_GROK_API_KEY_*` / `RELEASEDESK_CURSOR_API_KEY_*` only |
+| SDLC agent catalog | `sdlc-agents` | Lead + specialists + Coding/Testing/Review definitions |
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 | Mandatory gates | `gates` | Security always required on every change (`MANDATORY_ANALYSIS_ROLES`, `evaluateSecurityParticipation`) |
 | AI Red Teaming providers | `ai-red-teaming` | `AiRedTeamingProvider` (`runProbes` / `healthCheck`); `custom` \| `zscaler`; collapsed gate + non-blocking remediation side-queue; per-iteration **red_team \| security** hard approval |
+
+## Per-agent API keys (no shared fallback)
+
+Each SDLC agent resolves credentials from **its own** env var. Shared keys
+(`XAI_API_KEY`, `GROK_API_KEY`, `CURSOR_API_KEY`, `CURSOR_SERVICE_ACCOUNT_KEY`)
+are **never** consulted for these agents.
+
+| Agent | Exclusive env var(s) |
+| --- | --- |
+| Lead | `RELEASEDESK_GROK_API_KEY_LEAD`, `RELEASEDESK_CURSOR_API_KEY_LEAD` |
+| Change Analyst | `RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST` |
+| Standards | `RELEASEDESK_GROK_API_KEY_STANDARDS` |
+| Security | `RELEASEDESK_GROK_API_KEY_SECURITY` |
+| Builder | `RELEASEDESK_GROK_API_KEY_BUILDER`, `RELEASEDESK_CURSOR_API_KEY_BUILDER` |
+| Coding Cloud Agent | `RELEASEDESK_CURSOR_API_KEY_CODING` |
+| Testing Cloud Agent | `RELEASEDESK_CURSOR_API_KEY_TESTING` |
+| Review Cloud Agent | `RELEASEDESK_CURSOR_API_KEY_REVIEW` |
+
+```ts
+import {
+  resolveAgentGrokApiKey,
+  resolveAgentCursorApiKey,
+  SDLC_AGENT_DEFINITIONS,
+  assertExclusiveApiKeys,
+} from "@releasedesk/core";
+
+assertExclusiveApiKeys(); // throws if any two agents share an env var
+const securityKey = resolveAgentGrokApiKey("security"); // only RELEASEDESK_GROK_API_KEY_SECURITY
+```
+
+See the repo-root `.env.example` for the full exclusive key list.
+
+## SDLC agents
+
+`SDLC_AGENT_DEFINITIONS` catalogs the Grok Bot Lead (hybrid), analysis specialists
+(Change Analyst, Standards, Security — Security is `mandatoryOnEveryChange`), Builder,
+and nested Cursor Cloud Agents (Coding, Testing, Review). Each entry lists its exclusive
+`apiKeyEnv` values for desk / doctor / provisioning checks.
 
 ## Run context lifecycle
 
