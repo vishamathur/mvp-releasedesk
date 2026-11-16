@@ -84,6 +84,17 @@ export {
 } from "./security-gate.js";
 
 export {
+  evaluateIterationProceedGate,
+  IterationApprovalKindSchema,
+  IterationApprovalSchema,
+  IterationProceedGateSchema,
+  type IterationApproval,
+  type IterationApprovalKind,
+  type IterationProceedGate,
+  type EvaluateIterationProceedInput,
+} from "./iteration-gate.js";
+
+export {
   CHARS_PER_TOKEN,
   estimateTokensFromText,
   estimateTokensFromJson,
@@ -130,5 +141,23 @@ export {
   type SdlcAgentRuntime,
   type SdlcAgentDefinition,
 } from "./sdlc-agents.js";
+
+export {
+  GROK_BOT_DEFINITIONS,
+  GROK_BOT_TRIAD_IDS,
+  getGrokBotDefinition,
+  listGrokBotTriad,
+  triggerGrokBot,
+  resolveBotWebhook,
+  describeOpenLive,
+  type GrokBotConnector,
+  type GrokBotDefinition,
+  type GrokBotRoutineDef,
+  type GrokBotSkillDef,
+  type GrokBotClientOptions,
+  type GrokBotTriggerMode,
+  type GrokBotTriggerRequest,
+  type GrokBotTriggerResult,
+} from "./grok-bots/index.js";
 
 export * from "./agents/index.js";

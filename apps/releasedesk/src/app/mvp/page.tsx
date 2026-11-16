@@ -6,38 +6,106 @@ import { DeskHeader } from "@/components/DeskHeader";
 import { MockLabel } from "@/components/MockLabel";
 import type { SdlcMvpPortfolioReport } from "@/lib/sdlc-mvp";
 
-type CatalogPortfolioItem = {
-  customerId: string;
-  customerName: string;
-  application: string;
-  repository: string;
+type BotCard = {
+  id: string;
+  displayName: string;
+  definitionPath: string;
+  triad: boolean;
+  persona: string;
+  mission: string;
+  skills: string[];
+  routines: string[];
+  connectors: string[];
+  teammates: string[];
+  channels: string[];
+  grokApiKeyEnv: string;
+  keyPresent: boolean;
+  webhookConfigured: boolean;
+  openLive: string;
+  firstMessage: string;
+};
+
+type BotsResponse = {
+  triadIds: string[];
+  bots: BotCard[];
+  shipPath: string;
+  note?: string;
+};
+
+type GateView = {
+  iterationId: string;
+  title: string;
+  gate: {
+    canProceed: boolean;
+    hasRedTeamApproval: boolean;
+    hasSecurityApproval: boolean;
+    blockingIssue?: string;
+  };
 };
 
 type CatalogResponse = {
   agents: SdlcMvpPortfolioReport["agents"];
   credentials: SdlcMvpPortfolioReport["credentials"];
-  portfolio: CatalogPortfolioItem[];
+  portfolio: Array<{
+    customerId: string;
+    customerName: string;
+    application: string;
+    repository: string;
+  }>;
   requirements: SdlcMvpPortfolioReport["requirements"];
-  mockNote?: string;
+};
+
+type TriggerResult = {
+  botId: string;
+  mode: string;
+  mocked: boolean;
+  summary: string;
+  openLive: string;
+  definitionPath: string;
+};
+
+type IntelResult = {
+  shipPath: string;
+  keyEnv: string;
+  classify: { mocked: boolean; text: string };
+  extract: { mocked: boolean; text: string };
+  score: { mocked: boolean; text: string };
+  summarize: { mocked: boolean; text: string };
 };
 
 export default function MvpPage() {
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
+  const [bots, setBots] = useState<BotsResponse | null>(null);
   const [report, setReport] = useState<SdlcMvpPortfolioReport | null>(null);
+  const [gate, setGate] = useState<GateView | null>(null);
+  const [triggerLog, setTriggerLog] = useState<TriggerResult | null>(null);
+  const [intel, setIntel] = useState<IntelResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/sdlc-mvp");
-        const body = (await res.json()) as CatalogResponse & { error?: string };
-        if (!res.ok) throw new Error(body.error ?? "Failed to load catalog");
-        if (!cancelled) setCatalog(body);
+        const [catRes, botsRes, gateRes] = await Promise.all([
+          fetch("/api/sdlc-mvp"),
+          fetch("/api/bots"),
+          fetch("/api/iteration-gate"),
+        ]);
+        const cat = (await catRes.json()) as CatalogResponse & { error?: string };
+        const botBody = (await botsRes.json()) as BotsResponse & { error?: string };
+        const gateBody = (await gateRes.json()) as GateView & { error?: string };
+        if (!catRes.ok) throw new Error(cat.error ?? "Catalog failed");
+        if (!botsRes.ok) throw new Error(botBody.error ?? "Bots failed");
+        if (!cancelled) {
+          setCatalog(cat);
+          setBots(botBody);
+          if (gateRes.ok) setGate(gateBody);
+        }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load catalog");
+          setError(err instanceof Error ? err.message : "Failed to load MVP");
         }
       }
     })();
@@ -60,11 +128,75 @@ export default function MvpPage() {
     });
   }, []);
 
+  const triggerBot = useCallback((botId: string) => {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/bots/trigger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            botId,
+            payload: { source: "desk-mvp", customerId: "northwind" },
+          }),
+        });
+        const body = (await res.json()) as TriggerResult & { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Trigger failed");
+        setTriggerLog(body);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Trigger failed");
+      }
+    });
+  }, []);
+
+  const signGate = useCallback((kind: "red_team" | "security") => {
+    startTransition(async () => {
+      const res = await fetch("/api/iteration-gate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, approvedBy: "desk-operator" }),
+      });
+      const body = (await res.json()) as GateView & { error?: string };
+      if (res.ok) setGate(body);
+      else setError(body.error ?? "Gate update failed");
+    });
+  }, []);
+
+  const resetGate = useCallback(() => {
+    startTransition(async () => {
+      const res = await fetch("/api/iteration-gate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reset: true }),
+      });
+      const body = (await res.json()) as GateView;
+      if (res.ok) setGate(body);
+    });
+  }, []);
+
+  const runIntel = useCallback(() => {
+    startTransition(async () => {
+      try {
+        const res = await fetch("/api/grok/release-intel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ op: "all" }),
+        });
+        const body = (await res.json()) as IntelResult & { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Intel failed");
+        setIntel(body);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Intel failed");
+      }
+    });
+  }, []);
+
   const requirements = report?.requirements ?? catalog?.requirements;
   const credentials = report?.credentials ?? catalog?.credentials ?? [];
   const agents = report?.agents ?? catalog?.agents ?? [];
+  const grokBots = bots?.bots ?? [];
+  const cursorAgents = agents.filter((a) => a.runtime === "cursor_cloud");
   const presentCount = credentials.filter((c) => c.present).length;
-  const missingCount = credentials.length - presentCount;
 
   return (
     <div className="min-h-screen">
@@ -78,14 +210,17 @@ export default function MvpPage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            Delivery-manager view of agility, mandatory security, and token efficiency across the
-            multi-customer ITS portfolio (Northwind KYC proof app).
+            Full agent surface: Grok Bots (Lead + Change Analyst + Standards + Security + Builder)
+            and Cursor Cloud Agents (Coding + Testing + Review), plus one Grok API ship path.
+            Agility, mandatory security, and token efficiency stay in view.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <MockLabel>MOCK specialists</MockLabel>
-            <MockLabel>MOCK GitHub PR</MockLabel>
+            <MockLabel>MOCK without exclusive keys</MockLabel>
+            <Link href="/agents" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
+              Agents detail
+            </Link>
             <Link href="/desk" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
-              Open full desk
+              Full desk
             </Link>
           </div>
         </div>
@@ -93,12 +228,12 @@ export default function MvpPage() {
         <section className="animate-rise-delay mt-14">
           <h2 className="font-display text-2xl text-rd-ink">Three requirements</h2>
           <p className="mt-2 max-w-2xl text-rd-forest/70">
-            One job each — portfolio speed, early security participation, lean prompts for margin.
+            Agility · security · token efficiency — portfolio speed, mandatory Security, lean slices.
           </p>
           <ol className="mt-8 grid gap-10 md:grid-cols-3">
             {[
               {
-                key: "agility",
+                key: "01",
                 title: requirements?.agility.label ?? "Agility",
                 body:
                   requirements?.agility.summary ??
@@ -110,7 +245,7 @@ export default function MvpPage() {
                   : "Portfolio on-demand checks",
               },
               {
-                key: "security",
+                key: "02",
                 title: requirements?.security.label ?? "Security",
                 body:
                   requirements?.security.summary ??
@@ -120,19 +255,19 @@ export default function MvpPage() {
                   : "Mandatory participation",
               },
               {
-                key: "token",
+                key: "03",
                 title: requirements?.tokenEfficiency.label ?? "Token efficiency",
                 body:
                   requirements?.tokenEfficiency.summary ??
                   "Role slices vs full-run packing.",
                 meta: requirements
-                  ? `~${requirements.tokenEfficiency.totalSavingsTokensEst} tokens saved · avg ${requirements.tokenEfficiency.averageSavingsPct}%`
+                  ? `~${requirements.tokenEfficiency.totalSavingsTokensEst} tokens · avg ${requirements.tokenEfficiency.averageSavingsPct}%`
                   : "Slice vs full run",
               },
             ].map((item) => (
               <li key={item.key}>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-rd-brass">
-                  {item.key === "token" ? "03" : item.key === "security" ? "02" : "01"}
+                  {item.key}
                 </p>
                 <h3 className="mt-3 font-display text-2xl text-rd-ink">{item.title}</h3>
                 <p className="mt-2 text-rd-forest/75">{item.body}</p>
@@ -140,124 +275,183 @@ export default function MvpPage() {
               </li>
             ))}
           </ol>
-        </section>
-
-        <section className="animate-rise-late mt-16">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="font-display text-2xl text-rd-ink">Portfolio results</h2>
-              <p className="mt-2 max-w-xl text-rd-forest/70">
-                Lead stubs run one on-demand check per DEMO_PORTFOLIO customer with{" "}
-                <code className="text-rd-ink">metadata.customerId</code>.
-              </p>
-            </div>
+          <div className="mt-8">
             <button
               type="button"
               className="btn-primary"
               onClick={runPortfolio}
               disabled={pending}
             >
-              {pending ? "Running portfolio…" : report ? "Re-run portfolio check" : "Run portfolio check"}
+              {pending && !triggerLog ? "Running…" : report ? "Re-run portfolio check" : "Run portfolio check"}
             </button>
           </div>
-
-          {error ? (
-            <p className="mt-6 text-sm text-[color:var(--rd-alert)]" role="alert">
-              {error}
+          {report ? (
+            <p className="mt-4 text-sm text-rd-forest/65">
+              Security {report.requirements.security.allCustomersOk ? "met" : "blocked"} · token savings ~
+              {report.requirements.tokenEfficiency.totalSavingsTokensEst} ·{" "}
+              {report.requirements.agility.customersChecked} customers
             </p>
           ) : null}
+        </section>
 
-          {!report && catalog?.portfolio ? (
-            <ul className="mt-8 space-y-4">
-              {catalog.portfolio.map((c) => (
-                <li key={c.customerId} className="border-t border-rd-mist/80 pt-4">
-                  <p className="font-medium text-rd-ink">
-                    {c.customerName} · {c.application}
-                  </p>
-                  <p className="mt-1 text-sm text-rd-forest/60">
-                    {c.customerId} · {c.repository}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {report ? (
-            <div className="mt-8 space-y-8">
-              <div className="grid gap-6 sm:grid-cols-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-rd-forest/50">
-                    Security mandatory
-                  </p>
-                  <p className="mt-2 font-display text-3xl text-rd-ink">
-                    {report.requirements.security.allCustomersOk ? "Met" : "Blocked"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-rd-forest/50">
-                    Token savings vs full run
-                  </p>
-                  <p className="mt-2 font-display text-3xl text-rd-ink">
-                    ~{report.requirements.tokenEfficiency.totalSavingsTokensEst}
-                  </p>
-                  <p className="mt-1 text-sm text-rd-forest/55">
-                    avg {report.requirements.tokenEfficiency.averageSavingsPct}% (security slice)
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-rd-forest/50">
-                    Customers checked
-                  </p>
-                  <p className="mt-2 font-display text-3xl text-rd-ink">
-                    {report.requirements.agility.customersChecked}
-                  </p>
-                </div>
-              </div>
-
-              <ul className="space-y-6">
-                {report.customers.map((c) => (
-                  <li key={c.runId} className="border-t border-rd-mist/80 pt-5">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="font-medium text-rd-ink">
-                        {c.customerName} · {c.application}
-                      </p>
-                      <span className="text-sm text-rd-forest/60">{c.readiness}</span>
-                    </div>
-                    <p className="mt-1 text-sm text-rd-forest/55">
-                      {c.customerId} · run {c.runId}
+        <section className="mt-16">
+          <h2 className="font-display text-2xl text-rd-ink">Grok Bots — open &amp; trigger</h2>
+          <p className="mt-2 max-w-2xl text-rd-forest/70">
+            All five bots (not packs-only). Webhook if configured; else exclusive-key xAI chat; else MOCK.
+            Highlight triad Lead · Security · Builder; Standards and Change Analyst remain first-class.
+          </p>
+          <ul className="mt-8 space-y-6">
+            {grokBots.map((bot) => (
+              <li key={bot.id} className="border-t border-rd-mist/80 pt-5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-rd-ink">
+                      {bot.displayName}
+                      {bot.triad ? (
+                        <span className="ml-2 text-xs uppercase tracking-[0.14em] text-rd-brass">
+                          triad
+                        </span>
+                      ) : null}
                     </p>
-                    <p className="mt-3 text-sm text-rd-forest/75">
-                      Security:{" "}
-                      {c.security.ok
-                        ? "completed with recorded result"
-                        : c.security.blockingIssues.join("; ")}
-                    </p>
-                    <p className="mt-1 text-sm text-rd-forest/75">
-                      Token slice: {c.tokenBudget.sliceTokensEst} vs full{" "}
-                      {c.tokenBudget.fullRunTokensEst} (−{c.tokenBudget.savingsTokensEst} /{" "}
-                      {c.tokenBudget.savingsPct}%)
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <MockLabel>MOCK specialists</MockLabel>
-                      <MockLabel>MOCK PR</MockLabel>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-sm text-rd-forest/55">{report.mockNote}</p>
+                    <p className="mt-1 text-sm text-rd-forest/65">{bot.mission}</p>
+                    <p className="mt-1 font-mono text-xs text-rd-forest/45">{bot.definitionPath}</p>
+                  </div>
+                  <span
+                    className={`text-xs font-bold uppercase tracking-[0.14em] ${
+                      bot.keyPresent ? "text-rd-canopy" : "text-rd-forest/45"
+                    }`}
+                  >
+                    {bot.keyPresent ? "key present" : "key missing"}
+                    {bot.webhookConfigured ? " · webhook" : ""}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-rd-forest/55">
+                  skills: {bot.skills.join(", ") || "—"} · routines: {bot.routines.join(", ") || "—"}
+                </p>
+                <p className="mt-1 text-sm text-rd-forest/55">
+                  connectors: {bot.connectors.join(", ")} · teammates: {bot.teammates.join(", ")}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setOpenId(openId === bot.id ? null : bot.id)}
+                  >
+                    {openId === bot.id ? "Hide open-live" : "Open live"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={pending}
+                    onClick={() => triggerBot(bot.id)}
+                  >
+                    Trigger
+                  </button>
+                </div>
+                {openId === bot.id ? (
+                  <div className="mt-3 space-y-2 text-sm text-rd-forest/75">
+                    <p>{bot.openLive}</p>
+                    <p className="font-mono text-xs text-rd-forest/55">{bot.grokApiKeyEnv}</p>
+                    <p className="whitespace-pre-wrap text-xs text-rd-forest/65">{bot.firstMessage}</p>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {triggerLog ? (
+            <div className="mt-6 border-t border-rd-mist/80 pt-4 text-sm text-rd-forest/75">
+              <p className="font-medium text-rd-ink">
+                Last trigger · {triggerLog.botId} · {triggerLog.mode}
+                {triggerLog.mocked ? " · MOCK" : " · live"}
+              </p>
+              <p className="mt-2 whitespace-pre-wrap">{triggerLog.summary.slice(0, 800)}</p>
             </div>
           ) : null}
         </section>
 
         <section className="mt-16">
-          <h2 className="font-display text-2xl text-rd-ink">Per-agent API keys</h2>
+          <h2 className="font-display text-2xl text-rd-ink">Cursor Cloud Agents</h2>
           <p className="mt-2 max-w-2xl text-rd-forest/70">
-            Exclusive env vars only — presence shown, values never displayed.{" "}
-            <span className="text-rd-forest/55">
-              {presentCount} present · {missingCount} missing
-            </span>
+            Coding · Testing · Review — exclusive <code className="text-rd-ink">RELEASEDESK_CURSOR_API_KEY_*</code>,
+            never shared <code className="text-rd-ink">CURSOR_API_KEY</code>. Builder hands off; no auto-merge.
           </p>
-          <ul className="mt-8 divide-y divide-rd-mist/80 border-y border-rd-mist/80">
+          <ul className="mt-8 grid gap-6 sm:grid-cols-3">
+            {cursorAgents.map((agent) => (
+              <li key={agent.id}>
+                <p className="font-medium text-rd-ink">{agent.label}</p>
+                <p className="mt-2 text-sm text-rd-forest/70">{agent.mission}</p>
+                <p className="mt-2 font-mono text-xs text-rd-forest/45">
+                  {agent.apiKeyEnv.join(", ")}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="mt-16">
+          <h2 className="font-display text-2xl text-rd-ink">Iteration gate</h2>
+          <p className="mt-2 max-w-2xl text-rd-forest/70">
+            PR #14 hard gate: <strong className="font-medium text-rd-ink">red_team | security</strong> before
+            proceed. Human merge/release remain separate.
+          </p>
+          <p className="mt-4 text-sm text-rd-forest/75">
+            {gate
+              ? gate.gate.canProceed
+                ? "Open — approval satisfied"
+                : gate.gate.blockingIssue ?? "Pending approval"
+              : "Loading…"}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className="btn-primary" disabled={pending} onClick={() => signGate("security")}>
+              Sign security
+            </button>
+            <button type="button" className="btn-secondary" disabled={pending} onClick={() => signGate("red_team")}>
+              Sign red_team
+            </button>
+            <button type="button" className="btn-secondary" disabled={pending} onClick={resetGate}>
+              Reset
+            </button>
+          </div>
+        </section>
+
+        <section className="mt-16">
+          <h2 className="font-display text-2xl text-rd-ink">Grok API ship</h2>
+          <p className="mt-2 max-w-2xl text-rd-forest/70">
+            One shipped module:{" "}
+            <code className="text-rd-ink">
+              {bots?.shipPath ?? "packages/releasedesk-specialists/src/grok-api-intel.ts"}
+            </code>{" "}
+            — classify / extract / score / summarize via{" "}
+            <code className="text-rd-ink">RELEASEDESK_GROK_API_KEY_BUILDER</code>.
+          </p>
+          <button type="button" className="btn-primary mt-4" disabled={pending} onClick={runIntel}>
+            Run release intel
+          </button>
+          {intel ? (
+            <ul className="mt-6 space-y-3 text-sm text-rd-forest/75">
+              {(
+                [
+                  ["classify", intel.classify],
+                  ["extract", intel.extract],
+                  ["score", intel.score],
+                  ["summarize", intel.summarize],
+                ] as const
+              ).map(([name, r]) => (
+                <li key={name}>
+                  <span className="font-medium text-rd-ink">{name}</span>
+                  {r.mocked ? " · MOCK" : " · live"} — {r.text.slice(0, 200)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+
+        <section className="mt-16">
+          <h2 className="font-display text-2xl text-rd-ink">Per-agent API keys</h2>
+          <p className="mt-2 text-rd-forest/70">
+            Exclusive env vars only — {presentCount}/{credentials.length} present. Values never shown.
+          </p>
+          <ul className="mt-6 divide-y divide-rd-mist/80 border-y border-rd-mist/80">
             {credentials.map((cred) => (
               <li
                 key={`${cred.agentId}:${cred.envVar}`}
@@ -277,26 +471,13 @@ export default function MvpPage() {
               </li>
             ))}
           </ul>
-
-          {agents.length > 0 ? (
-            <div className="mt-10">
-              <h3 className="font-display text-xl text-rd-ink">Working agents</h3>
-              <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-                {agents.map((agent) => (
-                  <li key={agent.id}>
-                    <p className="font-medium text-rd-ink">{agent.label}</p>
-                    <p className="mt-1 text-sm text-rd-forest/65">{agent.mission}</p>
-                    <p className="mt-2 text-xs uppercase tracking-[0.12em] text-rd-forest/45">
-                      {agent.runtime}
-                      {agent.mandatoryOnEveryChange ? " · mandatory" : ""}
-                      {agent.usesContextSlice ? " · context slice" : ""}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </section>
+
+        {error ? (
+          <p className="mt-10 text-sm text-[color:var(--rd-alert)]" role="alert">
+            {error}
+          </p>
+        ) : null}
       </main>
     </div>
   );

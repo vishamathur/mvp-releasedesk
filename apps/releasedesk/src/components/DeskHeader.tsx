@@ -30,6 +30,16 @@ export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
           SDLC MVP
         </Link>
         <Link
+          href="/agents"
+          className={
+            dark
+              ? "text-sm font-medium text-white/70 underline-offset-4 hover:text-white hover:underline"
+              : "text-sm font-medium text-rd-forest/70 underline-offset-4 hover:text-rd-ink hover:underline"
+          }
+        >
+          Agents
+        </Link>
+        <Link
           href="/desk"
           className={
             dark

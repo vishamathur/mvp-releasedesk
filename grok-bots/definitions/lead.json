@@ -1,0 +1,12 @@
+{
+  "id": "lead",
+  "displayName": "RD Lead",
+  "definitionPath": "grok-bots/definitions/lead.json",
+  "grokApiKeyEnv": "RELEASEDESK_GROK_API_KEY_LEAD",
+  "cursorApiKeyEnv": "RELEASEDESK_CURSOR_API_KEY_LEAD",
+  "webhookUrlEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_URL_LEAD",
+  "webhookKeyEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_KEY_LEAD",
+  "triad": true,
+  "teammates": ["change_analyst", "standards", "security", "builder"],
+  "source": "packages/releasedesk-core/src/grok-bots/definitions.ts"
+}
