@@ -79,11 +79,13 @@ Leave buffer for a live bot persona edit + Q&A.
 
 | Slide box | Live surface |
 | --- | --- |
+| Customer ER · CostEstimate · priority backlog | Intake panel / `/control` · `@releasedesk/core` intake · dual cost+queue approvals |
+| Fairness → `approved_for_dev` → Lead | Lead starts only from dual-approved queue items |
 | Grok Bots Lead→CA→Std→Sec→Bld | `grok-bots/definitions/*` + `/agents` + `/desk` GrokBotsPanel |
 | Cursor Coding ships | Builder → Coding; code in `apps/releasedesk/src/lib/grok-release-intel.ts` |
 | Grok API classify/extract/score/summarize | `POST /api/grok/release-intel` + run panel + `/mvp` |
 | Iteration gate red_team\|security | `/mvp` gate + run `IterationApprovalGate` |
-| Merge + release | Run page ApprovalGates — human only |
+| Merge + release → **back to Lead** | Run page ApprovalGates — readiness/result closes the circle |
 
 ---
 

@@ -37,17 +37,36 @@ Canonical store copy also lives at the Project docs store.
 
 ## Slide 2 — Architecture / workflow
 
-**Title:** Grok Bot → Cursor → Grok API (with human gates)
+**Title:** Customer intake → Lead → Grok Bot → Cursor → Grok API → back to Lead
 
-**One-liner:** Lead and specialists hand off asynchronously; Builder launches Cursor; shipped code calls Grok API; humans own the iteration gate and final merge/release.
+**One-liner:** Multi-customer ER + finance + priority feed Lead; bots and Cursor ship Grok intel; humans gate iteration/merge/release; readiness closes the circle back to Lead.
 
 ```mermaid
-flowchart LR
+flowchart TB
+  subgraph Intake["Customer ER · finance · priority"]
+    Cust["Customer<br/>unique customerId"]
+    Req["CustomerRequest<br/>priorityHint"]
+    Cost["CostEstimate<br/>finance · keyed by customerId"]
+    Queue["Weighted backlog<br/>fairness interleave"]
+    Views["Per-customer views"]
+    CostGate["Human cost approval"]
+    QGate["Human queue approval"]
+    RePri["Re-prioritize<br/>+ quick sign-off"]
+    Cust -->|1..*| Req
+    Req -->|1..1| Cost
+    Req --> Queue
+    Queue --> Views
+    Cost --> CostGate
+    Queue --> QGate
+    CostGate --> RePri
+    QGate --> RePri
+  end
+
   subgraph GrokBots["Grok Bots"]
     Lead["Lead Bot<br/>orchestrates"]
     CA["Change Analyst"]
     Std["Standards"]
-    Sec["Security"]
+    Sec["Security · mandatory"]
     Bld["Builder"]
     Lead --> CA
     Lead --> Std
@@ -56,37 +75,40 @@ flowchart LR
   end
 
   subgraph CursorLane["Cursor cloud agent"]
-    Agent["Coding agent<br/>rules + skills"]
+    Agent["Coding · Testing · Review<br/>exclusive NHI keys"]
     Repo["Ships real repo change"]
     Agent --> Repo
   end
 
   subgraph GrokAPI["Grok API"]
-    Intel["Classify / extract / score / summarize"]
+    Intel["Classify / extract / score / summarize<br/>+ trustCheck"]
   end
 
   subgraph Humans["Human gates"]
-    Gate["Iteration gate<br/>red team OR security"]
+    Iter["Iteration gate<br/>red_team OR security"]
     Merge["Merge + release approval"]
   end
 
+  RePri -->|"approved_for_dev only"| Lead
   Bld -->|"hand off + context"| Agent
   Repo --> Intel
-  Intel --> Gate
-  Gate -->|approve| Merge
-  Gate -->|reject| Blocked["Blocked — no ship"]
+  Intel --> Iter
+  Iter -->|approve| Merge
+  Iter -->|reject| Blocked["Blocked — no ship"]
+  Merge -->|"readiness / result"| Lead
+  Intel -.->|"structured intel"| Lead
 ```
 
 **On-slide callouts**
-1. **Grok Bot lane** — Lead · Change Analyst · Standards · Security · Builder
-2. **Cursor** — Builder hands off; agent ships real code under project rules/skills
-3. **Grok API** — called by what shipped; structured intel feeds the workflow
-4. **Human** — iteration gate, then merge/release; never auto-merge
+1. **Intake ER** — Customer → Request → CostEstimate (`customerId`); dual cost + queue approvals; fairness priority before Lead
+2. **Grok Bot lane** — Lead · Change Analyst · Standards · Security · Builder
+3. **Cursor → Grok API** — Coding ships; Testing∥Review never merge; classify/extract/score/summarize + trustCheck
+4. **Full circle** — merge/release result and intel feed **back to Lead**; never auto-merge
 
-**Live map:** `/mvp` + `/agents` + `/desk` → run page gates + `grok-release-intel.ts`
+**Live map:** `/control` · `/mvp` · `/agents` · `/desk` → intake + run gates + `grok-release-intel.ts`
 
 **Spoken (≤60s):**  
-“Lead sequences specialists. Builder hands work to Cursor with context and our rules. The agent ships code that calls Grok API for intel the workflow consumes. Humans still own the iteration gate and final merge. Now we open the live system.”
+“Customers enter with requests, cost estimates, and priority. Finance and queue humans both approve — then fairness-ordered work hits Lead. Lead sequences specialists; Builder hands to Cursor; shipped code calls Grok API. Iteration and merge stay human. Readiness closes the circle back to Lead. Now we open the live system.”
 
 ---
 
