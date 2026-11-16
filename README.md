@@ -2,7 +2,8 @@
 
 **Release Desk** orchestrates the full SDLC for the **Northwind Bank KYC** application: multi-customer intake → Lead specialists → AI Red Teaming → ATLAS/OWASP hard block → Cloud Coding / **Testing** / Review (MOCK by default) → independent **Verification** → checkpoints + remediate → feature checklist → human merge/release.
 
-Architecture diagram: [`docs/architecture-mermaid.md`](./docs/architecture-mermaid.md).  
+Architecture diagram (Cursor-maximized): [`docs/architecture-mermaid.md`](./docs/architecture-mermaid.md).  
+Capability map: [`docs/cursor-maximized-architecture.md`](./docs/cursor-maximized-architecture.md).  
 Cursor SDLC operator notes (Testing vs Verification): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
 Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).
 
