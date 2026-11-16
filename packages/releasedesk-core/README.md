@@ -27,6 +27,7 @@ npm run typecheck -w @releasedesk/core
 | Store | `store` | `InMemoryRunContextStore` and `FileBackedRunContextStore` |
 | Agent contracts | `agents/*` | Lead, Change Analyst, Standards, Security, Builder I/O |
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
+| Mandatory gates | `gates` | Security always required on every change (`MANDATORY_ANALYSIS_ROLES`, `evaluateSecurityParticipation`) |
 
 ## Run context lifecycle
 

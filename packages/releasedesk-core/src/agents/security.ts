@@ -4,7 +4,10 @@ import { AgentRoleSchema } from "./roles.js";
 
 /**
  * Security Agent — findings/advisories; release-blocking risks.
- * Runtime implementation lands in Milestone 4.
+ *
+ * Participation is **mandatory** on every change / release check (see
+ * `MANDATORY_ANALYSIS_ROLES` / `evaluateSecurityParticipation` in `@releasedesk/core`).
+ * There is no low-risk skip path before human approval.
  */
 export const SecurityAgentInputSchema = AgentInvocationBaseSchema.extend({
   agentRole: z.literal(AgentRoleSchema.enum.security),

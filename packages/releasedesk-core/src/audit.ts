@@ -45,6 +45,9 @@ export const AuditActionSchema = z.enum([
   "feature.signoff_requested",
   "feature.signoff_item_recorded",
   "feature.signoff_completed",
+  /** Mandatory Security participation gate */
+  "security.gate_evaluated",
+  "security.gate_blocked",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;
