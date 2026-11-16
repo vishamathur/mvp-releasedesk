@@ -37,122 +37,44 @@ Canonical store copy also lives at the Project docs store.
 
 ## Slide 2 — Architecture / workflow
 
-**Title:** Full SDLC control plane → back to Lead
+**Title:** SDLC control plane → back to Lead
 
-**One-liner:** Customer ER + finance + priority → Lead + specialists → ATLAS/OWASP → Cursor Coding/Testing/Review → Grok API → human gates → readiness + tokens/NHI back to Lead. Full workflow — nothing dropped.
+**One-liner:** Intake → Grok Bots → Cursor ships → Grok API → human gates → Lead. Detail lives in code + `/control`; this slide is the room map.
 
 ```mermaid
-flowchart TB
-  subgraph Intake["1 · Multi-customer intake · ER · finance · priority"]
-    Cust["Customer<br/>unique customerId"]
-    Req["CustomerRequest<br/>priorityHint"]
-    Cost["CostEstimate<br/>finance · keyed by customerId"]
-    Queue["Weighted multi-customer backlog<br/>fairness interleave"]
-    Views["Per-customer views"]
-    CostGate["Human cost approval"]
-    QGate["Human queue approval"]
-    RePri["Re-prioritize + quick sign-off"]
-    Cust -->|1..*| Req
-    Req -->|1..1| Cost
-    Req --> Queue
-    Queue --> Views
-    Cost --> CostGate
-    Queue --> QGate
-    CostGate --> RePri
-    QGate --> RePri
+flowchart LR
+  subgraph W1["WIRE 1 · Intake"]
+    A["Customer ER"] --- B["Cost / finance"] --- C["Priority queue"]
   end
 
-  subgraph GrokBots["2 · Grok Bots"]
-    Lead["Lead Bot · orchestrates"]
-    CA["Change Analyst"]
-    Std["Standards"]
-    Sec["Security · mandatory every change"]
-    Bld["Builder"]
-    Lead --> CA
-    Lead --> Std
-    Lead --> Sec
-    Sec --> Bld
+  subgraph W2["WIRE 2 · Grok Bots"]
+    D["Lead"] --- E["CA"] --- F["Standards"] --- G["Security"] --- H["Builder"]
   end
 
-  subgraph RedTeam["3 · ATLAS / OWASP · AI Red Teaming"]
-    AIRed["AI Red Teaming<br/>all AI/prompt touchpoints"]
-    Zscal["Zscaler provider · optional MOCK"]
-    Collapsed["Collapsed gate<br/>pre_release + post_remediation"]
-    SideQ["Remediation side-queue<br/>non-blocking"]
-    Atlas["ATLAS / OWASP LLM Top 10<br/>hard-block review-ready PRs"]
-    AIRed --> Collapsed
-    AIRed -.-> Zscal
-    Collapsed -.-> SideQ
-    Collapsed --> Atlas
+  subgraph W3["WIRE 3 · Cursor + Grok API"]
+    I["Coding"] --- J["Testing"] --- K["Review"]
+    I --> L["Grok API intel"]
   end
 
-  subgraph CursorLane["4 · Cursor cloud agents · exclusive NHI"]
-    Coding["Coding · ships repo change"]
-    Testing["Testing · verifies · never merge"]
-    Review["Review · reviews · never merge"]
-    NHI["NHI keys<br/>RELEASEDESK_CURSOR_API_KEY_*"]
-    Coding --- NHI
-    Testing --- NHI
-    Review --- NHI
+  subgraph W4["WIRE 4 · Humans"]
+    M["Iteration gate"] --- N["Merge"] --- O["Release"]
   end
 
-  subgraph GrokAPI["5 · Grok API · shipped code"]
-    Intel["Classify / extract / score / summarize"]
-    Trust["trustCheck<br/>humanGateStillRequired · noAutoApprove"]
-    LeadKey["NHI · RELEASEDESK_GROK_API_KEY_LEAD"]
-    Intel --> Trust
-    Trust --- LeadKey
-  end
-
-  subgraph Humans["6 · Human gates"]
-    Iter["Iteration gate<br/>red_team OR security"]
-    FeatSO["Feature sign-off checklist"]
-    Merge["Human merge approval"]
-    Rel["Human release approval"]
-    Iter --> FeatSO --> Merge --> Rel
-  end
-
-  subgraph Efficiency["7 · Token efficiency · portfolio"]
-    Portfolio["DEMO_PORTFOLIO<br/>Northwind · Contoso · Fabrikam"]
-    Slice["Role context slices<br/>vs full-run packing"]
-    Margin["Token = invoice line item<br/>ITS margin"]
-    Portfolio --- Slice --- Margin
-  end
-
-  subgraph APP["App · Northwind KYC"]
-    KYC["KYC UI + API + domain"]
-  end
-
-  RePri -->|"approved_for_dev only"| Lead
-  CA & Std & Sec & Bld -.->|AI output| AIRed
-  AIRed -.->|realtime flags| Lead
-  Bld -->|"hand off + context"| Coding
-  Coding --> Testing
-  Coding --> Review
-  SideQ -.->|async remediate| Coding
-  Coding -->|"ships"| Intel
-  Coding & Testing & Review -.->|prompts| AIRed
-  Atlas --> Iter
-  Trust --> Iter
-  Rel -->|"readiness / result"| Lead
-  Intel -.->|"structured intel"| Lead
-  Slice -.->|lean prompts| Lead
-  CA -.-> KYC
-  Sec -.-> KYC
-  Coding ==>|build + verify| KYC
-  Rel -.->|gate release of| KYC
+  C ==> D
+  H ==> I
+  L ==> M
+  O ==>|"readiness"| D
 ```
 
-**On-slide callouts**
-1. **Intake** — Customer ER · CostEstimate finance · dual approvals · fairness priority → Lead  
-2. **Bots + ATLAS** — Lead·CA·Standards·Security·Builder; collapsed AI Red Team; hard-block review-ready PRs  
-3. **Cursor + Grok API** — Coding ships; Testing∥Review never merge; classify/extract/score/summarize + trustCheck; exclusive NHI  
-4. **Full circle** — iteration → feature sign-off → merge/release → readiness + token slices **back to Lead**
+**On-slide callouts (say, don’t draw)**
+1. Security mandatory; ATLAS/OWASP on review-ready PRs  
+2. Coding ships; Testing/Review never merge; exclusive NHI keys  
+3. Iteration gate = red_team OR security; never auto-merge  
 
-**Live map:** `/control` (7 stages) · `/mvp` · `/agents` · `/desk` · [`architecture-mermaid.md`](./architecture-mermaid.md)
+**Detail diagram:** [`architecture-mermaid.md`](./architecture-mermaid.md) (full ER / ATLAS / side-queue) · Live: `/control`
 
-**Spoken (≤60s):**  
-“Full stack: customers, cost, and priority into Lead; specialists and ATLAS; Cursor Coding ships while Testing and Review stay independent; Grok API intel; humans on iteration and merge. Readiness and token efficiency close the circle back to Lead. Now we open `/control`.”
+**Spoken (≤40s):**  
+“Intake into Lead, specialists hand off, Cursor Coding ships code that calls Grok API, humans gate iteration and merge, then readiness closes the loop. Detail is in `/control` — let’s open it.”
 
 ---
 

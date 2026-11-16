@@ -75,19 +75,16 @@ Leave buffer for a live bot persona edit + Q&A.
 
 ---
 
-## Architecture ↔ live map (Slide 2 — full workflow)
+## Architecture ↔ live map (Slide 2 = 4 wires)
 
-| Stage | Live surface |
-| --- | --- |
-| 1 Intake ER · finance · priority | `/control` stage 1 · intake dual cost+queue · fairness backlog |
-| 2 Grok Bots Lead→CA→Std→Sec→Bld | `/agents` · `/desk` · `grok-bots/definitions/*` |
-| 3 ATLAS / OWASP AI Red Team | `/control` ATLAS panel · `checkpoint-gate.ts` |
-| 4 Cursor Coding ∥ Testing ∥ Review + NHI | Builder handoff · exclusive `RELEASEDESK_CURSOR_API_KEY_*` |
-| 5 Grok API classify/extract/score/summarize | `grok-release-intel.ts` · `POST /api/grok/release-intel` |
-| 6 Iteration → feature sign-off → merge/release | Run gates · readiness **back to Lead** |
-| 7 Portfolio · token slices · NHI | `/mvp` · `/control` stage 7 · `token-budget.ts` |
+| Wire | Slide box | Live surface |
+| --- | --- | --- |
+| 1 | Intake · Customer ER · cost · priority | `/control` stage 1 · dual cost+queue · fairness backlog |
+| 2 | Grok Bots Lead→CA→Standards→Security→Builder | `/agents` · `/desk` · `grok-bots/definitions/*` |
+| 3 | Cursor Coding∥Testing∥Review + Grok API intel | Builder handoff · `grok-release-intel.ts` · exclusive NHI |
+| 4 | Humans iteration · merge · release → readiness to Lead | Run gates · `/control` stages 4–6 |
 
-Full Mermaid: [`architecture-mermaid.md`](./architecture-mermaid.md)
+**Full detail (ATLAS, side-queue, tokens, ER):** [`architecture-mermaid.md`](./architecture-mermaid.md) · `/control`
 
 ---
 

@@ -4,7 +4,7 @@ Last updated: 2026-11-17 (Asia/Calcutta)
 
 **Full SDLC control plane** — do not drop stages for slide brevity. Multi-customer ER + finance + priority fairness feed Lead; Grok Bots + Cursor Coding/Testing/Review; ATLAS/OWASP; Grok API intel; token efficiency; NHI exclusive keys; human gates; readiness closes the circle back to Lead.
 
-Canonical Slide 2 copy: [`spacexai-demo-slides.md`](./spacexai-demo-slides.md). Live surface: `/control`.
+**Slide 2** uses a 4-wire room map in [`spacexai-demo-slides.md`](./spacexai-demo-slides.md). **This file keeps the full workflow.** Live surface: `/control`.
 
 ```mermaid
 flowchart TB
