@@ -11,7 +11,8 @@ Northwind Bank KYC **release readiness** (brief Space 1): DMs cannot tell if a c
 | Grok Bots | `grok-bots/bots/{lead,change-analyst,standards,security,builder}` — persona, skills, routines |
 | Desk host | `grok-bots-host.ts`, `GET /api/bots`, `POST /api/bots/trigger`, `GrokBotsPanel`, `ChallengeTrigger` |
 | Cursor guidance | `AGENTS.md`, `.cursor/rules/releasedesk-grok-api.mdc`, `.cursor/skills/ship-grok-release-intel/SKILL.md` |
-| Grok API | `grok-release-intel.ts` + route + panel + tests — classify/extract/score/summarize + trustCheck |
+| Grok API | `grok-release-intel.ts` + route + panel + tests — classify + summarize + trustCheck |
+| Cursor path | Builder → **Coding** (ships) → **Testing** ∥ **Review**; exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` |
 | UI spine | Desk optimized for agent navigation; run page keeps gate + intel + handoffs |
 
 ## Preserved
@@ -28,7 +29,7 @@ Northwind Bank KYC **release readiness** (brief Space 1): DMs cannot tell if a c
 ## Still open
 
 - Live import into x.ai/bot UI (packs are repo-ready; Desk mirrors open/navigate)
-- Live `XAI_API_KEY` for non-MOCK Grok calls in the room
+- Live `RELEASEDESK_GROK_API_KEY_LEAD` for non-MOCK Grok calls in the room
 - Optional slide 3 (trade-offs / next) — only if asked
 
 ## Why choices (talk track)

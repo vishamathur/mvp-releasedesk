@@ -3,18 +3,26 @@ import type {
   CloudAgentClient,
   CloudAgentDispatchRequest,
   CloudAgentDispatchResult,
+  CloudAgentKind,
 } from "./types.js";
 
 /**
  * Real Cursor Cloud Agents API client (v1 public beta).
- * Enabled when CURSOR_API_KEY or CURSOR_SERVICE_ACCOUNT_KEY is present
+ * Enabled when exclusive RELEASEDESK_CURSOR_API_KEY_* keys are present
  * and RELEASEDESK_CLOUD_CLIENT=real (see resolveCloudAgentClient).
+ * Shared CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY are never used.
  *
  * Docs: https://cursor.com/docs/cloud-agent/api/endpoints
  */
 
 export type RealCloudAgentClientOptions = {
+  /**
+   * Single exclusive key override (tests). When set, used for every kind.
+   * Prefer {@link resolveApiKeyForKind} in production so each agent has its own key.
+   */
   apiKey?: string;
+  /** Per-kind exclusive key resolver (Coding / Testing / Review). */
+  resolveApiKeyForKind?: (kind: CloudAgentKind) => string | undefined;
   /** Default https://api.cursor.com */
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -45,9 +53,12 @@ type ApiCreateResponse = {
   run?: ApiRun;
 };
 
-export function resolveCursorApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const key = env.CURSOR_API_KEY ?? env.CURSOR_SERVICE_ACCOUNT_KEY;
-  return key && key.trim().length > 0 ? key.trim() : undefined;
+/**
+ * @deprecated Shared CURSOR_* keys are not used on the SDLC path.
+ * Prefer resolveCursorApiKeyForAgent from resolve.ts / @releasedesk/core.
+ */
+export function resolveCursorApiKey(_env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return undefined;
 }
 
 function repoHttpsUrl(repository: string): string {
@@ -72,28 +83,31 @@ function authHeaders(apiKey: string): Record<string, string> {
 
 /**
  * Create a live Cursor Cloud Agents client.
- * Throws only on programmer misuse (missing key). Network/API failures return failed results
- * so Builder retry logic can handle them.
+ * Requires either `apiKey` (tests) or `resolveApiKeyForKind` (per-agent exclusive keys).
+ * Network/API failures return failed results so Builder retry logic can handle them.
  */
 export function createRealCloudAgentClient(
   options: RealCloudAgentClientOptions = {},
 ): CloudAgentClient {
-  const resolvedKey = options.apiKey ?? resolveCursorApiKey();
-  if (!resolvedKey) {
+  if (!options.apiKey && !options.resolveApiKeyForKind) {
     throw new Error(
-      "createRealCloudAgentClient requires CURSOR_API_KEY or CURSOR_SERVICE_ACCOUNT_KEY",
+      "createRealCloudAgentClient requires apiKey or resolveApiKeyForKind (exclusive RELEASEDESK_CURSOR_API_KEY_*)",
     );
   }
-  const apiKey: string = resolvedKey;
 
   const baseUrl = (options.baseUrl ?? "https://api.cursor.com").replace(/\/$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const pollIntervalMs = options.pollIntervalMs ?? 2000;
   const pollTimeoutMs = options.pollTimeoutMs ?? 15 * 60 * 1000;
 
+  function apiKeyFor(kind: CloudAgentKind): string | undefined {
+    return options.apiKey ?? options.resolveApiKeyForKind?.(kind);
+  }
+
   async function createAndWait(
     request: CloudAgentDispatchRequest,
     attempt: number,
+    apiKey: string,
   ): Promise<CloudAgentDispatchResult> {
     const startingRef =
       request.agentKind === "coding"
@@ -186,7 +200,7 @@ export function createRealCloudAgentClient(
     const cloudAgentUrl =
       created.agent?.url ?? `https://cursor.com/agents/${agentId}`;
 
-    const terminal = await pollRun(agentId, runId);
+    const terminal = await pollRun(agentId, runId, apiKey);
     const branches = terminal.git?.branches ?? [];
     const primary = branches[0];
     const branch = primary?.branch ?? request.branch ?? request.proposedBranch;
@@ -247,7 +261,7 @@ export function createRealCloudAgentClient(
     };
   }
 
-  async function pollRun(agentId: string, runId: string): Promise<ApiRun> {
+  async function pollRun(agentId: string, runId: string, apiKey: string): Promise<ApiRun> {
     const deadline = Date.now() + pollTimeoutMs;
     let last: ApiRun = { id: runId, status: "CREATING" };
 
@@ -288,8 +302,34 @@ export function createRealCloudAgentClient(
       const attempt = (attempts.get(key) ?? 0) + 1;
       attempts.set(key, attempt);
 
+      const apiKey = apiKeyFor(request.agentKind);
+      if (!apiKey) {
+        const expected =
+          request.agentKind === "coding"
+            ? "RELEASEDESK_CURSOR_API_KEY_CODING"
+            : request.agentKind === "testing"
+              ? "RELEASEDESK_CURSOR_API_KEY_TESTING"
+              : "RELEASEDESK_CURSOR_API_KEY_REVIEW";
+        const mock = createMockMeta(
+          "cursor-cloud-agents",
+          `Exclusive ${expected} missing for ${request.agentKind} (shared CURSOR_* never used)`,
+        );
+        return {
+          handoffId: request.handoffId,
+          agentKind: request.agentKind,
+          status: "failed",
+          mocked: true,
+          mock,
+          summary: formatMockNote(
+            `Cannot dispatch ${request.agentKind} Cloud Agent — ${expected} unavailable`,
+          ),
+          attempt,
+          error: `missing ${expected}`,
+        };
+      }
+
       try {
-        return await createAndWait(request, attempt);
+        return await createAndWait(request, attempt, apiKey);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -311,13 +351,15 @@ export function createRealCloudAgentClient(
  * credentials are missing — used by resolveCloudAgentClient when mode=real
  * was requested without a key (should not happen if resolve is correct).
  */
-export function createUnavailableRealClientStub(): CloudAgentClient {
+export function createUnavailableRealClientStub(
+  expectedEnvVar = "RELEASEDESK_CURSOR_API_KEY_CODING",
+): CloudAgentClient {
   return {
     mode: "real",
     async dispatch(request): Promise<CloudAgentDispatchResult> {
       const mock = createMockMeta(
         "cursor-cloud-agents",
-        "Real client requested but CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY missing",
+        `Real client requested but exclusive ${expectedEnvVar} missing (shared CURSOR_* never used)`,
       );
       return {
         handoffId: request.handoffId,
@@ -326,10 +368,10 @@ export function createUnavailableRealClientStub(): CloudAgentClient {
         mocked: true,
         mock,
         summary: formatMockNote(
-          "Cannot dispatch real Cloud Agent — credentials unavailable",
+          `Cannot dispatch real Cloud Agent — ${expectedEnvVar} unavailable`,
         ),
         attempt: 1,
-        error: "missing CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY",
+        error: `missing ${expectedEnvVar}`,
       };
     },
   };

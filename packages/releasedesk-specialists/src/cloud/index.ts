@@ -22,7 +22,9 @@ export {
 
 export {
   resolveCloudAgentClient,
+  resolveCursorApiKeyForAgent,
   describeCloudClientMode,
+  cursorAgentIdForKind,
   type ResolveCloudAgentClientOptions,
 } from "./resolve.js";
 

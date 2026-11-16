@@ -151,6 +151,7 @@ export function createChangeAnalystRunner(options: SpecialistRunnerOptions = {})
         `Draft concise release notes for ${repository} (${baseRef}...${headRef}). Findings JSON: ${JSON.stringify(findings.slice(0, 30))}`,
         {
           ...options.grok,
+          agentRole: options.grok?.agentRole ?? "change_analyst",
           fallback: localNotes,
         },
       );

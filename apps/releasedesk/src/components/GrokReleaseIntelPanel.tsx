@@ -7,10 +7,14 @@ type Intel = {
   mode: string;
   mocked: boolean;
   classify: { category: string; confidence: number };
-  extract: { entities: string[]; openQuestions: string[] };
-  score: { releaseRisk: number; rationale: string };
   summarize: string;
-  trustCheck: { schemaValid: boolean; humanGateStillRequired: true; notes: string[] };
+  trustCheck: {
+    schemaValid: boolean;
+    humanGateStillRequired: true;
+    noAutoApprove: true;
+    keyEnvVar: string;
+    notes: string[];
+  };
 };
 
 export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
@@ -44,8 +48,7 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
         {intel?.mocked ? <MockLabel>MOCK Grok API</MockLabel> : null}
       </div>
       <p className="mt-2 text-sm text-rd-forest/70">
-        Shipped workflow path — classify / extract / score / summarize. Trust check keeps human gates
-        authoritative.
+        Shipped path — classify + summarize. Trust check keeps human gates authoritative.
       </p>
       <button type="button" className="btn-primary mt-4" disabled={busy} onClick={() => void run()}>
         {busy ? "Calling Grok…" : "Run Grok API intel"}
@@ -54,18 +57,17 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
       {intel ? (
         <div className="mt-6 space-y-3 text-sm">
           <p className="font-medium text-rd-ink">
-            {intel.classify.category} · confidence {intel.classify.confidence} · risk{" "}
-            {intel.score.releaseRisk}/100 · mode {intel.mode}
+            {intel.classify.category} · confidence {intel.classify.confidence} · mode {intel.mode}
           </p>
           <p className="text-rd-forest/75">{intel.summarize}</p>
-          <p className="text-rd-forest/60">{intel.score.rationale}</p>
           <ul className="list-disc pl-5 text-rd-forest/65">
             {intel.trustCheck.notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
           </ul>
           <p className="text-xs font-bold uppercase tracking-wider text-rd-brass">
-            humanGateStillRequired · schemaValid={String(intel.trustCheck.schemaValid)}
+            humanGateStillRequired · schemaValid={String(intel.trustCheck.schemaValid)} ·{" "}
+            {intel.trustCheck.keyEnvVar}
           </p>
         </div>
       ) : null}

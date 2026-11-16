@@ -1,8 +1,12 @@
 /**
- * Grok API release intel — shipped product path for SpaceXAI challenge.
- * Classifies, extracts, scores, and summarizes release findings.
- * Without XAI_API_KEY / GROK_API_KEY → MOCK-labeled deterministic fallback.
+ * Grok API release intel — one shipped Desk module (classify + summarize).
+ *
+ * Live key: RELEASEDESK_GROK_API_KEY_LEAD only.
+ * Shared XAI_API_KEY / GROK_API_KEY are never consulted.
+ * Absent key → MOCK-labeled fallback.
  */
+
+import { GROK_API_KEY_ENV, resolveAgentGrokApiKey } from "@releasedesk/core";
 
 export type GrokIntelMode = "live" | "mock";
 
@@ -12,34 +16,64 @@ export type GrokReleaseIntelInput = {
   findings: Array<{ source: string; text: string; severity?: string }>;
 };
 
+export type GrokIntelTrustCheck = {
+  schemaValid: boolean;
+  humanGateStillRequired: true;
+  noAutoApprove: true;
+  keyEnvVar: string;
+  usedSharedFallback: false;
+  notes: string[];
+};
+
 export type GrokReleaseIntelResult = {
   mode: GrokIntelMode;
   model: string;
   classify: { category: string; confidence: number };
-  extract: { entities: string[]; openQuestions: string[] };
-  score: { releaseRisk: number; rationale: string };
   summarize: string;
-  trustCheck: {
-    schemaValid: boolean;
-    humanGateStillRequired: true;
-    notes: string[];
-  };
+  trustCheck: GrokIntelTrustCheck;
   mocked: boolean;
   rawPreview?: string;
 };
 
 const MODEL = process.env.GROK_MODEL?.trim() || "grok-2-latest";
+const INTEL_ROLE = "lead" as const;
+const INTEL_KEY_ENV = GROK_API_KEY_ENV[INTEL_ROLE];
 
-function resolveApiKey(): string | undefined {
-  const key = process.env.XAI_API_KEY ?? process.env.GROK_API_KEY;
-  return key && key.trim().length > 0 ? key.trim() : undefined;
+function trustNotes(extra: string[]): GrokIntelTrustCheck {
+  return {
+    schemaValid: true,
+    humanGateStillRequired: true,
+    noAutoApprove: true,
+    keyEnvVar: INTEL_KEY_ENV,
+    usedSharedFallback: false,
+    notes: extra,
+  };
+}
+
+export function trustCheckGrokIntelPayload(payload: {
+  classify?: { category?: unknown; confidence?: unknown };
+  summarize?: unknown;
+}): { ok: true; confidence: number } | { ok: false; reason: string } {
+  if (!payload.classify || payload.summarize == null) {
+    return { ok: false, reason: "missing classify/summarize" };
+  }
+  if (typeof payload.classify.category !== "string" || !payload.classify.category.trim()) {
+    return { ok: false, reason: "classify.category invalid" };
+  }
+  const confidence = Number(payload.classify.confidence);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    return { ok: false, reason: "classify.confidence out of range [0,1]" };
+  }
+  if (typeof payload.summarize !== "string" || !payload.summarize.trim()) {
+    return { ok: false, reason: "summarize invalid" };
+  }
+  return { ok: true, confidence };
 }
 
 function mockIntel(input: GrokReleaseIntelInput): GrokReleaseIntelResult {
   const severe = input.findings.filter((f) =>
     ["high", "critical"].includes((f.severity ?? "").toLowerCase()),
   );
-  const releaseRisk = Math.min(100, 25 + severe.length * 20 + input.findings.length * 5);
   return {
     mode: "mock",
     model: MODEL,
@@ -47,26 +81,12 @@ function mockIntel(input: GrokReleaseIntelInput): GrokReleaseIntelResult {
       category: severe.length ? "security_or_compliance_hold" : "routine_release_candidate",
       confidence: 0.62,
     },
-    extract: {
-      entities: [...new Set(input.findings.map((f) => f.source))].slice(0, 8),
-      openQuestions: severe.length
-        ? ["Which findings are release-blocking vs waivable?"]
-        : ["Confirm feature sign-off checklist complete?"],
-    },
-    score: {
-      releaseRisk,
-      rationale: `MOCK: heuristic risk from ${input.findings.length} finding(s), ${severe.length} high/critical`,
-    },
-    summarize: `MOCK: Release intel for ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); risk ${releaseRisk}/100. Human merge/release gates still required.`,
-    trustCheck: {
-      schemaValid: true,
-      humanGateStillRequired: true,
-      notes: [
-        "MOCK: no XAI_API_KEY — deterministic fallback",
-        "Grok scores never auto-approve merge/release",
-        "Cross-check against Security + iteration gate (red_team|security)",
-      ],
-    },
+    summarize: `MOCK: ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); ${severe.length} high/critical. Human gates still required.`,
+    trustCheck: trustNotes([
+      `MOCK: no ${INTEL_KEY_ENV} — deterministic fallback`,
+      "Shared XAI_API_KEY / GROK_API_KEY never used",
+      "Grok never auto-approves merge/release",
+    ]),
     mocked: true,
   };
 }
@@ -84,24 +104,15 @@ function parseIntelJson(text: string): Partial<GrokReleaseIntelResult> | null {
 
 export async function runGrokReleaseIntel(
   input: GrokReleaseIntelInput,
-  opts?: { fetchImpl?: typeof fetch },
+  opts?: { fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv },
 ): Promise<GrokReleaseIntelResult> {
-  const apiKey = resolveApiKey();
+  const env = opts?.env ?? process.env;
+  const apiKey = resolveAgentGrokApiKey(INTEL_ROLE, env);
   if (!apiKey) return mockIntel(input);
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
-  const system = [
-    "You are Release Desk Grok intel.",
-    "Return ONLY JSON with keys: classify{category,confidence}, extract{entities,openQuestions},",
-    "score{releaseRisk 0-100,rationale}, summarize (string).",
-    "Do not approve merges. Humans decide.",
-  ].join(" ");
-
-  const user = JSON.stringify({
-    repository: input.repository,
-    goal: input.goal,
-    findings: input.findings.slice(0, 40),
-  });
+  const system =
+    "You are Release Desk Grok intel. Return ONLY JSON: classify{category,confidence 0-1}, summarize (string). Do not approve merges.";
 
   try {
     const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
@@ -115,7 +126,14 @@ export async function runGrokReleaseIntel(
         temperature: 0.1,
         messages: [
           { role: "system", content: system },
-          { role: "user", content: user },
+          {
+            role: "user",
+            content: JSON.stringify({
+              repository: input.repository,
+              goal: input.goal,
+              findings: input.findings.slice(0, 40),
+            }),
+          },
         ],
       }),
     });
@@ -131,50 +149,40 @@ export async function runGrokReleaseIntel(
     };
     const text = body.choices?.[0]?.message?.content?.trim() ?? "";
     const parsed = parseIntelJson(text);
-    if (!parsed?.classify || !parsed?.extract || !parsed?.score || !parsed?.summarize) {
+    const trusted = parsed
+      ? trustCheckGrokIntelPayload(parsed)
+      : { ok: false as const, reason: "unparseable JSON" };
+
+    if (!trusted.ok || !parsed) {
       const fallback = mockIntel(input);
-      fallback.trustCheck.notes.unshift("MOCK fallback: could not parse Grok JSON");
+      fallback.trustCheck.notes.unshift(
+        `MOCK fallback: trust check failed (${"reason" in trusted ? trusted.reason : "parse"})`,
+      );
       fallback.rawPreview = text.slice(0, 500);
       return fallback;
     }
 
-    const releaseRisk = Number(parsed.score.releaseRisk);
     return {
       mode: "live",
       model: MODEL,
       classify: {
-        category: String(parsed.classify.category ?? "unknown"),
-        confidence: Number(parsed.classify.confidence ?? 0),
-      },
-      extract: {
-        entities: Array.isArray(parsed.extract.entities)
-          ? parsed.extract.entities.map(String)
-          : [],
-        openQuestions: Array.isArray(parsed.extract.openQuestions)
-          ? parsed.extract.openQuestions.map(String)
-          : [],
-      },
-      score: {
-        releaseRisk: Number.isFinite(releaseRisk) ? releaseRisk : 50,
-        rationale: String(parsed.score.rationale ?? ""),
+        category: String(parsed.classify!.category),
+        confidence: trusted.confidence,
       },
       summarize: String(parsed.summarize),
-      trustCheck: {
-        schemaValid: true,
-        humanGateStillRequired: true,
-        notes: [
-          "Live Grok API response schema-validated",
-          "Compare score to Security blockers + iteration gate",
-          "Human merge/release gates remain authoritative",
-        ],
-      },
+      trustCheck: trustNotes([
+        `Live Grok API via exclusive ${INTEL_KEY_ENV}`,
+        "Schema trust check passed",
+        "Human merge/release gates remain authoritative",
+      ]),
       mocked: false,
       rawPreview: text.slice(0, 400),
     };
   } catch (err) {
     const fallback = mockIntel(input);
-    const message = err instanceof Error ? err.message : String(err);
-    fallback.trustCheck.notes.unshift(`MOCK fallback: ${message}`);
+    fallback.trustCheck.notes.unshift(
+      `MOCK fallback: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return fallback;
   }
 }
