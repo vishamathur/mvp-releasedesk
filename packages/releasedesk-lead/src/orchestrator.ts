@@ -53,6 +53,30 @@ import {
   type ResolvePrClientOptions,
   type TrackedPullRequest,
 } from "./pr/index.js";
+import {
+  createMockWorkspaceSuiteRunner,
+  evaluateTestGate,
+  parseTestGateRecord,
+  type TestGateRecord,
+  type WorkspaceSuiteRunner,
+} from "./test-gate.js";
+import {
+  buildReleaseNotesPackage,
+  parseReleaseNotesRecord,
+  type ReleaseNotesRecord,
+} from "./release-notes.js";
+import {
+  buildRollbackPlan,
+  parseRollbackRecord,
+  type RollbackRecord,
+} from "./rollback.js";
+import {
+  createMockObservabilitySink,
+  parseObservabilityRecord,
+  summarizeObservability,
+  type ObservabilityRecord,
+  type ObservabilitySink,
+} from "./observability.js";
 
 type LeadDelegation = {
   taskId: string;
@@ -89,6 +113,10 @@ export type ReleaseCheckReport = {
   approvals: ApprovalRecord;
   checkpoints: CheckpointRecord;
   pullRequests: PullRequestRecord;
+  testGates: TestGateRecord;
+  releaseNotes: ReleaseNotesRecord;
+  rollback: RollbackRecord;
+  observability: ObservabilityRecord;
   dmSession: DmSession;
 };
 
@@ -106,6 +134,12 @@ export type LeadOrchestratorOptions = {
   prClient?: ResolvePrClientOptions;
   /** When false, skip opening/tracking PRs (default true). */
   enablePrWorkflow?: boolean;
+  /** Workspace suite evaluator for automated test gates (MOCK by default). */
+  workspaceSuite?: WorkspaceSuiteRunner;
+  /** Observability sink (MOCK in-memory by default). */
+  observability?: ObservabilitySink;
+  /** When false, skip release-notes / rollback / test-gate packaging (default true). */
+  enableAgileArtifacts?: boolean;
 };
 
 const ANALYSIS_ROLES: SpecialistRole[] = ["change_analyst", "standards", "security"];
@@ -124,7 +158,10 @@ export class LeadOrchestrator {
   private readonly defaultMaxAttempts: number;
   private readonly enableRemediation: boolean;
   private readonly enablePrWorkflow: boolean;
+  private readonly enableAgileArtifacts: boolean;
   private readonly prClient: PrWorkflowClient;
+  private readonly workspaceSuite: WorkspaceSuiteRunner;
+  private readonly observability: ObservabilitySink;
   private dmSession: DmSession;
 
   constructor(options: LeadOrchestratorOptions) {
@@ -137,7 +174,10 @@ export class LeadOrchestrator {
     this.defaultMaxAttempts = options.defaultMaxAttempts ?? 2;
     this.enableRemediation = options.enableRemediation ?? true;
     this.enablePrWorkflow = options.enablePrWorkflow ?? true;
+    this.enableAgileArtifacts = options.enableAgileArtifacts ?? true;
     this.prClient = resolvePrClient(options.prClient);
+    this.workspaceSuite = options.workspaceSuite ?? createMockWorkspaceSuiteRunner();
+    this.observability = options.observability ?? createMockObservabilitySink();
     this.dmSession = createDmSession();
   }
 
@@ -211,6 +251,7 @@ export class LeadOrchestrator {
       `Starting release check: ${input.goal}`,
     );
 
+    const startedAtMs = Date.now();
     const run = await this.store.create({
       goal: input.goal,
       target: input.target,
@@ -220,11 +261,30 @@ export class LeadOrchestrator {
         approvals: { gates: [] } satisfies ApprovalRecord,
         checkpoints: { checkpoints: [] } satisfies CheckpointRecord,
         pullRequests: { pullRequests: [] } satisfies PullRequestRecord,
+        testGates: { gates: [] } satisfies TestGateRecord,
+        releaseNotes: { packages: [] } satisfies ReleaseNotesRecord,
+        rollback: { plans: [] } satisfies RollbackRecord,
+        observability: {
+          summary: {
+            mode: this.observability.mode,
+            eventCount: 0,
+            kinds: {},
+            mocked: this.observability.mode !== "real",
+            recent: [],
+          },
+          events: [],
+        } satisfies ObservabilityRecord,
         prClientMode: this.prClient.mode,
         prClientDescription: describePrClientMode(this.prClient),
         autoMerge: false,
         ...(input.metadata ?? {}),
       },
+    });
+
+    await this.emitObservability(run.runId, {
+      kind: "run.started",
+      message: `Release check started (${trigger.kind})`,
+      metrics: { remediationBudget: this.maxRemediationCycles },
     });
 
     await this.store.appendAudit({
@@ -378,6 +438,122 @@ export class LeadOrchestrator {
       await this.pollAllTrackedPullRequests(run.runId);
     }
 
+    // Agile SDLC artifacts: automated test gate, release notes, rollback plan.
+    let testGates = parseTestGateRecord((await this.requireRun(run.runId)).metadata.testGates);
+    let releaseNotes = parseReleaseNotesRecord(
+      (await this.requireRun(run.runId)).metadata.releaseNotes,
+    );
+    let rollback = parseRollbackRecord((await this.requireRun(run.runId)).metadata.rollback);
+
+    if (this.enableAgileArtifacts) {
+      const afterPr = await this.requireRun(run.runId);
+      const testGate = await evaluateTestGate({
+        tasks: afterPr.tasks,
+        pullRequests: parsePullRequestRecord(afterPr.metadata.pullRequests),
+        repository: input.target.repository,
+        baseRef: input.target.baseRef,
+        headRef: input.target.headRef,
+        workspaceSuite: this.workspaceSuite,
+      });
+      testGates = parseTestGateRecord(afterPr.metadata.testGates);
+      testGates.gates.push(testGate);
+      await this.store.update(run.runId, {
+        metadata: { ...(await this.requireRun(run.runId)).metadata, testGates },
+      });
+      await this.store.appendAudit({
+        runId: run.runId,
+        action: "test_gate.evaluated",
+        message: testGate.summary,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: {
+          testGateId: testGate.id,
+          status: testGate.status,
+          blocking: testGate.blocking,
+          checks: testGate.checks,
+        },
+      });
+      await this.emitObservability(run.runId, {
+        kind: "test_gate.evaluated",
+        message: testGate.summary,
+        metrics: {
+          status: testGate.status,
+          blocking: testGate.blocking,
+          checkCount: testGate.checks.length,
+        },
+      });
+
+      const notesPkg = buildReleaseNotesPackage({
+        tasks: (await this.requireRun(run.runId)).tasks,
+        repository: input.target.repository,
+        baseRef: input.target.baseRef,
+        headRef: input.target.headRef,
+        goal: input.goal,
+      });
+      releaseNotes = parseReleaseNotesRecord(
+        (await this.requireRun(run.runId)).metadata.releaseNotes,
+      );
+      releaseNotes.packages.push(notesPkg);
+      await this.store.update(run.runId, {
+        metadata: { ...(await this.requireRun(run.runId)).metadata, releaseNotes },
+      });
+      await this.store.appendAudit({
+        runId: run.runId,
+        action: "release_notes.generated",
+        message: `Release notes package ${notesPkg.status}: ${notesPkg.title}`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: {
+          packageId: notesPkg.id,
+          overallImpact: notesPkg.overallImpact,
+          highlightCount: notesPkg.highlights.length,
+          mocked: notesPkg.mocked,
+        },
+      });
+      await this.emitObservability(run.runId, {
+        kind: "release_notes.generated",
+        message: notesPkg.title,
+        metrics: {
+          overallImpact: notesPkg.overallImpact,
+          highlightCount: notesPkg.highlights.length,
+          mocked: notesPkg.mocked,
+        },
+      });
+
+      const rollbackPlan = buildRollbackPlan({
+        tasks: (await this.requireRun(run.runId)).tasks,
+        repository: input.target.repository,
+        headRef: input.target.headRef,
+        releaseTag: input.target.releaseTag,
+        previousReleaseTag: asString(input.metadata?.previousReleaseTag),
+      });
+      rollback = parseRollbackRecord((await this.requireRun(run.runId)).metadata.rollback);
+      rollback.plans.push(rollbackPlan);
+      await this.store.update(run.runId, {
+        metadata: { ...(await this.requireRun(run.runId)).metadata, rollback },
+      });
+      await this.store.appendAudit({
+        runId: run.runId,
+        action: "rollback.plan_created",
+        message: `Rollback plan ${rollbackPlan.status} (risk ${rollbackPlan.riskLevel})`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: {
+          planId: rollbackPlan.id,
+          previousReleaseTag: rollbackPlan.previousReleaseTag,
+          riskLevel: rollbackPlan.riskLevel,
+          stepCount: rollbackPlan.steps.length,
+          mocked: rollbackPlan.mocked,
+        },
+      });
+      await this.emitObservability(run.runId, {
+        kind: "rollback.plan_created",
+        message: rollbackPlan.rationale,
+        metrics: {
+          status: rollbackPlan.status,
+          riskLevel: rollbackPlan.riskLevel,
+          stepCount: rollbackPlan.steps.length,
+        },
+      });
+    }
+
     // Human approval gates — modeled, never auto-approved / never auto-merged.
     await this.requestApproval(run.runId, "release", "Release decision requires human approval");
     await this.requestApproval(
@@ -385,16 +561,25 @@ export class LeadOrchestrator {
       "merge",
       "Merge decision requires human approval (never auto-merge)",
     );
+    await this.emitObservability(run.runId, {
+      kind: "human.gate_requested",
+      message: "Merge and release human gates requested",
+      metrics: { gateCount: 2 },
+    });
 
     const finalRun = await this.requireRun(run.runId);
     const approvals = parseApprovalRecord(finalRun.metadata.approvals);
     const checkpoints = parseCheckpointRecord(finalRun.metadata.checkpoints);
     const pullRequests = parsePullRequestRecord(finalRun.metadata.pullRequests);
+    testGates = parseTestGateRecord(finalRun.metadata.testGates);
+    releaseNotes = parseReleaseNotesRecord(finalRun.metadata.releaseNotes);
+    rollback = parseRollbackRecord(finalRun.metadata.rollback);
     const assessment = assessReadiness({
       tasks: finalRun.tasks,
       approvals,
       considerRemediation: this.enableRemediation,
       checkpoints,
+      testGates,
     });
 
     const leadTaskId =
@@ -428,7 +613,46 @@ export class LeadOrchestrator {
       ...(leadOutput as unknown as Record<string, unknown>),
       checkpoints,
       pullRequests,
+      testGates,
+      releaseNotes,
+      rollback,
       autoMerge: false,
+    });
+
+    const durationMs = Date.now() - startedAtMs;
+    await this.emitObservability(run.runId, {
+      kind: "run.completed",
+      message: `Release check completed — readiness ${leadOutput.readiness}`,
+      metrics: {
+        readiness: leadOutput.readiness,
+        durationMs,
+        remediationCycles: cycle,
+        blockingCount: assessment.blockingIssues.length,
+        testGateStatus: testGates.gates.at(-1)?.status ?? "n/a",
+      },
+    });
+
+    const obsEvents =
+      this.observability.list?.() ??
+      parseObservabilityRecord((await this.requireRun(run.runId)).metadata.observability).events;
+    const observability: ObservabilityRecord = {
+      events: obsEvents.filter((e) => e.runId === run.runId),
+      summary: summarizeObservability(
+        obsEvents.filter((e) => e.runId === run.runId),
+        {
+          mode: this.observability.mode,
+          durationMs,
+          remediationCycles: cycle,
+          testGateStatus: testGates.gates.at(-1)?.status,
+          readiness: leadOutput.readiness,
+        },
+      ),
+    };
+    await this.store.update(run.runId, {
+      metadata: {
+        ...(await this.requireRun(run.runId)).metadata,
+        observability,
+      },
     });
 
     const completed = await this.store.complete(
@@ -450,6 +674,10 @@ export class LeadOrchestrator {
       approvals,
       checkpoints,
       pullRequests,
+      testGates,
+      releaseNotes,
+      rollback,
+      observability,
       dmSession: this.dmSession,
     };
   }
@@ -527,6 +755,7 @@ export class LeadOrchestrator {
       tasks: next.tasks,
       approvals: record,
       checkpoints: parseCheckpointRecord(next.metadata.checkpoints),
+      testGates: parseTestGateRecord(next.metadata.testGates),
     });
     return { run: next, gate: updated, assessment };
   }
@@ -557,6 +786,7 @@ export class LeadOrchestrator {
       tasks: report.run.tasks,
       approvals,
       checkpoints: report.checkpoints,
+      testGates: report.testGates,
     });
     const leadOutput = LeadAgentOutputSchema.parse({
       ...report.leadOutput,
@@ -594,6 +824,45 @@ export class LeadOrchestrator {
   }
 
   // --- internals ---
+
+  private async emitObservability(
+    runId: string,
+    input: {
+      kind: Parameters<ObservabilitySink["emit"]>[0]["kind"];
+      message: string;
+      metrics?: Record<string, number | string | boolean | null>;
+    },
+  ): Promise<void> {
+    const event = await this.observability.emit({
+      kind: input.kind,
+      runId,
+      message: input.message,
+      ...(input.metrics !== undefined ? { metrics: input.metrics } : {}),
+      mocked: this.observability.mode !== "real",
+    });
+
+    const run = await this.requireRun(runId);
+    const current = parseObservabilityRecord(run.metadata.observability);
+    current.events.push(event);
+    current.summary = summarizeObservability(current.events, {
+      mode: this.observability.mode,
+    });
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, observability: current },
+    });
+    await this.store.appendAudit({
+      runId,
+      action: "observability.event_emitted",
+      message: `Observability ${event.kind}: ${event.message}`,
+      actor: { kind: "system" },
+      details: {
+        eventId: event.id,
+        kind: event.kind,
+        metrics: event.metrics,
+        mocked: event.mocked,
+      },
+    });
+  }
 
   private async requireRun(runId: string): Promise<RunContext> {
     const run = await this.store.get(runId);

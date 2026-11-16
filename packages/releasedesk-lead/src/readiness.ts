@@ -31,6 +31,15 @@ export type ReadinessCheckpointTrail = {
   }>;
 };
 
+/** Structural test-gate trail (avoids circular import with test-gate.ts). */
+export type ReadinessTestGateTrail = {
+  gates: Array<{
+    status: "passed" | "failed";
+    blocking?: boolean;
+    summary: string;
+  }>;
+};
+
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -70,6 +79,8 @@ export function assessReadiness(input: {
   considerRemediation?: boolean;
   /** Latest checkpoint trail (M6) — failed terminal checkpoints add blockers. */
   checkpoints?: ReadinessCheckpointTrail;
+  /** Automated testing gates — failed blocking gates add readiness blockers. */
+  testGates?: ReadinessTestGateTrail;
 }): ReadinessAssessment {
   const allSpecialists = input.tasks.filter((t) => t.agentRole !== "lead");
   /** Builder history is informative; readiness uses latest per role. */
@@ -146,6 +157,13 @@ export function assessReadiness(input: {
       if (!blockingIssues.includes(msg)) blockingIssues.push(msg);
       if (issue.remediable) remediationRecommended = true;
     }
+  }
+
+  const latestTestGate = input.testGates?.gates.at(-1);
+  if (latestTestGate?.status === "failed" && latestTestGate.blocking !== false) {
+    const msg = `Test gate failed: ${latestTestGate.summary}`;
+    if (!blockingIssues.includes(msg)) blockingIssues.push(msg);
+    remediationRecommended = true;
   }
 
   const approvals = input.approvals;

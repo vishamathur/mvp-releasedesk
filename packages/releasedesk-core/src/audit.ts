@@ -40,6 +40,11 @@ export const AuditActionSchema = z.enum([
   "pr.tracked",
   "pr.status_polled",
   "pr.merge_blocked",
+  /** Agile SDLC hardening — test gates, release notes, rollback, observability */
+  "test_gate.evaluated",
+  "release_notes.generated",
+  "rollback.plan_created",
+  "observability.event_emitted",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;
