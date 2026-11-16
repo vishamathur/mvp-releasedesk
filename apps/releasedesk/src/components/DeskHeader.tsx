@@ -2,6 +2,9 @@ import Link from "next/link";
 
 export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
   const dark = tone === "dark";
+  const navLink = dark
+    ? "text-sm font-medium text-white/70 underline-offset-4 hover:text-white hover:underline"
+    : "text-sm font-medium text-rd-forest/70 underline-offset-4 hover:text-rd-ink hover:underline";
   return (
     <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
       <Link href="/" className="group flex items-baseline gap-3">
@@ -19,15 +22,14 @@ export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
         </span>
       </Link>
       <nav className="flex items-center gap-2">
-        <Link
-          href="/control"
-          className={
-            dark
-              ? "text-sm font-medium text-white/70 underline-offset-4 hover:text-white hover:underline"
-              : "text-sm font-medium text-rd-forest/70 underline-offset-4 hover:text-rd-ink hover:underline"
-          }
-        >
+        <Link href="/control" className={navLink}>
           Control plane
+        </Link>
+        <Link href="/mvp" className={navLink}>
+          MVP
+        </Link>
+        <Link href="/agents" className={navLink}>
+          Agents
         </Link>
         <Link
           href="/desk"

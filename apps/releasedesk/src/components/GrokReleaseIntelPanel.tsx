@@ -7,6 +7,8 @@ type Intel = {
   mode: string;
   mocked: boolean;
   classify: { category: string; confidence: number };
+  extract: string[];
+  score: { level: string; rationale: string };
   summarize: string;
   trustCheck: {
     schemaValid: boolean;
@@ -48,7 +50,8 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
         {intel?.mocked ? <MockLabel>MOCK Grok API</MockLabel> : null}
       </div>
       <p className="mt-2 text-sm text-rd-forest/70">
-        Shipped path — classify + summarize. Trust check keeps human gates authoritative.
+        Shipped path — classify / extract / score / summarize. Trust check keeps human gates
+        authoritative.
       </p>
       <button type="button" className="btn-primary mt-4" disabled={busy} onClick={() => void run()}>
         {busy ? "Calling Grok…" : "Run Grok API intel"}
@@ -57,9 +60,12 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
       {intel ? (
         <div className="mt-6 space-y-3 text-sm">
           <p className="font-medium text-rd-ink">
-            {intel.classify.category} · confidence {intel.classify.confidence} · mode {intel.mode}
+            {intel.classify.category} · confidence {intel.classify.confidence} · score{" "}
+            {intel.score.level} · mode {intel.mode}
           </p>
           <p className="text-rd-forest/75">{intel.summarize}</p>
+          <p className="text-rd-forest/65">Extract: {intel.extract.join("; ") || "—"}</p>
+          <p className="text-rd-forest/65">Score: {intel.score.rationale}</p>
           <ul className="list-disc pl-5 text-rd-forest/65">
             {intel.trustCheck.notes.map((n) => (
               <li key={n}>{n}</li>

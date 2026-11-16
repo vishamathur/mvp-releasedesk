@@ -17,18 +17,24 @@ export default function HomePage() {
             Release Desk
           </p>
           <h1 className="animate-rise-delay mt-6 max-w-xl text-2xl font-medium text-white/88 sm:text-3xl">
-            Delivery-manager command for Northwind Bank KYC releases.
+            Enterprise SDLC control plane for multi-customer IT services.
           </h1>
           <p className="animate-rise-delay mt-4 max-w-lg text-base text-white/65">
-            Start on-demand Lead checks, watch specialist and cloud-agent results, and decide merge
-            and release gates with a full audit trail.
+            Grok Bots → Cursor Coding → Grok API intel, with mandatory Security/ATLAS, iteration
+            gate, and human merge/release. Northwind KYC is the worked example.
           </p>
           <div className="animate-rise-late mt-10 flex flex-wrap items-center gap-3">
             <Link
-              href="/desk"
+              href="/mvp"
               className="btn-primary !bg-[color:var(--rd-brass)] !text-[color:var(--rd-ink)]"
             >
-              Enter the desk
+              Open control plane
+            </Link>
+            <Link
+              href="/desk"
+              className="btn-secondary !border-white/25 !bg-white/10 !text-white hover:!bg-white/20"
+            >
+              Challenge desk
             </Link>
             <span className="inline-flex items-center gap-2 text-sm text-white/55">
               <MockLabel>MOCK integrations labeled</MockLabel>
