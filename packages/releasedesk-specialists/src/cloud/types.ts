@@ -1,7 +1,64 @@
 import type { MockMeta } from "@releasedesk/core";
 
-/** Cursor Cloud Agent kinds under Builder. */
-export type CloudAgentKind = "coding" | "testing" | "review";
+/**
+ * Cursor Cloud Agent kinds.
+ *
+ * Builder pipeline (existing): coding | testing | review
+ * Orchestration (Lead + specialists as ephemeral Cloud Agents):
+ *   lead | change_analyst | standards | security | builder | ai_red_teaming
+ */
+export type BuilderCloudAgentKind = "coding" | "testing" | "review";
+
+export type OrchestrationCloudAgentKind =
+  | "lead"
+  | "change_analyst"
+  | "standards"
+  | "security"
+  | "builder"
+  | "ai_red_teaming";
+
+export type CloudAgentKind = BuilderCloudAgentKind | OrchestrationCloudAgentKind;
+
+export const BUILDER_CLOUD_AGENT_KINDS: readonly BuilderCloudAgentKind[] = [
+  "coding",
+  "testing",
+  "review",
+] as const;
+
+export const ORCHESTRATION_CLOUD_AGENT_KINDS: readonly OrchestrationCloudAgentKind[] = [
+  "lead",
+  "change_analyst",
+  "standards",
+  "security",
+  "builder",
+  "ai_red_teaming",
+] as const;
+
+export const SPECIALIST_CLOUD_AGENT_KINDS = [
+  "change_analyst",
+  "standards",
+  "security",
+  "builder",
+  "ai_red_teaming",
+] as const satisfies ReadonlyArray<Exclude<OrchestrationCloudAgentKind, "lead">>;
+
+export type SpecialistCloudAgentKind = (typeof SPECIALIST_CLOUD_AGENT_KINDS)[number];
+
+export function isBuilderCloudAgentKind(kind: CloudAgentKind): kind is BuilderCloudAgentKind {
+  return (BUILDER_CLOUD_AGENT_KINDS as readonly string[]).includes(kind);
+}
+
+export function isOrchestrationCloudAgentKind(
+  kind: CloudAgentKind,
+): kind is OrchestrationCloudAgentKind {
+  return (ORCHESTRATION_CLOUD_AGENT_KINDS as readonly string[]).includes(kind);
+}
+
+export function isSpecialistCloudAgentKind(
+  kind: CloudAgentKind,
+): kind is SpecialistCloudAgentKind {
+  return (SPECIALIST_CLOUD_AGENT_KINDS as readonly string[]).includes(kind);
+}
 
 export type CloudAgentClientMode = "mock" | "real";
 
@@ -12,6 +69,17 @@ export type CloudAgentClientMode = "mock" | "real";
 export type CloudAgentClient = {
   readonly mode: CloudAgentClientMode;
   dispatch(request: CloudAgentDispatchRequest): Promise<CloudAgentDispatchResult>;
+};
+
+/**
+ * Pointer to durable shared run context for ephemeral Cloud Agents.
+ * Desk / Lead pass a file-store URI so specialists can read/write the same run.
+ */
+export type SharedRunContextRef = {
+  /** Absolute path to FileBackedRunContextStore JSON (or other durable URI). */
+  storeUri: string;
+  runId?: string;
+  taskId?: string;
 };
 
 export type CloudAgentDispatchRequest = {
@@ -31,6 +99,8 @@ export type CloudAgentDispatchRequest = {
    * Present so callers cannot accidentally enable merge.
    */
   autoMerge: false;
+  /** Shared durable run context for ephemeral orchestration agents. */
+  sharedContext?: SharedRunContextRef;
 };
 
 export type CloudAgentDispatchResult = {
@@ -52,7 +122,7 @@ export type CloudAgentDispatchResult = {
   provider?: Record<string, unknown>;
 };
 
-/** One audit step recorded during Builder → Cloud Agent orchestration. */
+/** One audit step recorded during Cloud Agent orchestration. */
 export type CloudAgentAuditEvent = {
   at: string;
   action: string;

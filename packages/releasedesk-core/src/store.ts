@@ -483,34 +483,46 @@ type FileStoreShape = {
   runs: RunContext[];
 };
 
-/** JSON file-backed store — durable across process restarts. */
+/**
+ * JSON file-backed store — durable across process restarts and shareable by
+ * ephemeral Cursor Cloud Agents (Lead + specialists) via a common path.
+ *
+ * Each mutating/read op reloads from disk so concurrent agent VMs see peer
+ * writes; persist is atomic (temp file + rename).
+ */
 export class FileBackedRunContextStore extends BaseRunContextStore {
-  private loaded = false;
-
   constructor(private readonly filePath: string) {
     super();
   }
 
+  /** Absolute path Cloud Agents use as the shared run-context URI. */
+  get storePath(): string {
+    return this.filePath;
+  }
+
+  /**
+   * Reload runs from disk before every operation so ephemeral Cloud Agents
+   * (separate processes) share durable state. In-memory Map is a per-op cache.
+   */
   private async ensureLoaded(): Promise<void> {
-    if (this.loaded) return;
     try {
       const raw = await readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as FileStoreShape;
       if (parsed.version !== 1 || !Array.isArray(parsed.runs)) {
         throw new RunContextError("store_corrupt", `Invalid store format at ${this.filePath}`);
       }
+      this.runs.clear();
       for (const run of parsed.runs) {
         const validated = RunContextSchema.parse(run);
         this.runs.set(validated.runId, validated);
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        // First use — empty store.
+        this.runs.clear();
       } else {
         throw err;
       }
     }
-    this.loaded = true;
   }
 
   protected async persist(): Promise<void> {
@@ -519,7 +531,7 @@ export class FileBackedRunContextStore extends BaseRunContextStore {
       version: 1,
       runs: [...this.runs.values()],
     };
-    const tmp = `${this.filePath}.${process.pid}.tmp`;
+    const tmp = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
     await writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
     await rename(tmp, this.filePath);
   }

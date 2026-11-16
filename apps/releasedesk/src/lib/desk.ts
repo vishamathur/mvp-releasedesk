@@ -22,6 +22,10 @@ import {
   type FeatureSignOffRecord,
   type ReleaseCheckReport,
 } from "@releasedesk/lead";
+import {
+  createMockCloudAgentClient,
+  startLeadCloudAgent,
+} from "@releasedesk/specialists";
 import { DEMO_SCENARIOS, isDemoScenarioId, runnersForScenario } from "./scenarios";
 import type { DemoScenarioId, DeskReport, RunListItem } from "./types";
 
@@ -247,6 +251,11 @@ export async function getRun(runId: string) {
   return { desk, view, list: toListItem({ ...desk, report: view }) };
 }
 
+/**
+ * Desk UI on-demand trigger — the only production path into Lead.
+ * Dispatches an ephemeral Lead Cloud Agent (MOCK by default), which fans out
+ * specialist Cloud Agents. No background scheduler polls the queue.
+ */
 export async function startOnDemandCheck(input?: {
   goal?: string;
   repository?: string;
@@ -254,22 +263,38 @@ export async function startOnDemandCheck(input?: {
 }) {
   const p = await ensureDirs();
   const store = new FileBackedRunContextStore(p.storeFile);
-  const lead = createLead({ store, enableRemediation: false, maxRemediationCycles: 0 });
-  const report = await lead.startOnDemandCheck({
-    goal: input?.goal ?? "On-demand release readiness check (Release Desk UI)",
-    target: {
-      repository: input?.repository ?? DEFAULT_REPO,
-      baseRef: "main",
-      headRef: "HEAD",
+  const cloudClient = createMockCloudAgentClient();
+  const started = await startLeadCloudAgent({
+    store,
+    storeUri: store.storePath,
+    cloudClient,
+    specialists: {
+      cloudClient,
+      storeUri: store.storePath,
+      skipGrok: true,
+      workspaceRoot: path.resolve(p.root, "..", ".."),
     },
-    trigger: {
-      requestedBy: input?.requestedBy ?? "delivery-manager",
-      notes: "Started from Release Desk UI",
+    lead: {
+      enableRemediation: false,
+      maxRemediationCycles: 0,
+      prClient: { client: createMockPrClient() },
+    },
+    check: {
+      goal: input?.goal ?? "On-demand release readiness check (Release Desk UI)",
+      target: {
+        repository: input?.repository ?? DEFAULT_REPO,
+        baseRef: "main",
+        headRef: "HEAD",
+      },
+      trigger: {
+        requestedBy: input?.requestedBy ?? "delivery-manager",
+        notes: "Desk UI on-demand → ephemeral Lead Cloud Agent (no scheduler)",
+      },
     },
   });
-  const desk = wrapReport(report);
+  const desk = wrapReport(started.report);
   await writeDeskReport(desk);
-  return { desk, view: report, list: toListItem(desk) };
+  return { desk, view: started.report, list: toListItem(desk) };
 }
 
 export async function runDemoScenario(scenarioId: DemoScenarioId) {

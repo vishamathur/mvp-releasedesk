@@ -4,7 +4,7 @@ Last updated: 2026-11-17 (Asia/Calcutta)
 
 **Goal:** Maximize Cursor capabilities; minimize self-managed infra. Diagram: [`architecture-mermaid.md`](./architecture-mermaid.md).
 
-**Checkout base:** tip `#16` / `cursor/testing-verification-stages-e619`. Sibling **MR-23** (`bc-bba2d0a3`) converts Lead/specialists to Cloud Agents with on-demand Desk→Lead trigger — this doc describes the **target** layout those code changes converge on.
+**Checkout base:** tip `#17` / `cursor/cursor-maximized-architecture-0b4f`. Sibling **MR-23** implements Lead/specialists as Cloud Agents (on-demand Desk→Lead, shared store, per-agent NHI API key slots) on this tip.
 
 ---
 
@@ -64,7 +64,7 @@ Self-hosted Cloud Agent **workers** remain an optional Enterprise placement for 
 | **Full air-gapped Cursor control plane** | Not offered | N/A — inference stays Cursor cloud; use self-hosted **workers** only for execution |
 | **SLA’d customer-facing KYC at bank scale** | Apps hosting quotas/SLA unpublished | Own infra when production-grade hosting is required; Apps fine for demo/internal |
 
-**Still optional / out of band:** SPLX; live Zscaler subscription; real `CURSOR_API_KEY` Cloud Agents (MOCK default for CI).
+**Still optional / out of band:** SPLX; live Zscaler subscription; real Cloud Agents via per-agent Cursor **named secrets** (MOCK default for CI; no external vault — see [`nhi-cursor-secrets.md`](./nhi-cursor-secrets.md)).
 
 ---
 
