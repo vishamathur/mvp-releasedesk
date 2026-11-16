@@ -48,6 +48,10 @@ export const AuditActionSchema = z.enum([
   /** Mandatory Security participation gate */
   "security.gate_evaluated",
   "security.gate_blocked",
+  /** MITRE ATLAS / OWASP LLM Top 10 hard guardrails */
+  "security.framework_findings",
+  "security.framework_merge_blocked",
+  "security.framework_waiver_recorded",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;

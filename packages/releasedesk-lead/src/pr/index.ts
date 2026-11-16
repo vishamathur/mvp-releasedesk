@@ -25,4 +25,8 @@ export {
   trackExistingPullRequest,
   pollTrackedPullRequest,
   refuseAutoMerge,
+  evaluatePrAiFrameworkMergeGate,
+  assertPrMergeAllowedForAiFrameworks,
+  latestSecurityFindings,
+  unresolvedAiFrameworkFindingIds,
 } from "./workflow.js";

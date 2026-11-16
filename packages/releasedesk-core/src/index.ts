@@ -85,6 +85,35 @@ export {
 } from "./gates.js";
 
 export {
+  OWASP_LLM_TOP_10,
+  ATLAS_TECHNIQUES,
+  OwaspLlmTop10IdSchema,
+  AtlasTechniqueIdSchema,
+  SecurityFrameworkIdSchema,
+  SecurityFrameworkMappingSchema,
+  AiFrameworkWaiverSchema,
+  AiFrameworkWaiverRecordSchema,
+  parseAiFrameworkWaiverRecord,
+  createAiFrameworkWaiver,
+  isFrameworkMappedFinding,
+  listUnresolvedFrameworkFindings,
+  evaluateAiFrameworkMergeGate,
+  assertAiFrameworkPrMergeAllowed,
+  owaspCategory,
+  atlasTechnique,
+  mappingForOwasp,
+  mappingForAtlas,
+  type OwaspLlmTop10Id,
+  type AtlasTechniqueId,
+  type SecurityFrameworkId,
+  type SecurityFrameworkMapping,
+  type AiFrameworkWaiver,
+  type AiFrameworkWaiverRecord,
+  type FrameworkMappedFindingLike,
+  type AiFrameworkMergeGate,
+} from "./ai-security-frameworks.js";
+
+export {
   RunContextError,
   InMemoryRunContextStore,
   FileBackedRunContextStore,
