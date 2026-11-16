@@ -2,40 +2,50 @@
 
 Last updated: 2026-11-17 (Asia/Calcutta)
 
-Two lanes: **SDLC** builds and verifies **KYC**. Queue item approval and cost-record approval are both required before Lead. **Security is mandatory on every change.**
+Multi-customer intake with dual approvals; four specialists; mandatory Security with ATLAS/OWASP hard blockers on review-ready (non-draft) PRs; human checklist + merge/release; feedback to Lead.
 
 ```mermaid
 flowchart LR
   subgraph SDLC["SDLC · Release Desk"]
-    Req["Customer request"]
-    Cost["Cost / billing estimate"]
-    Queue["Prioritized backlog"]
+    Cust["Customers · unique customerId"]
+    Req["Customer requests"]
+    Cost["Cost estimate · keyed by customerId"]
+    Queue["Weighted multi-customer backlog"]
+    Views["Per-customer views"]
     CostApprove["Human cost approval"]
     QApprove["Human queue approval"]
     RePri["Re-prioritize + sign-off"]
     Lead["Lead Agent"]
-    Spec["Specialists"]
-    Sec["Security · mandatory"]
+    CA["Change Analyst"]
+    ST["Standards"]
+    SE["Security"]
+    BU["Builder"]
+    Atlas["ATLAS / OWASP LLM Top 10<br/>hard block · review-ready PRs only"]
     Cloud["Cloud Agents"]
     Verify["Checkpoints + remediate"]
-    Human["Checklist · merge · release"]
+    FeatSO["Developer sign-off checklist"]
+    Merge["Human merge approval"]
+    Rel["Human release approval"]
   end
 
   subgraph APP["App · Northwind KYC"]
     KYC["KYC UI + API + domain"]
   end
 
+  Cust --> Req
   Req --> Cost
   Req --> Queue
+  Queue --> Views
   Cost --> CostApprove
   Queue --> QApprove
   CostApprove --> RePri
   QApprove --> RePri
   RePri --> Lead
-  Lead --> Spec --> Sec --> Cloud --> Verify --> Human
-  Spec -.->|analyze| KYC
-  Sec -.->|guardrails on| KYC
+  Lead --> CA --> ST --> SE --> BU --> Atlas
+  Atlas --> Cloud --> Verify --> FeatSO --> Merge --> Rel
+  CA -.->|analyze| KYC
+  SE -.->|guardrails on| KYC
   Cloud ==>|build + verify| KYC
-  Human -.->|gate release of| KYC
-  Human -->|result| Lead
+  Rel -.->|gate release of| KYC
+  Rel -->|result| Lead
 ```
