@@ -121,6 +121,38 @@ export {
 } from "./feature-signoff.js";
 
 export {
+  AiRedTeamProviderNameSchema,
+  DEFAULT_AI_RED_TEAM_PROVIDER,
+  AiRedTeamFrameworkSchema,
+  AiRedTeamProviderModeSchema,
+  AiRedTeamProbeTargetSchema,
+  AiRedTeamFindingSchema,
+  AiRedTeamProbeResultSchema,
+  AiRedTeamHealthCheckSchema,
+  ZSCALER_NOT_WIRED_CODE,
+  ZscalerAiRedTeamNotWiredError,
+  createCustomAiRedTeamingProvider,
+  ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS,
+  resolveZscalerAiRedTeamCredentials,
+  createZscalerMockFindings,
+  createZscalerAiRedTeamingProvider,
+  AI_RED_TEAM_PROVIDER_ENV,
+  parseAiRedTeamProviderName,
+  resolveAiRedTeamingProvider,
+  describeAiRedTeamingProvider,
+  type AiRedTeamProviderName,
+  type AiRedTeamFramework,
+  type AiRedTeamProviderMode,
+  type AiRedTeamProbeTarget,
+  type AiRedTeamFinding,
+  type AiRedTeamProbeResult,
+  type AiRedTeamHealthCheck,
+  type AiRedTeamingProvider,
+  type ZscalerAiRedTeamingProviderOptions,
+  type ResolveAiRedTeamingProviderOptions,
+} from "./ai-red-teaming/index.js";
+
+export {
   QueueItemStatusSchema,
   CostDirectionSchema,
   CostApprovalStatusSchema,
