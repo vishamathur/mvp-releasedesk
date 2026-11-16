@@ -39,6 +39,8 @@ describe("runGrokReleaseIntel", () => {
               message: {
                 content: JSON.stringify({
                   classify: { category: "routine_release_candidate", confidence: 0.9 },
+                  extract: ["Confirm docs-only delta"],
+                  score: { level: "low", rationale: "docs only" },
                   summarize: "Clean wave; human gates still required.",
                 }),
               },
@@ -63,6 +65,8 @@ describe("runGrokReleaseIntel", () => {
     expect(result.mocked).toBe(false);
     expect(result.mode).toBe("live");
     expect(result.classify.category).toBe("routine_release_candidate");
+    expect(result.extract).toContain("Confirm docs-only delta");
+    expect(result.score.level).toBe("low");
     expect(result.summarize).toContain("human gates");
     expect(result.trustCheck.humanGateStillRequired).toBe(true);
     expect(result.trustCheck.noAutoApprove).toBe(true);
