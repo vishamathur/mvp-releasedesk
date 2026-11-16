@@ -2,7 +2,9 @@
 
 Lead Agent orchestrator for Release Desk (Milestones 3 + 6).
 
-Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default), runs **checkpoint verification** after specialist and cloud-agent stages, drives **remediation → reverify** loops, tracks **PR workflow** (MOCK GitHub or real via token), models **human approval gates** (never auto-merge), and consolidates release readiness with a full audit trail.
+Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default **today**), sequences distinct **Testing** vs **Verification** stages, runs **checkpoint verification** after specialist and cloud-agent stages, drives **remediation → reverify** loops, tracks **PR workflow** (MOCK GitHub or real via token), models **human approval gates** (never auto-merge), and consolidates release readiness with a full audit trail.
+
+**On-demand only:** `startOnDemandCheck` / Desk `/api/checks` / intake `startLeadFromApprovedQueueItem` — there is no backlog queue scheduler. Cursor-maximized target: Lead itself becomes an ephemeral Cloud Agent; Coding/Testing/Review already are.
 
 Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for real specialists + Builder Cloud Agents. Release Desk UI is Milestone 7.
 
@@ -93,6 +95,7 @@ console.log(report.checkpoints, report.pullRequests, report.approvals);
 | Unique run IDs | Via `@releasedesk/core` store / `run_` ids |
 | Parallel dispatch | Analysis wave via `Promise.all` (always includes Security) |
 | Mandatory Security | Every change routes Security; readiness blocked without recorded result |
+| Testing vs Verification | Testing = Cloud Testing Agent evidence; Verification = independent pass/fail (must not auto-pass) |
 | Checkpoint verification | After `specialist_analysis`, `cloud_agents`, `post_remediation` |
 | Remediation loop | Builder + standards/security reverify when checkpoints fail |
 | PR workflow | Open/track/poll; MOCK or real GitHub; never auto-merge |

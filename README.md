@@ -1,18 +1,28 @@
 # mvp-releasedesk
 
-**Release Desk** orchestrates the full SDLC for the **Northwind Bank KYC** application: multi-customer intake → Lead specialists → AI Red Teaming → ATLAS/OWASP hard block → Cloud Coding / **Testing** / Review (MOCK by default) → independent **Verification** → checkpoints + remediate → feature checklist → human merge/release.
+**Release Desk** orchestrates the full SDLC for the **Northwind Bank KYC** application: multi-customer intake → **dual human approvals** → Desk **on-demand** Lead → specialists (incl. mandatory Security) → AI Red Teaming → ATLAS/OWASP hard block → Cloud Coding / **Testing** / Review (MOCK by default) → independent **Verification** → checkpoints + remediate → feature checklist → human merge/release.
 
 Architecture diagram (Cursor-maximized): [`docs/architecture-mermaid.md`](./docs/architecture-mermaid.md).  
 Capability map: [`docs/cursor-maximized-architecture.md`](./docs/cursor-maximized-architecture.md).  
-Cursor SDLC operator notes (Testing vs Verification): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
+Cursor SDLC operator notes (Testing vs Verification + on-demand Desk): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
 Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).  
+Intake dual gates: [`docs/customer-intake.md`](./docs/customer-intake.md).  
 Cursor-maximized deploy checklist (env, Apps, MOCK vs real, Zscaler): [`docs/deployment-checklist.md`](./docs/deployment-checklist.md).
+
+### Architecture model (operators)
+
+| Layer | Today (this tip) | Cursor-maximized target |
+| --- | --- | --- |
+| Desk UI + KYC | Always-on local Next.js (`npm run desk` / `dev`) | Prefer **Cursor Apps** hosting |
+| Lead + specialists + AI Red Teaming | In-process Node `AgentRunner`s (MOCK stubs or specialists package) | Ephemeral **Cloud Agents** |
+| Coding / Testing / Review | **Cloud Agents** under Builder (`MOCK` default) | Unchanged |
+| Lead trigger | Desk UI / CLI **on-demand only** after dual intake approvals — **no** backlog scheduler | Same + optional Automations |
 
 License: [GPL-3.0](./LICENSE).
 
 ## How to run the MVP (no Zscaler / Cloud credentials required)
 
-Requires Node.js 20+. Everything below uses **MOCK** specialists, Cloud Agents, GitHub PR client, and AI Red Teaming (`custom` provider) by default.
+Requires Node.js 20+. Everything below uses **MOCK** specialists, Cloud Agents (Coding/Testing/Review), GitHub PR client, and AI Red Teaming (`custom` provider) by default. Desk starts Lead **on demand** only.
 
 ```bash
 npm install
@@ -22,13 +32,13 @@ npm run seed
 npm run dev
 # → http://localhost:3000
 
-# 2) Release Desk UI (port 3001) — full Lead orchestration demos
+# 2) Release Desk UI (port 3001) — always-on surface; on-demand Lead only
 npm run build:core && npm run build:lead && npm run build:specialists
 npm run generate:demos
 npm run desk
-# → http://localhost:3001
+# → http://localhost:3001  (Start release check / intake → Lead; no queue scheduler)
 
-# 3) On-demand release check (CLI, MOCK stubs)
+# 3) On-demand release check (CLI, MOCK stubs) — same on-demand contract
 npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
 
 # 4) Unit tests across the monorepo
@@ -103,9 +113,10 @@ Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/run
 Package: [`packages/releasedesk-core`](./packages/releasedesk-core/) (`@releasedesk/core`).
 
 - Unique `run_` IDs and a parallel-safe task model (status, dependencies, evidence, retry/failure)
-- Zod schemas for Lead, Change Analyst, Standards, Security, and Builder agent I/O
+- Zod schemas for Lead, Change Analyst, Standards, Security, Builder, and **AI Red Teaming** agent I/O
+- Pluggable `AiRedTeamingProvider` (`custom` \| `zscaler`) + SDLC stage contracts (Testing vs Verification)
 - Audit trail hooks on every store mutation
-- In-memory and file-backed run-context stores
+- In-memory and file-backed run-context stores (durable shared context for ephemeral agents)
 - Clear `MOCK:` / `mocked: true` labeling for stubbed integrations
 
 ```bash
@@ -118,9 +129,11 @@ See the [package README](./packages/releasedesk-core/README.md) for how agents p
 
 Package: [`packages/releasedesk-lead`](./packages/releasedesk-lead/) (`@releasedesk/lead`).
 
-- Creates unique runs via `@releasedesk/core` and delegates to pluggable specialist `AgentRunner`s
+- Creates unique runs via `@releasedesk/core` and delegates to pluggable specialist `AgentRunner`s (**today** in-process; Cursor-maximized target = ephemeral Cloud Agent)
+- Entry points are **on-demand**: Desk `/api/checks`, intake `startLeadFromApprovedQueueItem`, CLI — **no** background scheduler
 - Default specialists are **MOCK stubs** that still write real task records, evidence, and audit events
 - Parallel analysis wave; retry/failure handling; remediation + reverification loop structure
+- Distinct **Testing** vs **Verification** stages after Coding (Verification must not auto-pass)
 - Human approval gates for merge/release (**not** auto-approved)
 - CLI: `npm run check:release -- --repo vishamathur/mvp-releasedesk`
 
@@ -144,9 +157,11 @@ npm run test:specialists
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
 
-## Milestone 5 — Cursor Cloud Agents under Builder
+## Milestone 5 — Cursor Cloud Agents (Coding / Testing / Review)
 
-Builder dispatches **Coding**, then **Testing** and **Review** in parallel, recording branch names, test results, and PR URLs on the shared run context. Default client is clearly labeled **MOCK:** so CI does not need Cursor credentials. Enable the real client with:
+**Today:** Builder dispatches **Coding**, then **Testing** and **Review** in parallel, recording branch names, test results, and PR URLs on the shared run context. Default client is clearly labeled **MOCK:** so CI does not need Cursor credentials.
+
+**Target (Cursor-maximized):** Lead, specialists, and AI Red Teaming also run as ephemeral Cloud Agents; Desk remains the always-on on-demand trigger. Enable the real Builder Cloud client with:
 
 ```bash
 export CURSOR_API_KEY=...                 # or CURSOR_SERVICE_ACCOUNT_KEY
@@ -157,7 +172,7 @@ Cloud Agents never auto-merge — Lead human merge/release gates stay pending. S
 
 ## Milestone 6 — verification loops + PR workflow
 
-Lead runs **checkpoint verification** after specialist analysis and after Builder/Cloud Agent stages, drives remediation → reverify when checkpoints fail, and tracks PRs via a pluggable GitHub client (**MOCK:** by default; real when `GH_TOKEN` / `GITHUB_TOKEN` is set). Merge and release still require **explicit human approval** — never auto-merge.
+Lead sequences **Testing** (Cloud Testing Agent evidence) then independent **Verification** (must not auto-pass because Testing ran), runs **checkpoint verification** after specialist and cloud-agent stages, drives remediation → reverify when checkpoints fail, and tracks PRs via a pluggable GitHub client (**MOCK:** by default; real when `GH_TOKEN` / `GITHUB_TOKEN` is set). Merge and release still require **explicit human approval** — never auto-merge.
 
 ```bash
 npm run test:lead
@@ -171,8 +186,8 @@ See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.m
 
 App: [`apps/releasedesk`](./apps/releasedesk/) (`@releasedesk/ui`).
 
-- Delivery-manager surface for consolidated release readiness from Lead runs
-- Start on-demand checks; inspect specialists, checkpoints, cloud handoffs, PRs, audit trail
+- Always-on delivery-manager surface; starts Lead **on-demand only** (no queue scheduler)
+- Dual intake approvals before Lead; inspect specialists, checkpoints, cloud handoffs, PRs, audit trail
 - Human approve/reject for merge + release (never auto-merges)
 - Demo scenarios: happy path, remediation loop, blocked-on-security, pending approval
 - UI driven by real orchestrator outputs / recorded `fixtures/demos/*.json` — not fake agent chat

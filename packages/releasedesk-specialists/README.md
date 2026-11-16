@@ -1,8 +1,8 @@
 # `@releasedesk/specialists`
 
-Milestone 4–5 — **specialist Agent runners** for Release Desk, including Builder → Cursor Cloud Agents.
+Milestone 4–5 — **specialist Agent runners** for Release Desk, including Builder → Cursor Cloud Agents (Coding / Testing / Review).
 
-Implements Change Analyst, Standards, Security, and Builder as real executions that return independently recorded results for the Lead’s shared run context (not hardcoded simulated conversations).
+Implements Change Analyst, Standards, Security, Builder, and **AI Red Teaming** as real executions that return independently recorded results for the Lead’s shared run context (not hardcoded simulated conversations). **Today** these runners are in-process Node; Cursor-maximized target is ephemeral Cloud Agents for the same roles (Desk still triggers Lead on-demand only).
 
 ## Install / test
 
@@ -63,7 +63,7 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 
 Optional Grok enrichment via `XAI_API_KEY` / `GROK_API_KEY`. Without credentials, local analysis still runs; Grok calls are skipped or `MOCK:`-labeled.
 
-## Cursor Cloud Agents (Milestone 5)
+## Cursor Cloud Agents (Milestone 5 — under Builder today)
 
 Builder plans three handoffs (`coding`, `testing`, `review`), then runs:
 

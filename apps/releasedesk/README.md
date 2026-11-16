@@ -1,8 +1,8 @@
 # Release Desk UI (Milestone 7)
 
-Delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) — specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, **feature sign-off checklists** (AI-produced code), and human merge/release gates.
+Always-on delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) **on demand only** (no backlog queue scheduler) — dual intake approvals, specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, **feature sign-off checklists** (AI-produced code), and human merge/release gates.
 
-Voice is optional and **MOCK**-labeled only.
+Voice is optional and **MOCK**-labeled only. Cursor-maximized target: Lead/specialists become ephemeral Cloud Agents; Desk stays the always-on trigger (prefer Cursor Apps hosting).
 
 ## Run locally
 
@@ -53,7 +53,7 @@ KYC demo remains on port 3000 (`npm run dev`).
 | --- | --- |
 | Specialist runners (default UI path) | Lead stub runners (`MOCK:` summaries) unless you wire real specialists via CLI |
 | GitHub PR client | MOCK unless `GH_TOKEN` / `GITHUB_TOKEN` is set (UI uses MOCK client) |
-| Cursor Cloud Agents | Appear only when Builder remediates; MOCK by default |
+| Cursor Cloud Agents | Coding / Testing / Review under Builder (MOCK by default). Lead/specialists are in-process today; Cloud Agents target for those roles |
 | Voice channel | Stub acknowledgment only |
 
 ## Layout
@@ -69,7 +69,8 @@ apps/releasedesk/
 
 API surface:
 
-- `POST /api/checks` — on-demand Lead check
+- `POST /api/checks` — on-demand Lead check (primary Desk→Lead trigger)
+- `GET|POST /api/intake` · `POST /api/intake/approvals` · `POST /api/intake/reorder` · `POST /api/intake/start` — dual approvals + on-demand Lead from `approved_for_dev` (no scheduler)
 - `GET /api/runs` · `GET /api/runs/:id`
 - `POST /api/runs/:id/approvals` — merge/release gates (never auto-merges)
 - `POST /api/runs/:id/feature-signoffs` — per-item or full feature checklist sign-off (never auto-signed)

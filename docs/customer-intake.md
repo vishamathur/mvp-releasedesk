@@ -9,10 +9,11 @@ Multi-customer prioritized intake sitting **before** Lead / SDLC.
 3. Weighted fairness rebalance (prevents one customer starving others)  
 4. **Human cost approval** AND **human queue approval** (both required)  
 5. Optional re-prioritize with **quick human sign-off**  
-6. Lead starts only from `approved_for_dev` items → full SDLC (mandatory Security, ATLAS/OWASP on review-ready PRs, feature checklist, merge/release)  
-7. Result feeds back to Lead  
+6. Lead starts **on demand only** from `approved_for_dev` items (Desk UI / `startLeadFromApprovedQueueItem` / CLI) — **no** backlog queue scheduler  
+7. Full SDLC: mandatory Security → Builder → AI Red Teaming → ATLAS/OWASP (review-ready PRs; drafts exempt) → Coding / Testing / Verification → feature checklist → merge/release  
+8. Result feeds back to Lead  
 
-Unapproved or partially approved items **must not** enter Lead/SDLC.
+Unapproved or partially approved items **must not** enter Lead/SDLC. Always-on surfaces are Desk + KYC; Lead is request-scoped.
 
 ## Statuses
 

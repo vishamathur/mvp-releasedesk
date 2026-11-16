@@ -29,6 +29,7 @@ npm run typecheck -w @releasedesk/core
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 | Mandatory gates | `gates` | Security always required; AI Red Teaming ATLAS/OWASP hard block (`evaluateAiRedTeamingHardBlock`, drafts exempt) + realtime Lead flags |
 | AI Red Teaming providers | `ai-red-teaming` | Shared `AiRedTeamingProvider` (`runProbes` / `healthCheck`); `custom` default + optional `zscaler` via `RELEASEDESK_AI_RED_TEAM_PROVIDER` |
+| SDLC stages | `sdlc-stages` | Distinct **Testing** vs **Verification** contracts (Verification must not auto-pass) |
 
 ## Run context lifecycle
 
@@ -59,9 +60,9 @@ Tasks with `dependsOn` stay `pending` until dependencies are `completed`, then b
 
 Every mutating store method appends an audit event (`run.created`, `task.started`, `agent.invoked`, `mock.integration_used`, …).
 
-## Agent contracts (plug-in later)
+## Agent contracts
 
-Agents are **not implemented here**. Milestone 3/4 will validate I/O with these schemas:
+Schemas live here; runners live in `@releasedesk/lead` / `@releasedesk/specialists` (today in-process; Cursor-maximized target = ephemeral Cloud Agents). Durable file/in-memory stores share run context across on-demand Lead invocations.
 
 | Role | Input schema | Output schema |
 | --- | --- | --- |
@@ -70,10 +71,11 @@ Agents are **not implemented here**. Milestone 3/4 will validate I/O with these 
 | Standards | `StandardsAgentInputSchema` | `StandardsAgentOutputSchema` |
 | Security | `SecurityAgentInputSchema` | `SecurityAgentOutputSchema` |
 | Builder | `BuilderAgentInputSchema` | `BuilderAgentOutputSchema` |
+| AI Red Teaming | `AiRedTeamingAgentInputSchema` | `AiRedTeamingAgentOutputSchema` |
 
-Typical plug-in shape for a future runner:
+Typical plug-in shape:
 
-1. Lead creates a run via the store and adds specialist tasks (with dependencies as needed).
+1. Desk/CLI starts Lead **on demand** (no backlog scheduler); Lead creates a run and specialist tasks.
 2. Orchestrator starts a ready task, builds a typed `*AgentInput`, invokes the agent runtime.
 3. Agent returns a typed `*AgentOutput` (evidence + optional `mocksUsed`).
 4. Orchestrator writes evidence / complete / fail on the store (audit trail updates automatically).
