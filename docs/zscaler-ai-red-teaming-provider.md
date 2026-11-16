@@ -14,6 +14,17 @@ Research context (Project store): `docs/zscaler-ai-red-teaming-research.md`.
 
 Zscaler is selected **only** when the env is explicitly `zscaler`.
 
+## Local secrets template (gitignored)
+
+Prefer Cursor Apps / Cloud Agent **named Runtime Secrets** for production. For local MOCK/dev wiring only:
+
+| Path | Role |
+| --- | --- |
+| [`.secrets/zscaler-ai-red-teaming.env.example`](../.secrets/zscaler-ai-red-teaming.env.example) | Committed placeholders |
+| `.secrets/zscaler-ai-red-teaming.env` | Local filled copy — **gitignored**; never commit |
+
+Placeholder names: `ZSCALER_AI_RED_TEAM_ENDPOINT`, `ZSCALER_AI_RED_TEAM_API_KEY`, `ZSCALER_AI_RED_TEAM_SCAN_SCOPE`, `ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING` (`block` \| `warn` \| `report-only`).
+
 ## Contract
 
 ```ts
