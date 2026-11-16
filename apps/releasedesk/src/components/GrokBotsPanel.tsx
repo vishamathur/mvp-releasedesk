@@ -5,11 +5,19 @@ import { MockLabel } from "./MockLabel";
 
 type BotPack = {
   id: string;
+  displayName: string;
+  label: string;
+  apiKeyEnv: string;
+  keyPresent: boolean;
+  liveBotId: string | null;
+  provisionStatus: string;
+  definitionPath: string;
   persona: string;
   skills: Array<{ name: string; body: string }>;
   routines: Array<{ name: string; body: string }>;
   connectors: string[];
   teammates: string[];
+  channels: string[];
   memoryNotes: string[];
 };
 
@@ -19,7 +27,6 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
   const [bots, setBots] = useState<BotPack[]>([]);
   const [openId, setOpenId] = useState<string>("lead");
   const [tab, setTab] = useState<"persona" | "skills" | "routines" | "connectors">("persona");
-  const [skillOpen, setSkillOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,35 +47,22 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
   }, []);
 
   const current = useMemo(() => bots.find((b) => b.id === openId), [bots, openId]);
-  const idx = bots.findIndex((b) => b.id === openId);
-
-  function go(delta: number) {
-    if (bots.length === 0) return;
-    const next = bots[(idx + delta + bots.length) % bots.length];
-    if (!next) return;
-    setOpenId(next.id);
-    setTab("persona");
-    setSkillOpen(null);
-  }
 
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-2xl text-rd-ink">Grok Bot agents</h2>
+          <h2 className="font-display text-2xl text-rd-ink">Grok Bots</h2>
           <p className="mt-2 max-w-2xl text-sm text-rd-forest/70">
-            Look · pull up · move agent to agent · go deep. Primary Wednesday demo surface.
+            Lead · CA · Standards · Security · Builder — open persona, skills, routines, connectors.
           </p>
         </div>
-        <MockLabel>Packs from grok-bots/</MockLabel>
+        <MockLabel>defs · no fake live IDs</MockLabel>
       </div>
 
       {error ? <p className="mt-4 text-sm text-rd-alert">{error}</p> : null}
 
-      <div className="mt-6 flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-ghost !text-xs" onClick={() => go(-1)}>
-          ← Prev agent
-        </button>
+      <div className="mt-6 flex flex-wrap gap-2">
         {bots.map((b) => (
           <button
             key={b.id}
@@ -77,25 +71,25 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
             onClick={() => {
               setOpenId(b.id);
               setTab("persona");
-              setSkillOpen(null);
             }}
           >
-            {b.id}
+            {b.displayName || b.id}
             {b.id === deepDiveId ? " · deep" : ""}
           </button>
         ))}
-        <button type="button" className="btn-ghost !text-xs" onClick={() => go(1)}>
-          Next agent →
-        </button>
       </div>
 
       {!current ? (
-        <p className="mt-6 text-sm text-rd-forest/55">Loading bot packs…</p>
+        <p className="mt-6 text-sm text-rd-forest/55">Loading…</p>
       ) : (
         <div className="mt-6 border-y border-rd-forest/10 py-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-rd-brass">
-            Now viewing · {current.id}
-            {current.id === deepDiveId ? " · recommended deep-dive" : ""}
+            {current.displayName} · {current.provisionStatus}
+            {current.liveBotId ? ` · ${current.liveBotId}` : " · scripted"}
+          </p>
+          <p className="mt-1 text-xs text-rd-forest/55">
+            {current.definitionPath} · {current.apiKeyEnv}
+            {current.keyPresent ? " · key present" : " · key missing"}
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -119,64 +113,49 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
 
           {tab === "skills" ? (
             <div className="mt-4 space-y-3">
-              {current.skills.length === 0 ? (
-                <p className="text-sm text-rd-forest/55">No skills file yet.</p>
-              ) : (
-                current.skills.map((s) => (
-                  <div key={s.name} className="border-b border-rd-forest/10 pb-3">
-                    <button
-                      type="button"
-                      className="text-sm font-medium text-rd-ink underline-offset-2 hover:underline"
-                      onClick={() => setSkillOpen(skillOpen === s.name ? null : s.name)}
-                    >
-                      {s.name}
-                    </button>
-                    {skillOpen === s.name || current.id === deepDiveId ? (
-                      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-xs text-rd-forest/75">
-                        {s.body}
-                      </pre>
-                    ) : null}
-                  </div>
-                ))
-              )}
+              {current.skills.map((s) => (
+                <div key={s.name} className="border-b border-rd-forest/10 pb-3">
+                  <p className="text-sm font-medium text-rd-ink">{s.name}</p>
+                  <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-xs text-rd-forest/75">
+                    {s.body}
+                  </pre>
+                </div>
+              ))}
             </div>
           ) : null}
 
           {tab === "routines" ? (
             <div className="mt-4 space-y-3">
-              {current.routines.length === 0 ? (
-                <p className="text-sm text-rd-forest/55">No routines file yet.</p>
-              ) : (
-                current.routines.map((r) => (
-                  <div key={r.name}>
-                    <p className="text-sm font-medium text-rd-ink">{r.name}</p>
-                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-rd-forest/75">
-                      {r.body}
-                    </pre>
-                  </div>
-                ))
-              )}
+              {current.routines.map((r) => (
+                <div key={r.name}>
+                  <p className="text-sm font-medium text-rd-ink">{r.name}</p>
+                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-rd-forest/75">
+                    {r.body}
+                  </pre>
+                </div>
+              ))}
             </div>
           ) : null}
 
           {tab === "connectors" ? (
             <div className="mt-4 space-y-2 text-sm text-rd-forest/75">
-              <p>
-                <span className="font-medium text-rd-ink">Connectors:</span>{" "}
-                {current.connectors.join(", ") || "n/a"}
-              </p>
-              <p>
-                <span className="font-medium text-rd-ink">Teammates / channels:</span>
-              </p>
+              <ul className="list-disc pl-5">
+                {current.connectors.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+              <p className="font-medium text-rd-ink">Channels</p>
+              <ul className="list-disc pl-5">
+                {current.channels.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+              <p className="font-medium text-rd-ink">Teammates</p>
               <ul className="list-disc pl-5">
                 {current.teammates.map((t) => (
                   <li key={t}>{t}</li>
                 ))}
               </ul>
-              <p>
-                <span className="font-medium text-rd-ink">Memory:</span>{" "}
-                {current.memoryNotes.join("; ")}
-              </p>
             </div>
           ) : null}
         </div>

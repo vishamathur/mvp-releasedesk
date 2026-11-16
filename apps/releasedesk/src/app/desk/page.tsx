@@ -26,8 +26,8 @@ export default async function DeskPage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            Pull up Lead and specialists, move agent to agent, deep-dive Security. Then trigger the
-            workflow, show the red-team gate, and run Grok API intel.
+            Open Lead · CA · Standards · Security · Builder (persona / skills / routines). Trigger
+            the workflow, then the red-team|security gate and Grok API intel.
           </p>
         </div>
 

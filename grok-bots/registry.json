@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-16T21:29:56.046Z",
+  "entries": [
+    {
+      "definitionId": "lead",
+      "liveBotId": null,
+      "createdAt": null,
+      "lastError": null,
+      "status": "skipped_missing_key"
+    },
+    {
+      "definitionId": "change-analyst",
+      "liveBotId": null,
+      "createdAt": null,
+      "lastError": null,
+      "status": "skipped_missing_key"
+    },
+    {
+      "definitionId": "standards",
+      "liveBotId": null,
+      "createdAt": null,
+      "lastError": null,
+      "status": "skipped_missing_key"
+    },
+    {
+      "definitionId": "security",
+      "liveBotId": null,
+      "createdAt": null,
+      "lastError": null,
+      "status": "skipped_missing_key"
+    },
+    {
+      "definitionId": "builder",
+      "liveBotId": null,
+      "createdAt": null,
+      "lastError": null,
+      "status": "skipped_missing_key"
+    }
+  ]
+}
