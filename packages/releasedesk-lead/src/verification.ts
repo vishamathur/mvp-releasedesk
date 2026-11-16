@@ -130,7 +130,11 @@ export function evaluateCheckpoint(input: {
     }
 
     for (const issue of assessment.blockingIssues) {
-      if (issue.startsWith("Security:") || issue.startsWith("Standards:")) {
+      if (
+        issue.startsWith("Security:") ||
+        issue.startsWith("Standards:") ||
+        issue.startsWith("AI Red Teaming:")
+      ) {
         if (issues.some((i) => i.message === issue)) continue;
         issues.push({
           code: "blocking_finding",
@@ -189,7 +193,11 @@ export function evaluateCheckpoint(input: {
 
   if (input.stage === "post_remediation") {
     for (const issue of assessment.blockingIssues) {
-      if (issue.startsWith("Security:") || issue.startsWith("Standards:")) {
+      if (
+        issue.startsWith("Security:") ||
+        issue.startsWith("Standards:") ||
+        issue.startsWith("AI Red Teaming:")
+      ) {
         issues.push({
           code: "reverify_blocking",
           message: issue,

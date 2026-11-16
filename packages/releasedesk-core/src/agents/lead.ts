@@ -36,6 +36,7 @@ export const LeadDelegationSchema = z.object({
     AgentRoleSchema.enum.standards,
     AgentRoleSchema.enum.security,
     AgentRoleSchema.enum.builder,
+    AgentRoleSchema.enum.ai_red_teaming,
   ]),
   rationale: z.string().min(1),
 });

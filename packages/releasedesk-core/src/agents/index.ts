@@ -52,3 +52,16 @@ export {
   type BuilderAgentOutput,
   type BuilderFeatureIntroduced,
 } from "./builder.js";
+
+export {
+  AiRedTeamingTouchpointSchema,
+  AiRedTeamingPassKindSchema,
+  AiRedTeamingAgentInputSchema,
+  AiRedTeamingFindingSchema,
+  AiRedTeamingAgentOutputSchema,
+  type AiRedTeamingTouchpoint,
+  type AiRedTeamingPassKind,
+  type AiRedTeamingAgentInput,
+  type AiRedTeamingFinding,
+  type AiRedTeamingAgentOutput,
+} from "./ai-red-teaming.js";

@@ -13,6 +13,7 @@ export {
   stubStandardsRunner,
   stubSecurityRunner,
   stubBuilderRunner,
+  stubAiRedTeamingRunner,
   createFlakyRunner,
 } from "./stub-runners.js";
 

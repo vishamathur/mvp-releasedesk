@@ -79,9 +79,23 @@ export {
   hasRecordedSecurityResult,
   securityParticipationSatisfied,
   assertMandatoryAnalysisRoles,
+  AI_RED_TEAMING_ROLE,
+  AI_RED_TEAMING_TASK_KIND,
+  AiRedTeamingLeadFlagSchema,
+  AiRedTeamingFlagRecordSchema,
+  AiRedTeamingHardBlockStatusSchema,
+  AiRedTeamingHardBlockGateSchema,
+  collectAiRedTeamingBlockingCount,
+  hasRealtimeAiRedTeamingFlags,
+  parseAiRedTeamingFlagRecord,
+  evaluateAiRedTeamingHardBlock,
   type MandatoryAnalysisRole,
   type SecurityParticipationStatus,
   type SecurityParticipationGate,
+  type AiRedTeamingLeadFlag,
+  type AiRedTeamingFlagRecord,
+  type AiRedTeamingHardBlockStatus,
+  type AiRedTeamingHardBlockGate,
 } from "./gates.js";
 
 export {

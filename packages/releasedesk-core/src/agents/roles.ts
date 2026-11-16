@@ -6,6 +6,7 @@ export const AgentRoleSchema = z.enum([
   "standards",
   "security",
   "builder",
+  "ai_red_teaming",
 ]);
 
 export type AgentRole = z.infer<typeof AgentRoleSchema>;
@@ -16,4 +17,5 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   standards: "Standards Agent",
   security: "Security Agent",
   builder: "Builder Agent",
+  ai_red_teaming: "AI Red Teaming",
 };

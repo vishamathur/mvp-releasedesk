@@ -358,6 +358,106 @@ describe("mandatory Security on every change", () => {
   });
 });
 
+describe("AI Red Teaming cross-cutting + realtime Lead flags", () => {
+  it("runs guardrails on analysis AI outputs and records hard-block evaluation", async () => {
+    const store = createInMemoryStore();
+    const lead = new LeadOrchestrator({ store, enableRemediation: false });
+    const report = await lead.startOnDemandCheck({
+      goal: "AI Red Teaming guardrails",
+      target: { repository: "vishamathur/mvp-releasedesk", baseRef: "main" },
+    });
+
+    const aiRt = report.run.tasks.filter((t) => t.agentRole === "ai_red_teaming");
+    expect(aiRt.length).toBeGreaterThanOrEqual(3);
+    expect(aiRt.every((t) => t.status === "completed")).toBe(true);
+    expect(
+      report.delegations.some((d) => d.agentRole === "ai_red_teaming"),
+    ).toBe(true);
+
+    const actions = report.run.auditTrail.map((e) => e.action);
+    expect(actions).toContain("ai_red_teaming.guardrail_started");
+    expect(actions).toContain("ai_red_teaming.guardrail_completed");
+    expect(actions).toContain("ai_red_teaming.hard_block_evaluated");
+    expect(report.assessment.aiRedTeamingHardBlock.label).toBe("AI Red Teaming");
+    expect(report.assessment.aiRedTeamingHardBlock.blocked).toBe(false);
+  });
+
+  it("flags Lead in real time and routes remediation before continuing", async () => {
+    const store = createInMemoryStore();
+    const stubs = createDefaultStubRunners();
+    const injectingAiRt: AgentRunner = async (inv) => {
+      const touchpoint = String(inv.task.input?.touchpoint ?? "sdlc_ai_prompt");
+      // Inject only on first analysis-wave change_analyst guardrail.
+      if (
+        inv.task.input?.passKind === "guardrail" &&
+        touchpoint === "change_analyst" &&
+        !inv.task.input?.injectFindings
+      ) {
+        return stubs.ai_red_teaming({
+          ...inv,
+          task: {
+            ...inv.task,
+            input: {
+              ...inv.task.input,
+              injectFindings: [
+                {
+                  id: "rt_inject_1",
+                  severity: "high",
+                  title: "Prompt injection",
+                  summary: "Injected AI Red Teaming finding for realtime Lead flag",
+                  framework: "both",
+                  category: "prompt_injection",
+                  releaseBlocking: true,
+                  owaspLlmId: "LLM01",
+                  atlasTechnique: "AML.T0051",
+                },
+              ],
+            },
+          },
+        });
+      }
+      return stubs.ai_red_teaming(inv);
+    };
+
+    const lead = new LeadOrchestrator({
+      store,
+      enableRemediation: true,
+      maxRemediationCycles: 1,
+      runners: { ...stubs, ai_red_teaming: injectingAiRt },
+    });
+
+    const report = await lead.startOnDemandCheck({
+      goal: "AI Red Teaming realtime flag",
+      target: { repository: "vishamathur/mvp-releasedesk", baseRef: "main" },
+    });
+
+    const actions = report.run.auditTrail.map((e) => e.action);
+    expect(actions).toContain("ai_red_teaming.flagged_lead");
+    expect(actions).toContain("ai_red_teaming.remediation_routed");
+    expect(actions).toContain("remediation.cycle_started");
+
+    const flags = (report.run.metadata.aiRedTeamingFlags as { flags?: unknown[] } | undefined)
+      ?.flags;
+    expect(Array.isArray(flags) && flags.length > 0).toBe(true);
+
+    const builderTasks = report.run.tasks.filter((t) => t.agentRole === "builder");
+    expect(builderTasks.length).toBeGreaterThanOrEqual(1);
+
+    // Dedicated post-Builder + hard_block passes after remediation.
+    expect(
+      report.run.tasks.some(
+        (t) =>
+          t.agentRole === "ai_red_teaming" && t.input?.passKind === "post_builder",
+      ),
+    ).toBe(true);
+    expect(
+      report.run.tasks.some(
+        (t) => t.agentRole === "ai_red_teaming" && t.input?.passKind === "hard_block",
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("recordHumanApproval on live run", () => {
   it("records approval before run completion", async () => {
     const store = createInMemoryStore();

@@ -1,7 +1,9 @@
 import {
   allFeatureSignOffsComplete,
+  evaluateAiRedTeamingHardBlock,
   evaluateSecurityParticipation,
   getIncompleteChecklists,
+  type AiRedTeamingHardBlockGate,
   type FeatureSignOffRecord,
   type LeadAgentOutput,
   type SecurityParticipationGate,
@@ -30,6 +32,8 @@ export type ReadinessAssessment = {
   summary: string;
   /** Mandatory Security participation gate — never skippable for low risk. */
   securityGate: SecurityParticipationGate;
+  /** AI Red Teaming ATLAS/OWASP hard block (draft PRs exempt). */
+  aiRedTeamingHardBlock: AiRedTeamingHardBlockGate;
 };
 
 /** Structural checkpoint trail (avoids circular import with verification.ts). */
@@ -86,6 +90,10 @@ export function assessReadiness(input: {
   considerRemediation?: boolean;
   /** Latest checkpoint trail (M6) — failed terminal checkpoints add blockers. */
   checkpoints?: ReadinessCheckpointTrail;
+  /** PR draft state for AI Red Teaming hard-block exemption. */
+  prDraft?: boolean;
+  /** Review-ready PR (non-draft) — hard block applies when true. */
+  reviewReady?: boolean;
 }): ReadinessAssessment {
   const allSpecialists = input.tasks.filter((t) => t.agentRole !== "lead");
   /** Builder history is informative; readiness uses latest per role. */
@@ -107,6 +115,15 @@ export function assessReadiness(input: {
   const securityGate = evaluateSecurityParticipation(input.tasks);
   if (!securityGate.satisfied && securityGate.blockingIssue) {
     blockingIssues.push(securityGate.blockingIssue);
+  }
+
+  const aiRedTeamingHardBlock = evaluateAiRedTeamingHardBlock({
+    tasks: input.tasks,
+    ...(input.prDraft !== undefined ? { prDraft: input.prDraft } : {}),
+    ...(input.reviewReady !== undefined ? { reviewReady: input.reviewReady } : {}),
+  });
+  if (aiRedTeamingHardBlock.blocked && aiRedTeamingHardBlock.blockingIssue) {
+    blockingIssues.push(aiRedTeamingHardBlock.blockingIssue);
   }
 
   for (const task of specialistTasks) {
@@ -144,6 +161,23 @@ export function assessReadiness(input: {
         remediationRecommended = true;
       } else if (risk === "high" || risk === "critical") {
         blockingIssues.push(`Security: elevated risk level (${risk})`);
+        remediationRecommended = true;
+      }
+    }
+
+    if (task.agentRole === "ai_red_teaming") {
+      const blockingCount = asNumber(out.releaseBlockingCount) ?? 0;
+      const risk = asString(out.riskLevel);
+      const flagRealtime = asBoolean(out.flagLeadRealtime) === true;
+      if (blockingCount > 0) {
+        const msg = `AI Red Teaming: ${blockingCount} release-blocking finding(s)`;
+        if (!blockingIssues.includes(msg)) blockingIssues.push(msg);
+        remediationRecommended = true;
+      } else if (risk === "high" || risk === "critical") {
+        const msg = `AI Red Teaming: elevated risk level (${risk})`;
+        if (!blockingIssues.includes(msg)) blockingIssues.push(msg);
+        remediationRecommended = true;
+      } else if (flagRealtime) {
         remediationRecommended = true;
       }
     }
@@ -196,8 +230,15 @@ export function assessReadiness(input: {
     blockingIssues.some((b) => b.includes("ended as failed") || b.includes("ended as cancelled"))
   ) {
     readiness = "not_ready";
+  } else if (aiRedTeamingHardBlock.blocked) {
+    readiness = "not_ready";
   } else if (
-    blockingIssues.some((b) => b.startsWith("Security:") || b.startsWith("Standards:")) &&
+    blockingIssues.some(
+      (b) =>
+        b.startsWith("Security:") ||
+        b.startsWith("Standards:") ||
+        b.startsWith("AI Red Teaming:"),
+    ) &&
     pending.length === 0 &&
     featuresComplete &&
     (approvals?.gates?.length ?? 0) > 0
@@ -234,6 +275,7 @@ export function assessReadiness(input: {
   const summaryParts = [
     `Specialists: ${allSpecialists.filter((s) => s.status === "completed").length}/${allSpecialists.length} completed`,
     `Security gate: ${securityGate.status}`,
+    `AI Red Teaming hard block: ${aiRedTeamingHardBlock.status}`,
     blockingIssues.length ? `Blocking: ${blockingIssues.length}` : "No blocking issues",
     incompleteFeatures.length
       ? `Pending feature sign-offs: ${incompleteFeatures.length}`
@@ -249,5 +291,6 @@ export function assessReadiness(input: {
     specialists: snapshots,
     summary: summaryParts.join(". "),
     securityGate,
+    aiRedTeamingHardBlock,
   };
 }

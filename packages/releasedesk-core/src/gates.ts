@@ -177,3 +177,215 @@ export function assertMandatoryAnalysisRoles(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// AI Red Teaming — realtime Lead flags + ATLAS/OWASP hard block
+// Distinct from Security (`security`). Label everywhere: "AI Red Teaming".
+// ---------------------------------------------------------------------------
+
+export const AI_RED_TEAMING_ROLE = AgentRoleSchema.enum.ai_red_teaming;
+
+/** Stable task-kind labels for AI Red Teaming passes. */
+export const AI_RED_TEAMING_TASK_KIND = "ai_red_teaming_pass" as const;
+
+export const AiRedTeamingLeadFlagSchema = z.object({
+  id: z.string().min(1),
+  at: z.string().datetime(),
+  touchpoint: z.string().min(1),
+  passKind: z.enum(["guardrail", "post_builder", "hard_block"]),
+  taskId: z.string().optional(),
+  findingIds: z.array(z.string()).default([]),
+  releaseBlockingCount: z.number().int().nonnegative().default(0),
+  summary: z.string().min(1),
+  /** Lead has routed remediation in response to this flag. */
+  remediationRouted: z.boolean().default(false),
+});
+
+export type AiRedTeamingLeadFlag = z.infer<typeof AiRedTeamingLeadFlagSchema>;
+
+export const AiRedTeamingFlagRecordSchema = z.object({
+  flags: z.array(AiRedTeamingLeadFlagSchema).default([]),
+});
+
+export type AiRedTeamingFlagRecord = z.infer<typeof AiRedTeamingFlagRecordSchema>;
+
+export const AiRedTeamingHardBlockStatusSchema = z.enum([
+  /** No release-blocking AI Red Teaming findings. */
+  "clear",
+  /** Findings exist but PR is draft — hard block exempt. */
+  "exempt_draft",
+  /** Review-ready PR blocked by unresolved ATLAS/OWASP findings. */
+  "blocked",
+  /** Hard-block pass has not run yet. */
+  "not_evaluated",
+]);
+
+export type AiRedTeamingHardBlockStatus = z.infer<
+  typeof AiRedTeamingHardBlockStatusSchema
+>;
+
+export const AiRedTeamingHardBlockGateSchema = z.object({
+  role: z.literal(AgentRoleSchema.enum.ai_red_teaming),
+  label: z.literal("AI Red Teaming"),
+  frameworks: z
+    .array(z.enum(["mitre_atlas", "owasp_llm"]))
+    .default(["mitre_atlas", "owasp_llm"]),
+  status: AiRedTeamingHardBlockStatusSchema,
+  /** True when progression must stop (review-ready PR + blocking findings). */
+  blocked: z.boolean(),
+  /** Draft PRs are exempt from the hard block. */
+  draftExempt: z.boolean(),
+  prDraft: z.boolean().optional(),
+  reviewReady: z.boolean().optional(),
+  releaseBlockingCount: z.number().int().nonnegative().default(0),
+  blockingIssue: z.string().optional(),
+  taskId: z.string().optional(),
+});
+
+export type AiRedTeamingHardBlockGate = z.infer<
+  typeof AiRedTeamingHardBlockGateSchema
+>;
+
+function latestAiRedTeamingTask(
+  tasks: readonly TaskRecord[],
+  passKind?: "guardrail" | "post_builder" | "hard_block",
+): TaskRecord | undefined {
+  let latest: TaskRecord | undefined;
+  for (const task of tasks) {
+    if (task.agentRole !== AI_RED_TEAMING_ROLE) continue;
+    if (passKind) {
+      const kind = task.output?.passKind ?? task.input?.passKind;
+      if (kind !== passKind) continue;
+    }
+    if (!latest) {
+      latest = task;
+      continue;
+    }
+    const prevTs = latest.completedAt ?? latest.updatedAt;
+    const nextTs = task.completedAt ?? task.updatedAt;
+    if (nextTs >= prevTs) latest = task;
+  }
+  return latest;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/**
+ * Collect release-blocking AI Red Teaming findings across all completed passes.
+ * Used for realtime Lead awareness and hard-block evaluation.
+ */
+export function collectAiRedTeamingBlockingCount(
+  tasks: readonly TaskRecord[],
+): number {
+  let total = 0;
+  for (const task of tasks) {
+    if (task.agentRole !== AI_RED_TEAMING_ROLE) continue;
+    if (task.status !== "completed") continue;
+    const count = asNumber(task.output?.releaseBlockingCount) ?? 0;
+    total += count;
+  }
+  return total;
+}
+
+/**
+ * True when any AI Red Teaming pass asked Lead to be flagged in real time
+ * (findings that should interrupt progression for remediation routing).
+ */
+export function hasRealtimeAiRedTeamingFlags(
+  tasks: readonly TaskRecord[],
+): boolean {
+  for (const task of tasks) {
+    if (task.agentRole !== AI_RED_TEAMING_ROLE) continue;
+    if (task.status !== "completed") continue;
+    if (asBoolean(task.output?.flagLeadRealtime) === true) return true;
+    const count = asNumber(task.output?.releaseBlockingCount) ?? 0;
+    if (count > 0) return true;
+  }
+  return false;
+}
+
+export function parseAiRedTeamingFlagRecord(raw: unknown): AiRedTeamingFlagRecord {
+  const parsed = AiRedTeamingFlagRecordSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  return { flags: [] };
+}
+
+/**
+ * Evaluate ATLAS/OWASP LLM Top 10 hard block after the dedicated post-Builder
+ * AI Red Teaming pass. Draft PRs are exempt; review-ready PRs are blocked when
+ * unresolved release-blocking findings remain.
+ */
+export function evaluateAiRedTeamingHardBlock(input: {
+  tasks: readonly TaskRecord[];
+  /** When true, PR is still a draft — hard block does not apply. */
+  prDraft?: boolean;
+  /** When true, PR is review-ready (non-draft). Defaults to !prDraft when omitted. */
+  reviewReady?: boolean;
+}): AiRedTeamingHardBlockGate {
+  const prDraft = input.prDraft === true;
+  const reviewReady =
+    input.reviewReady !== undefined ? input.reviewReady : !prDraft;
+
+  const hardBlockTask = latestAiRedTeamingTask(input.tasks, "hard_block");
+  const postBuilderTask = latestAiRedTeamingTask(input.tasks, "post_builder");
+  const evalTask = hardBlockTask ?? postBuilderTask;
+
+  const releaseBlockingCount = (() => {
+    if (evalTask?.status === "completed") {
+      return asNumber(evalTask.output?.releaseBlockingCount) ?? 0;
+    }
+    // Fall back to any completed AI Red Teaming passes when hard_block not yet run.
+    return collectAiRedTeamingBlockingCount(input.tasks);
+  })();
+
+  if (releaseBlockingCount === 0) {
+    return AiRedTeamingHardBlockGateSchema.parse({
+      role: AI_RED_TEAMING_ROLE,
+      label: "AI Red Teaming",
+      frameworks: ["mitre_atlas", "owasp_llm"],
+      status: evalTask ? "clear" : "not_evaluated",
+      blocked: false,
+      draftExempt: prDraft,
+      prDraft,
+      reviewReady,
+      releaseBlockingCount: 0,
+      ...(evalTask ? { taskId: evalTask.id } : {}),
+    });
+  }
+
+  if (prDraft || !reviewReady) {
+    return AiRedTeamingHardBlockGateSchema.parse({
+      role: AI_RED_TEAMING_ROLE,
+      label: "AI Red Teaming",
+      frameworks: ["mitre_atlas", "owasp_llm"],
+      status: "exempt_draft",
+      blocked: false,
+      draftExempt: true,
+      prDraft: true,
+      reviewReady: false,
+      releaseBlockingCount,
+      blockingIssue: `AI Red Teaming: ${releaseBlockingCount} ATLAS/OWASP finding(s) — draft PR exempt from hard block`,
+      ...(evalTask ? { taskId: evalTask.id } : {}),
+    });
+  }
+
+  return AiRedTeamingHardBlockGateSchema.parse({
+    role: AI_RED_TEAMING_ROLE,
+    label: "AI Red Teaming",
+    frameworks: ["mitre_atlas", "owasp_llm"],
+    status: "blocked",
+    blocked: true,
+    draftExempt: false,
+    prDraft: false,
+    reviewReady: true,
+    releaseBlockingCount,
+    blockingIssue: `AI Red Teaming: ${releaseBlockingCount} unresolved ATLAS/OWASP LLM Top 10 finding(s) hard-block review-ready PR progression`,
+    ...(evalTask ? { taskId: evalTask.id } : {}),
+  });
+}
