@@ -20,14 +20,15 @@ export const DEMO_SCENARIOS: DemoScenarioMeta[] = [
   {
     id: "remediation-loop",
     title: "Remediation loop",
-    blurb: "Security blocks first, Builder remediates, reverify clears → pending human approval.",
-    expectedReadiness: "needs_human",
+    blurb:
+      "Security blocks first, Builder remediates, reverify clears → feature checklist + merge/release gates.",
+    expectedReadiness: "needs_human (feature sign-off + gates)",
   },
   {
     id: "blocked-on-security",
     title: "Blocked on security",
     blurb:
-      "Release-blocking security findings persist after remediation. Gates stay pending until you reject → not_ready.",
+      "Release-blocking security findings persist after remediation. Feature checklist + gates stay pending until you reject → not_ready.",
     expectedReadiness: "needs_human (security blockers) → not_ready on reject",
   },
   {

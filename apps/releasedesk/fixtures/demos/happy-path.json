@@ -1,15 +1,15 @@
 {
-  "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+  "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
   "scenarioId": "happy-path",
   "scenarioLabel": "Happy path",
-  "createdAt": "2026-11-14T09:41:09.004Z",
-  "updatedAt": "2026-11-14T09:41:09.031Z",
+  "createdAt": "2026-11-16T19:02:23.972Z",
+  "updatedAt": "2026-11-16T19:02:23.995Z",
   "prClientMode": "mock",
   "autoMerge": false,
   "report": {
-    "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+    "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
     "run": {
-      "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+      "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
       "status": "completed",
       "goal": "Demo: happy-path release readiness for Northwind KYC",
       "target": {
@@ -19,20 +19,20 @@
       },
       "tasks": [
         {
-          "id": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "name": "Change analysis",
           "agentRole": "change_analyst",
           "status": "completed",
           "dependsOn": [],
           "evidence": [
             {
-              "id": "ev_98920554-c056-4fae-9552-2fb667ad1e83",
+              "id": "ev_95ec09cd-d062-4db7-9efb-7808795f8cc7",
               "kind": "diff",
               "title": "Change summary (stub)",
               "summary": "MOCK: Reviewed head vs base with stub commit list",
               "source": "change_analyst",
-              "createdAt": "2026-11-14T09:41:09.014Z",
+              "createdAt": "2026-11-16T19:02:23.981Z",
               "mock": {
                 "mocked": true,
                 "mockLabel": "change-analyst-stub",
@@ -62,12 +62,12 @@
             "commitsReviewed": 0,
             "evidence": [
               {
-                "id": "ev_aa34189c-203e-4eda-9f67-cf47f8339eb4",
+                "id": "ev_2ef08669-b9ae-487d-9c7b-11fe10e12f6a",
                 "kind": "diff",
                 "title": "Change summary (stub)",
                 "summary": "MOCK: Reviewed head vs base with stub commit list",
                 "source": "change_analyst",
-                "createdAt": "2026-11-14T09:41:09.013Z",
+                "createdAt": "2026-11-16T19:02:23.980Z",
                 "mock": {
                   "mocked": true,
                   "mockLabel": "change-analyst-stub",
@@ -87,26 +87,26 @@
             "attempt": 0,
             "maxAttempts": 2
           },
-          "createdAt": "2026-11-14T09:41:09.007Z",
-          "updatedAt": "2026-11-14T09:41:09.015Z",
-          "startedAt": "2026-11-14T09:41:09.009Z",
-          "completedAt": "2026-11-14T09:41:09.015Z"
+          "createdAt": "2026-11-16T19:02:23.975Z",
+          "updatedAt": "2026-11-16T19:02:23.982Z",
+          "startedAt": "2026-11-16T19:02:23.976Z",
+          "completedAt": "2026-11-16T19:02:23.982Z"
         },
         {
-          "id": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "task_caf5899a-6de4-435e-8740-9d479278e47e",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "name": "Standards compliance",
           "agentRole": "standards",
           "status": "completed",
           "dependsOn": [],
           "evidence": [
             {
-              "id": "ev_da3c9373-fb36-43cc-988b-5ab93eb01787",
+              "id": "ev_1d48ce5b-7628-4949-b017-c415366f0602",
               "kind": "policy_ref",
               "title": "Policy check (stub)",
               "summary": "MOCK: Northwind KYC standards evaluated against fixture corpus",
               "source": "standards",
-              "createdAt": "2026-11-14T09:41:09.016Z",
+              "createdAt": "2026-11-16T19:02:23.983Z",
               "mock": {
                 "mocked": true,
                 "mockLabel": "standards-stub",
@@ -130,12 +130,12 @@
             ],
             "evidence": [
               {
-                "id": "ev_713d1bb8-ee5e-4402-b048-80cc4072456d",
+                "id": "ev_964c3c7e-e428-417e-ac8c-e2d65fa6f203",
                 "kind": "policy_ref",
                 "title": "Policy check (stub)",
                 "summary": "MOCK: Northwind KYC standards evaluated against fixture corpus",
                 "source": "standards",
-                "createdAt": "2026-11-14T09:41:09.013Z",
+                "createdAt": "2026-11-16T19:02:23.980Z",
                 "mock": {
                   "mocked": true,
                   "mockLabel": "standards-stub",
@@ -155,26 +155,26 @@
             "attempt": 0,
             "maxAttempts": 2
           },
-          "createdAt": "2026-11-14T09:41:09.008Z",
-          "updatedAt": "2026-11-14T09:41:09.017Z",
-          "startedAt": "2026-11-14T09:41:09.010Z",
-          "completedAt": "2026-11-14T09:41:09.017Z"
+          "createdAt": "2026-11-16T19:02:23.975Z",
+          "updatedAt": "2026-11-16T19:02:23.984Z",
+          "startedAt": "2026-11-16T19:02:23.977Z",
+          "completedAt": "2026-11-16T19:02:23.984Z"
         },
         {
-          "id": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "name": "Security review",
           "agentRole": "security",
           "status": "completed",
           "dependsOn": [],
           "evidence": [
             {
-              "id": "ev_a8f0cd8d-cc19-4f2f-b112-7440664de7d4",
+              "id": "ev_2857afca-c9eb-43ef-8634-35d8f90ae025",
               "kind": "advisory",
               "title": "Security scan (stub)",
               "summary": "MOCK: No release-blocking advisories in fixture scan",
               "source": "security",
-              "createdAt": "2026-11-14T09:41:09.019Z",
+              "createdAt": "2026-11-16T19:02:23.985Z",
               "mock": {
                 "mocked": true,
                 "mockLabel": "security-stub",
@@ -195,12 +195,12 @@
             "riskLevel": "none",
             "evidence": [
               {
-                "id": "ev_0f783561-df7c-4272-93d1-01d96d85d8f6",
+                "id": "ev_7fc373f1-4968-4424-b507-20174ab6a42a",
                 "kind": "advisory",
                 "title": "Security scan (stub)",
                 "summary": "MOCK: No release-blocking advisories in fixture scan",
                 "source": "security",
-                "createdAt": "2026-11-14T09:41:09.014Z",
+                "createdAt": "2026-11-16T19:02:23.980Z",
                 "mock": {
                   "mocked": true,
                   "mockLabel": "security-stub",
@@ -220,26 +220,26 @@
             "attempt": 0,
             "maxAttempts": 2
           },
-          "createdAt": "2026-11-14T09:41:09.008Z",
-          "updatedAt": "2026-11-14T09:41:09.020Z",
-          "startedAt": "2026-11-14T09:41:09.012Z",
-          "completedAt": "2026-11-14T09:41:09.020Z"
+          "createdAt": "2026-11-16T19:02:23.976Z",
+          "updatedAt": "2026-11-16T19:02:23.986Z",
+          "startedAt": "2026-11-16T19:02:23.979Z",
+          "completedAt": "2026-11-16T19:02:23.986Z"
         },
         {
-          "id": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "name": "Lead consolidation",
           "agentRole": "lead",
           "status": "completed",
           "dependsOn": [],
           "evidence": [],
           "output": {
-            "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
-            "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+            "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
+            "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
             "agentRole": "lead",
             "status": "completed",
-            "completedAt": "2026-11-14T09:41:09.028Z",
-            "summary": "Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human",
+            "completedAt": "2026-11-16T19:02:23.992Z",
+            "summary": "Specialists: 3/3 completed. No blocking issues. Feature sign-offs complete (or none). Pending approvals: 2. Readiness: needs_human",
             "evidence": [],
             "mocksUsed": [
               {
@@ -276,17 +276,17 @@
             "readiness": "needs_human",
             "delegations": [
               {
-                "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+                "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
                 "agentRole": "change_analyst",
                 "rationale": "Parallel analysis wave — Change analysis"
               },
               {
-                "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+                "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
                 "agentRole": "standards",
                 "rationale": "Parallel analysis wave — Standards compliance"
               },
               {
-                "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+                "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
                 "agentRole": "security",
                 "rationale": "Parallel analysis wave — Security review"
               }
@@ -296,18 +296,18 @@
             "checkpoints": {
               "checkpoints": [
                 {
-                  "id": "checkpoint_specialist_analysis_1_1794649269022",
+                  "id": "checkpoint_specialist_analysis_1_1794855743987",
                   "stage": "specialist_analysis",
                   "status": "passed",
-                  "at": "2026-11-14T09:41:09.022Z",
+                  "at": "2026-11-16T19:02:23.987Z",
                   "cycle": 0,
                   "issues": [],
                   "summary": "Checkpoint specialist_analysis passed (cycle 0)",
                   "evidence": {
                     "taskIds": [
-                      "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
-                      "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
-                      "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2"
+                      "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
+                      "task_caf5899a-6de4-435e-8740-9d479278e47e",
+                      "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7"
                     ],
                     "blockingIssues": []
                   }
@@ -319,18 +319,18 @@
             },
             "autoMerge": false
           },
-          "createdAt": "2026-11-14T09:41:09.025Z",
-          "updatedAt": "2026-11-14T09:41:09.029Z",
-          "startedAt": "2026-11-14T09:41:09.026Z",
-          "completedAt": "2026-11-14T09:41:09.029Z"
+          "createdAt": "2026-11-16T19:02:23.991Z",
+          "updatedAt": "2026-11-16T19:02:23.993Z",
+          "startedAt": "2026-11-16T19:02:23.991Z",
+          "completedAt": "2026-11-16T19:02:23.993Z"
         }
       ],
       "auditTrail": [
         {
-          "id": "aud_d1e64bd3-15cb-4400-bd25-c496b47ec680",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_71fb38d3-266d-462a-82e8-1a7b17569851",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "run.created",
-          "at": "2026-11-14T09:41:09.006Z",
+          "at": "2026-11-16T19:02:23.974Z",
           "actor": {
             "kind": "system"
           },
@@ -344,10 +344,10 @@
           }
         },
         {
-          "id": "aud_b6821e2e-8bac-475f-9ad3-3b14dbd5dd33",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_ebc45c47-9853-454d-8d16-8969367ff8a6",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.invoked",
-          "at": "2026-11-14T09:41:09.007Z",
+          "at": "2026-11-16T19:02:23.974Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
@@ -368,10 +368,10 @@
           }
         },
         {
-          "id": "aud_6e5ea6ea-b782-4cf3-834d-b870f50fee14",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_096c72fe-9985-48a2-9c45-7cdfbf6a97e2",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "mock.integration_used",
-          "at": "2026-11-14T09:41:09.007Z",
+          "at": "2026-11-16T19:02:23.974Z",
           "actor": {
             "kind": "system"
           },
@@ -382,15 +382,15 @@
           }
         },
         {
-          "id": "aud_9cb7dc85-b5f6-478d-89ad-101505b73fb1",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_73bced1a-2afc-462c-8eaf-bc96e21dda77",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.created",
-          "at": "2026-11-14T09:41:09.008Z",
+          "at": "2026-11-16T19:02:23.975Z",
           "actor": {
             "kind": "agent",
             "agentRole": "change_analyst"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "Task created: Change analysis",
           "details": {
             "status": "ready",
@@ -398,15 +398,15 @@
           }
         },
         {
-          "id": "aud_668b21fc-97c6-481a-8840-6693feb5e06c",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_351e6534-f287-4dd0-a9b9-73742dac4c54",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.created",
-          "at": "2026-11-14T09:41:09.008Z",
+          "at": "2026-11-16T19:02:23.976Z",
           "actor": {
             "kind": "agent",
             "agentRole": "standards"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "Task created: Standards compliance",
           "details": {
             "status": "ready",
@@ -414,15 +414,15 @@
           }
         },
         {
-          "id": "aud_f580bc88-2a94-48b4-81bd-ec86abbfa754",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_dd303732-b293-41c4-9b72-17120de728ca",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.created",
-          "at": "2026-11-14T09:41:09.009Z",
+          "at": "2026-11-16T19:02:23.976Z",
           "actor": {
             "kind": "agent",
             "agentRole": "security"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "Task created: Security review",
           "details": {
             "status": "ready",
@@ -430,241 +430,241 @@
           }
         },
         {
-          "id": "aud_7b24794a-f025-4def-bfc0-031edf412175",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_c886e528-7260-41d4-8828-5c00b2c2b673",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.started",
-          "at": "2026-11-14T09:41:09.010Z",
+          "at": "2026-11-16T19:02:23.977Z",
           "actor": {
             "kind": "agent",
             "agentRole": "change_analyst"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "Task started: Change analysis"
         },
         {
-          "id": "aud_e4a388f1-af6a-4490-bd49-a7f7c10c8a60",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_cbd3eda9-958d-4c74-808d-db981e8e3b6c",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.invoked",
-          "at": "2026-11-14T09:41:09.010Z",
+          "at": "2026-11-16T19:02:23.977Z",
           "actor": {
             "kind": "agent",
             "agentRole": "change_analyst"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "Agent invoked: change_analyst"
         },
         {
-          "id": "aud_726067f5-2d12-4609-8794-d4914f8b4142",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_5bf045df-5baa-4323-ad68-1a850e943777",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.started",
-          "at": "2026-11-14T09:41:09.010Z",
+          "at": "2026-11-16T19:02:23.979Z",
           "actor": {
             "kind": "agent",
             "agentRole": "standards"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "Task started: Standards compliance"
         },
         {
-          "id": "aud_9a073946-3eec-4dd6-a9f3-1fe232bb57ca",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_e8bc7466-c08f-4e7f-9408-fb6dc2511b45",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.invoked",
-          "at": "2026-11-14T09:41:09.012Z",
+          "at": "2026-11-16T19:02:23.979Z",
           "actor": {
             "kind": "agent",
             "agentRole": "standards"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "Agent invoked: standards"
         },
         {
-          "id": "aud_fbba7fba-4918-423e-ab85-3867338865ae",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_f5bd8e49-953b-477b-a694-01c419ee1d79",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.started",
-          "at": "2026-11-14T09:41:09.012Z",
+          "at": "2026-11-16T19:02:23.980Z",
           "actor": {
             "kind": "agent",
             "agentRole": "security"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "Task started: Security review"
         },
         {
-          "id": "aud_cb32cecd-fb74-45f4-be11-f1f8ae12b0b8",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_dc9274a4-2d76-4d85-949d-9078cb6a91b0",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.invoked",
-          "at": "2026-11-14T09:41:09.013Z",
+          "at": "2026-11-16T19:02:23.980Z",
           "actor": {
             "kind": "agent",
             "agentRole": "security"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "Agent invoked: security"
         },
         {
-          "id": "aud_48c2c6e0-fe13-41cb-a0ef-9e9a5b30db50",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_99de053c-d55e-43f5-8751-913dfa0fceae",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "evidence.added",
-          "at": "2026-11-14T09:41:09.014Z",
+          "at": "2026-11-16T19:02:23.981Z",
           "actor": {
             "kind": "system"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "Evidence added: Change summary (stub)",
           "details": {
-            "evidenceId": "ev_98920554-c056-4fae-9552-2fb667ad1e83",
+            "evidenceId": "ev_95ec09cd-d062-4db7-9efb-7808795f8cc7",
             "kind": "diff"
           }
         },
         {
-          "id": "aud_d6de78c0-ed0e-4463-b72b-143da0a2ad73",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_2f670642-94d5-45a7-91c6-17c94bbdac3b",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "mock.integration_used",
-          "at": "2026-11-14T09:41:09.015Z",
+          "at": "2026-11-16T19:02:23.981Z",
           "actor": {
             "kind": "system"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "MOCK: Reviewed head vs base with stub commit list",
           "details": {
             "mockLabel": "change-analyst-stub"
           }
         },
         {
-          "id": "aud_03ffd927-a4de-4d84-b60d-1c2f04acce17",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_725487ce-785e-4826-8ed2-74aa9b93711a",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.completed",
-          "at": "2026-11-14T09:41:09.016Z",
+          "at": "2026-11-16T19:02:23.982Z",
           "actor": {
             "kind": "agent",
             "agentRole": "change_analyst"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "Task completed: Change analysis"
         },
         {
-          "id": "aud_22cba13f-56d6-4889-8273-e2375ec333ee",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_d134d160-7092-4bf4-b0ae-c480ca41f208",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.completed",
-          "at": "2026-11-14T09:41:09.016Z",
+          "at": "2026-11-16T19:02:23.982Z",
           "actor": {
             "kind": "agent",
             "agentRole": "change_analyst"
           },
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "message": "Agent completed: change_analyst"
         },
         {
-          "id": "aud_0c47959d-7681-46f0-bacd-cf60a57d31cd",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_3a0fa223-50e4-48cf-9d59-adb3709ca38d",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "evidence.added",
-          "at": "2026-11-14T09:41:09.017Z",
+          "at": "2026-11-16T19:02:23.983Z",
           "actor": {
             "kind": "system"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "Evidence added: Policy check (stub)",
           "details": {
-            "evidenceId": "ev_da3c9373-fb36-43cc-988b-5ab93eb01787",
+            "evidenceId": "ev_1d48ce5b-7628-4949-b017-c415366f0602",
             "kind": "policy_ref"
           }
         },
         {
-          "id": "aud_42a4414e-3900-4011-8664-2ca645cb8ba2",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_e4e9d9db-7226-42fc-94e7-1df4be124d79",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "mock.integration_used",
-          "at": "2026-11-14T09:41:09.017Z",
+          "at": "2026-11-16T19:02:23.984Z",
           "actor": {
             "kind": "system"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "MOCK: Northwind KYC standards evaluated against fixture corpus",
           "details": {
             "mockLabel": "standards-stub"
           }
         },
         {
-          "id": "aud_9174b86d-d6a5-45da-942b-f28e3ef0e4c6",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_672180f0-1707-400c-9508-de19045aa8a2",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.completed",
-          "at": "2026-11-14T09:41:09.019Z",
+          "at": "2026-11-16T19:02:23.985Z",
           "actor": {
             "kind": "agent",
             "agentRole": "standards"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "Task completed: Standards compliance"
         },
         {
-          "id": "aud_b82e5cc6-0828-40cb-bf0f-b07555a062aa",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_25a996cf-4c1e-4582-80ac-e7f84fcccb6a",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.completed",
-          "at": "2026-11-14T09:41:09.019Z",
+          "at": "2026-11-16T19:02:23.985Z",
           "actor": {
             "kind": "agent",
             "agentRole": "standards"
           },
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "message": "Agent completed: standards"
         },
         {
-          "id": "aud_f6dff3cb-81b2-4df8-b055-1dd18e77ffae",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_37f9ec75-c1f0-4416-b7ca-c0b4a5de09f7",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "evidence.added",
-          "at": "2026-11-14T09:41:09.019Z",
+          "at": "2026-11-16T19:02:23.985Z",
           "actor": {
             "kind": "system"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "Evidence added: Security scan (stub)",
           "details": {
-            "evidenceId": "ev_a8f0cd8d-cc19-4f2f-b112-7440664de7d4",
+            "evidenceId": "ev_2857afca-c9eb-43ef-8634-35d8f90ae025",
             "kind": "advisory"
           }
         },
         {
-          "id": "aud_224b7dbb-2f9f-4396-9d8e-2e1190aacf6b",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_a6feb9b0-fe3d-4b45-9468-1b903d2baa65",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "mock.integration_used",
-          "at": "2026-11-14T09:41:09.020Z",
+          "at": "2026-11-16T19:02:23.986Z",
           "actor": {
             "kind": "system"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "MOCK: No release-blocking advisories in fixture scan",
           "details": {
             "mockLabel": "security-stub"
           }
         },
         {
-          "id": "aud_4c7afdbb-5907-441e-8a94-eec14ca84b30",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_efaeaa60-cacb-46d7-9e15-fa9a3c74a3ae",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.completed",
-          "at": "2026-11-14T09:41:09.020Z",
+          "at": "2026-11-16T19:02:23.986Z",
           "actor": {
             "kind": "agent",
             "agentRole": "security"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "Task completed: Security review"
         },
         {
-          "id": "aud_9bf18db0-22ab-442e-a3f6-690cc153b90a",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_ff9cc80f-b0b1-4216-9957-ca1bc6a89895",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.completed",
-          "at": "2026-11-14T09:41:09.021Z",
+          "at": "2026-11-16T19:02:23.986Z",
           "actor": {
             "kind": "agent",
             "agentRole": "security"
           },
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "message": "Agent completed: security"
         },
         {
-          "id": "aud_68f41e45-1431-494b-aa7a-dcd8556d477e",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_5bcead39-eece-4ef5-86c1-f8f6877cb42c",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "run.updated",
-          "at": "2026-11-14T09:41:09.022Z",
+          "at": "2026-11-16T19:02:23.988Z",
           "actor": {
             "kind": "system"
           },
@@ -676,35 +676,35 @@
           }
         },
         {
-          "id": "aud_02157de4-7970-4153-b647-7bb2801d9e85",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_707f27d2-5d8b-47fc-a98e-c320d3decc0d",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "checkpoint.passed",
-          "at": "2026-11-14T09:41:09.022Z",
+          "at": "2026-11-16T19:02:23.988Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
           "message": "Checkpoint specialist_analysis passed (cycle 0)",
           "details": {
-            "checkpointId": "checkpoint_specialist_analysis_1_1794649269022",
+            "checkpointId": "checkpoint_specialist_analysis_1_1794855743987",
             "stage": "specialist_analysis",
             "cycle": 0,
             "issues": [],
             "evidence": {
               "taskIds": [
-                "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
-                "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
-                "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2"
+                "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
+                "task_caf5899a-6de4-435e-8740-9d479278e47e",
+                "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7"
               ],
               "blockingIssues": []
             }
           }
         },
         {
-          "id": "aud_a5bc5c04-ffb9-4617-ab93-29f911fd2306",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_fc8a2bf0-6b33-482e-ada4-e7582edee79c",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "run.updated",
-          "at": "2026-11-14T09:41:09.023Z",
+          "at": "2026-11-16T19:02:23.989Z",
           "actor": {
             "kind": "system"
           },
@@ -716,25 +716,25 @@
           }
         },
         {
-          "id": "aud_8c24a498-85ed-4b09-9ff2-0927ce05a54c",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_1bd20d6d-02c8-4a9e-9204-5697a6760c47",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "human.approval_requested",
-          "at": "2026-11-14T09:41:09.023Z",
+          "at": "2026-11-16T19:02:23.990Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
           "message": "Human approval requested for release: Release decision requires human approval",
           "details": {
-            "gateId": "approval_release_1_1794649269023",
+            "gateId": "approval_release_1_1794855743989",
             "kind": "release"
           }
         },
         {
-          "id": "aud_569eb9d9-46f3-4f0b-86a1-ad25e701d55e",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_47ad5c08-70cc-4ef2-9415-862076b26d50",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "run.updated",
-          "at": "2026-11-14T09:41:09.024Z",
+          "at": "2026-11-16T19:02:23.990Z",
           "actor": {
             "kind": "system"
           },
@@ -746,30 +746,30 @@
           }
         },
         {
-          "id": "aud_9436acda-a3ab-4e5b-8724-dfcf7b3098d9",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_10d19b74-37cb-4da7-b16c-1b48f420b411",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "human.approval_requested",
-          "at": "2026-11-14T09:41:09.025Z",
+          "at": "2026-11-16T19:02:23.990Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
           "message": "Human approval requested for merge: Merge decision requires human approval (never auto-merge)",
           "details": {
-            "gateId": "approval_merge_2_1794649269024",
+            "gateId": "approval_merge_2_1794855743990",
             "kind": "merge"
           }
         },
         {
-          "id": "aud_bdcca032-0f5b-4f87-a787-a5e54e8984d4",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_c49691b4-d53c-4cd1-9b53-5c6f85c28c00",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.created",
-          "at": "2026-11-14T09:41:09.026Z",
+          "at": "2026-11-16T19:02:23.991Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
-          "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+          "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
           "message": "Task created: Lead consolidation",
           "details": {
             "status": "ready",
@@ -777,62 +777,62 @@
           }
         },
         {
-          "id": "aud_b23d7dc2-0be5-49d8-8ca9-c373bf7dcddc",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_5bd96753-4347-47f3-b779-fafe1848ca05",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.started",
-          "at": "2026-11-14T09:41:09.027Z",
+          "at": "2026-11-16T19:02:23.992Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
-          "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+          "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
           "message": "Task started: Lead consolidation"
         },
         {
-          "id": "aud_2ac36e9c-e95b-4972-9378-9eb7ec1b4072",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_8f8ae21f-7793-4127-a5f2-26cf5b17a8d4",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.invoked",
-          "at": "2026-11-14T09:41:09.028Z",
+          "at": "2026-11-16T19:02:23.992Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
-          "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+          "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
           "message": "Agent invoked: lead"
         },
         {
-          "id": "aud_ac634830-35fc-4df1-a208-64e3b2a9628b",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_eca6a8ca-5a8f-4878-b3a6-231ccaacf7df",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "task.completed",
-          "at": "2026-11-14T09:41:09.029Z",
+          "at": "2026-11-16T19:02:23.993Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
-          "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+          "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
           "message": "Task completed: Lead consolidation"
         },
         {
-          "id": "aud_f72f9546-e404-43a2-b519-9105323ca002",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_0b533dcd-5e6f-449d-a370-1aafceebf6a7",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "agent.completed",
-          "at": "2026-11-14T09:41:09.030Z",
+          "at": "2026-11-16T19:02:23.994Z",
           "actor": {
             "kind": "agent",
             "agentRole": "lead"
           },
-          "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+          "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
           "message": "Agent completed: lead"
         },
         {
-          "id": "aud_787fbf48-ddc8-4ab1-93e3-59b193d24b4a",
-          "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
+          "id": "aud_20d2d85f-968c-4888-9c56-647336981a8b",
+          "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
           "action": "run.completed",
-          "at": "2026-11-14T09:41:09.031Z",
+          "at": "2026-11-16T19:02:23.995Z",
           "actor": {
             "kind": "system"
           },
-          "message": "Lead readiness: needs_human. Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human"
+          "message": "Lead readiness: needs_human. Specialists: 3/3 completed. No blocking issues. Feature sign-offs complete (or none). Pending approvals: 2. Readiness: needs_human"
         }
       ],
       "metadata": {
@@ -845,36 +845,39 @@
         "approvals": {
           "gates": [
             {
-              "id": "approval_release_1_1794649269023",
+              "id": "approval_release_1_1794855743989",
               "kind": "release",
               "status": "pending",
-              "requestedAt": "2026-11-14T09:41:09.023Z",
+              "requestedAt": "2026-11-16T19:02:23.989Z",
               "reason": "Release decision requires human approval"
             },
             {
-              "id": "approval_merge_2_1794649269024",
+              "id": "approval_merge_2_1794855743990",
               "kind": "merge",
               "status": "pending",
-              "requestedAt": "2026-11-14T09:41:09.024Z",
+              "requestedAt": "2026-11-16T19:02:23.990Z",
               "reason": "Merge decision requires human approval (never auto-merge)"
             }
           ]
         },
+        "featureSignOffs": {
+          "checklists": []
+        },
         "checkpoints": {
           "checkpoints": [
             {
-              "id": "checkpoint_specialist_analysis_1_1794649269022",
+              "id": "checkpoint_specialist_analysis_1_1794855743987",
               "stage": "specialist_analysis",
               "status": "passed",
-              "at": "2026-11-14T09:41:09.022Z",
+              "at": "2026-11-16T19:02:23.987Z",
               "cycle": 0,
               "issues": [],
               "summary": "Checkpoint specialist_analysis passed (cycle 0)",
               "evidence": {
                 "taskIds": [
-                  "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
-                  "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
-                  "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2"
+                  "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
+                  "task_caf5899a-6de4-435e-8740-9d479278e47e",
+                  "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7"
                 ],
                 "blockingIssues": []
               }
@@ -889,19 +892,19 @@
         "autoMerge": false,
         "scenarioId": "happy-path",
         "scenarioLabel": "Happy path",
-        "completionSummary": "Lead readiness: needs_human. Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human"
+        "completionSummary": "Lead readiness: needs_human. Specialists: 3/3 completed. No blocking issues. Feature sign-offs complete (or none). Pending approvals: 2. Readiness: needs_human"
       },
-      "createdAt": "2026-11-14T09:41:09.004Z",
-      "updatedAt": "2026-11-14T09:41:09.031Z",
-      "completedAt": "2026-11-14T09:41:09.031Z"
+      "createdAt": "2026-11-16T19:02:23.972Z",
+      "updatedAt": "2026-11-16T19:02:23.995Z",
+      "completedAt": "2026-11-16T19:02:23.994Z"
     },
     "leadOutput": {
-      "runId": "run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc",
-      "taskId": "task_1df1dbd6-5446-4ed8-9e69-3980205359eb",
+      "runId": "run_009bc23d-7ebd-4d85-b967-f594fd4054fa",
+      "taskId": "task_57ac2000-a058-458c-899c-9d52d59f52ec",
       "agentRole": "lead",
       "status": "completed",
-      "completedAt": "2026-11-14T09:41:09.028Z",
-      "summary": "Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human",
+      "completedAt": "2026-11-16T19:02:23.992Z",
+      "summary": "Specialists: 3/3 completed. No blocking issues. Feature sign-offs complete (or none). Pending approvals: 2. Readiness: needs_human",
       "evidence": [],
       "mocksUsed": [
         {
@@ -938,17 +941,17 @@
       "readiness": "needs_human",
       "delegations": [
         {
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "agentRole": "change_analyst",
           "rationale": "Parallel analysis wave — Change analysis"
         },
         {
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "agentRole": "standards",
           "rationale": "Parallel analysis wave — Standards compliance"
         },
         {
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "agentRole": "security",
           "rationale": "Parallel analysis wave — Security review"
         }
@@ -963,7 +966,7 @@
       "specialists": [
         {
           "role": "change_analyst",
-          "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+          "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
           "status": "completed",
           "summary": "MOCK: Change analysis complete (stub)",
           "output": {
@@ -982,12 +985,12 @@
             "commitsReviewed": 0,
             "evidence": [
               {
-                "id": "ev_aa34189c-203e-4eda-9f67-cf47f8339eb4",
+                "id": "ev_2ef08669-b9ae-487d-9c7b-11fe10e12f6a",
                 "kind": "diff",
                 "title": "Change summary (stub)",
                 "summary": "MOCK: Reviewed head vs base with stub commit list",
                 "source": "change_analyst",
-                "createdAt": "2026-11-14T09:41:09.013Z",
+                "createdAt": "2026-11-16T19:02:23.980Z",
                 "mock": {
                   "mocked": true,
                   "mockLabel": "change-analyst-stub",
@@ -1006,7 +1009,7 @@
         },
         {
           "role": "standards",
-          "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+          "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
           "status": "completed",
           "summary": "MOCK: Standards check complete (stub) — compliant",
           "output": {
@@ -1019,12 +1022,12 @@
             ],
             "evidence": [
               {
-                "id": "ev_713d1bb8-ee5e-4402-b048-80cc4072456d",
+                "id": "ev_964c3c7e-e428-417e-ac8c-e2d65fa6f203",
                 "kind": "policy_ref",
                 "title": "Policy check (stub)",
                 "summary": "MOCK: Northwind KYC standards evaluated against fixture corpus",
                 "source": "standards",
-                "createdAt": "2026-11-14T09:41:09.013Z",
+                "createdAt": "2026-11-16T19:02:23.980Z",
                 "mock": {
                   "mocked": true,
                   "mockLabel": "standards-stub",
@@ -1043,7 +1046,7 @@
         },
         {
           "role": "security",
-          "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+          "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
           "status": "completed",
           "summary": "MOCK: Security check complete (stub) — risk none",
           "output": {
@@ -1054,12 +1057,12 @@
             "riskLevel": "none",
             "evidence": [
               {
-                "id": "ev_0f783561-df7c-4272-93d1-01d96d85d8f6",
+                "id": "ev_7fc373f1-4968-4424-b507-20174ab6a42a",
                 "kind": "advisory",
                 "title": "Security scan (stub)",
                 "summary": "MOCK: No release-blocking advisories in fixture scan",
                 "source": "security",
-                "createdAt": "2026-11-14T09:41:09.014Z",
+                "createdAt": "2026-11-16T19:02:23.980Z",
                 "mock": {
                   "mocked": true,
                   "mockLabel": "security-stub",
@@ -1077,21 +1080,21 @@
           }
         }
       ],
-      "summary": "Specialists: 3/3 completed. No blocking issues. Pending approvals: 2. Readiness: needs_human"
+      "summary": "Specialists: 3/3 completed. No blocking issues. Feature sign-offs complete (or none). Pending approvals: 2. Readiness: needs_human"
     },
     "delegations": [
       {
-        "taskId": "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
+        "taskId": "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
         "agentRole": "change_analyst",
         "rationale": "Parallel analysis wave — Change analysis"
       },
       {
-        "taskId": "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
+        "taskId": "task_caf5899a-6de4-435e-8740-9d479278e47e",
         "agentRole": "standards",
         "rationale": "Parallel analysis wave — Standards compliance"
       },
       {
-        "taskId": "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2",
+        "taskId": "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7",
         "agentRole": "security",
         "rationale": "Parallel analysis wave — Security review"
       }
@@ -1099,36 +1102,39 @@
     "approvals": {
       "gates": [
         {
-          "id": "approval_release_1_1794649269023",
+          "id": "approval_release_1_1794855743989",
           "kind": "release",
           "status": "pending",
-          "requestedAt": "2026-11-14T09:41:09.023Z",
+          "requestedAt": "2026-11-16T19:02:23.989Z",
           "reason": "Release decision requires human approval"
         },
         {
-          "id": "approval_merge_2_1794649269024",
+          "id": "approval_merge_2_1794855743990",
           "kind": "merge",
           "status": "pending",
-          "requestedAt": "2026-11-14T09:41:09.024Z",
+          "requestedAt": "2026-11-16T19:02:23.990Z",
           "reason": "Merge decision requires human approval (never auto-merge)"
         }
       ]
     },
+    "featureSignOffs": {
+      "checklists": []
+    },
     "checkpoints": {
       "checkpoints": [
         {
-          "id": "checkpoint_specialist_analysis_1_1794649269022",
+          "id": "checkpoint_specialist_analysis_1_1794855743987",
           "stage": "specialist_analysis",
           "status": "passed",
-          "at": "2026-11-14T09:41:09.022Z",
+          "at": "2026-11-16T19:02:23.987Z",
           "cycle": 0,
           "issues": [],
           "summary": "Checkpoint specialist_analysis passed (cycle 0)",
           "evidence": {
             "taskIds": [
-              "task_7ccdedaf-e0ec-4c22-9a12-235545bb5184",
-              "task_15d133a7-62a7-47af-acd6-317a4b466ff0",
-              "task_5b7e6a0d-bfaa-438d-bcc6-355e44d2f7a2"
+              "task_285a00bb-73b0-48b6-aa41-4e0651dd723a",
+              "task_caf5899a-6de4-435e-8740-9d479278e47e",
+              "task_1b0eeb99-f11f-4e2e-b293-75e0d1144fd7"
             ],
             "blockingIssues": []
           }
@@ -1144,19 +1150,19 @@
           "channel": "text",
           "role": "dm",
           "text": "Start on_demand release check for vishamathur/mvp-releasedesk",
-          "at": "2026-11-14T09:41:09.004Z"
+          "at": "2026-11-16T19:02:23.972Z"
         },
         {
           "channel": "text",
           "role": "lead",
           "text": "Starting release check: Demo: happy-path release readiness for Northwind KYC",
-          "at": "2026-11-14T09:41:09.004Z"
+          "at": "2026-11-16T19:02:23.972Z"
         },
         {
           "channel": "text",
           "role": "lead",
-          "text": "Release check run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc finished — readiness: needs_human",
-          "at": "2026-11-14T09:41:09.032Z"
+          "text": "Release check run_009bc23d-7ebd-4d85-b967-f594fd4054fa finished — readiness: needs_human",
+          "at": "2026-11-16T19:02:23.995Z"
         }
       ]
     }
@@ -1167,19 +1173,19 @@
         "channel": "text",
         "role": "dm",
         "text": "Start on_demand release check for vishamathur/mvp-releasedesk",
-        "at": "2026-11-14T09:41:09.004Z"
+        "at": "2026-11-16T19:02:23.972Z"
       },
       {
         "channel": "text",
         "role": "lead",
         "text": "Starting release check: Demo: happy-path release readiness for Northwind KYC",
-        "at": "2026-11-14T09:41:09.004Z"
+        "at": "2026-11-16T19:02:23.972Z"
       },
       {
         "channel": "text",
         "role": "lead",
-        "text": "Release check run_51f288cb-8f46-4dbd-a6b4-1d77f221f2bc finished — readiness: needs_human",
-        "at": "2026-11-14T09:41:09.032Z"
+        "text": "Release check run_009bc23d-7ebd-4d85-b967-f594fd4054fa finished — readiness: needs_human",
+        "at": "2026-11-16T19:02:23.995Z"
       }
     ]
   }

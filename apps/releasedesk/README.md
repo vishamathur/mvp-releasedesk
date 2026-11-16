@@ -1,6 +1,6 @@
 # Release Desk UI (Milestone 7)
 
-Delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) — specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, and human merge/release gates.
+Delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) — specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, **feature sign-off checklists** (AI-produced code), and human merge/release gates.
 
 Voice is optional and **MOCK**-labeled only.
 
@@ -34,7 +34,8 @@ KYC demo remains on port 3000 (`npm run dev`).
    - Approve both gates → readiness becomes `ready`. Auto-merge stays false.
 4. **Remediation loop**
    - Run **Remediation loop** live.
-   - Confirm first security wave blocked, Builder + Reverify tasks exist, checkpoints include remediation stages, then pending human gates.
+   - Confirm first security wave blocked, Builder + Reverify tasks exist, checkpoints include remediation stages, then a **feature sign-off checklist** plus pending merge/release gates.
+   - Sign off checklist items (or entire checklist), then approve merge + release → `ready`.
 5. **Blocked on security**
    - Run **Blocked on security** → security blockers persist after remediation; reject the release gate → `not_ready`.
 6. **Pending approval**
@@ -71,5 +72,6 @@ API surface:
 - `POST /api/checks` — on-demand Lead check
 - `GET /api/runs` · `GET /api/runs/:id`
 - `POST /api/runs/:id/approvals` — merge/release gates (never auto-merges)
+- `POST /api/runs/:id/feature-signoffs` — per-item or full feature checklist sign-off (never auto-signed)
 - `POST /api/demos` — live or fixture scenarios
 - `POST /api/dm` — text or MOCK voice

@@ -32,12 +32,27 @@ export const BuilderWorkItemSchema = z.object({
   notes: z.string().optional(),
 });
 
+/** Explicit evidence that Builder / Cloud Coding introduced a new feature. */
+export const BuilderFeatureIntroducedSchema = z.object({
+  id: z.string().min(1).optional(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  branch: z.string().optional(),
+  prUrl: z.string().url().optional(),
+});
+
 export const BuilderAgentOutputSchema = AgentResultBaseSchema.extend({
   agentRole: z.literal(AgentRoleSchema.enum.builder),
   workItems: z.array(BuilderWorkItemSchema).default([]),
   proposedBranch: z.string().optional(),
   proposedPrUrl: z.string().url().optional(),
   testsPassed: z.boolean().optional(),
+  /**
+   * Optional explicit list of new features introduced by this remediation.
+   * When omitted, Lead still detects features from completed coding work items.
+   */
+  featuresIntroduced: z.array(BuilderFeatureIntroducedSchema).default([]),
 });
 
 export type BuilderAgentOutput = z.infer<typeof BuilderAgentOutputSchema>;
+export type BuilderFeatureIntroduced = z.infer<typeof BuilderFeatureIntroducedSchema>;

@@ -78,3 +78,29 @@ export {
 } from "./store.js";
 
 export * from "./agents/index.js";
+
+export {
+  FeatureSignOffItemIdSchema,
+  DEFAULT_FEATURE_SIGNOFF_ITEM_DEFS,
+  FeatureArtifactSchema,
+  FeatureSignOffItemSchema,
+  FeatureSignOffChecklistStatusSchema,
+  FeatureSignOffChecklistSchema,
+  FeatureSignOffRecordSchema,
+  createFeatureArtifactId,
+  createDefaultSignOffItems,
+  createFeatureSignOffChecklist,
+  isChecklistComplete,
+  getIncompleteChecklists,
+  allFeatureSignOffsComplete,
+  deriveChecklistStatus,
+  signOffChecklistItem,
+  signOffEntireChecklist,
+  parseFeatureSignOffRecord,
+  type FeatureSignOffItemId,
+  type FeatureArtifact,
+  type FeatureSignOffItem,
+  type FeatureSignOffChecklistStatus,
+  type FeatureSignOffChecklist,
+  type FeatureSignOffRecord,
+} from "./feature-signoff.js";

@@ -6,6 +6,7 @@ import { CheckpointTrail } from "@/components/CheckpointTrail";
 import { CloudHandoffs } from "@/components/CloudHandoffs";
 import { DeskHeader } from "@/components/DeskHeader";
 import { DmPanel } from "@/components/DmPanel";
+import { FeatureSignOffPanel } from "@/components/FeatureSignOffPanel";
 import { MockLabel } from "@/components/MockLabel";
 import { PrPanel } from "@/components/PrPanel";
 import { ReadinessBanner } from "@/components/ReadinessBanner";
@@ -64,6 +65,30 @@ export default async function RunPage({ params }: Props) {
             />
           </div>
           <div className="space-y-16">
+            <FeatureSignOffPanel
+              runId={view.runId}
+              checklists={(view.featureSignOffs?.checklists ?? []).map((c) => ({
+                id: c.id,
+                kind: c.kind,
+                status: c.status,
+                feature: {
+                  title: c.feature.title,
+                  summary: c.feature.summary,
+                  sourceAgent: String(c.feature.sourceAgent),
+                  ...(c.feature.branch !== undefined ? { branch: c.feature.branch } : {}),
+                  ...(c.feature.prUrl !== undefined ? { prUrl: c.feature.prUrl } : {}),
+                },
+                items: c.items.map((i) => ({
+                  id: i.id,
+                  label: i.label,
+                  description: i.description,
+                  signedOff: i.signedOff,
+                  ...(i.signedOffBy !== undefined ? { signedOffBy: i.signedOffBy } : {}),
+                  ...(i.notes !== undefined ? { notes: i.notes } : {}),
+                })),
+                ...(c.completedBy !== undefined ? { completedBy: c.completedBy } : {}),
+              }))}
+            />
             <ApprovalGates runId={view.runId} gates={view.approvals.gates} />
             <AuditTrail events={view.run.auditTrail} />
             <DmPanel runId={view.runId} initialMessages={desk.dmSession.messages} />

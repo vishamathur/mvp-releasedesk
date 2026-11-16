@@ -1,4 +1,10 @@
-import type { LeadAgentOutput, TaskRecord } from "@releasedesk/core";
+import {
+  allFeatureSignOffsComplete,
+  getIncompleteChecklists,
+  type FeatureSignOffRecord,
+  type LeadAgentOutput,
+  type TaskRecord,
+} from "@releasedesk/core";
 import {
   allReleaseGatesApproved,
   anyGateRejected,
@@ -61,11 +67,17 @@ export function latestTasksByRole(tasks: readonly TaskRecord[]): TaskRecord[] {
 }
 
 /**
- * Consolidate specialist task outputs + approval state into release readiness.
+ * Consolidate specialist task outputs + feature sign-offs + merge/release
+ * approval state into release readiness.
+ *
+ * Feature checklist sign-off (per AI-produced feature) must complete before
+ * run-level merge/release gates can clear readiness to `ready`.
  */
 export function assessReadiness(input: {
   tasks: readonly TaskRecord[];
   approvals?: ApprovalRecord;
+  /** Per-feature developer checklist sign-offs (AI-produced code). */
+  featureSignOffs?: FeatureSignOffRecord;
   /** When true, treat open remediation findings as recommending builder work. */
   considerRemediation?: boolean;
   /** Latest checkpoint trail (M6) — failed terminal checkpoints add blockers. */
@@ -149,8 +161,17 @@ export function assessReadiness(input: {
   }
 
   const approvals = input.approvals;
+  const featureSignOffs = input.featureSignOffs;
+  const incompleteFeatures = getIncompleteChecklists(featureSignOffs);
+  const featuresComplete = allFeatureSignOffsComplete(featureSignOffs);
+
   if (anyGateRejected(approvals)) {
     blockingIssues.push("Human approval gate rejected");
+  }
+  if (incompleteFeatures.length > 0) {
+    blockingIssues.push(
+      `Feature sign-off checklist incomplete: ${incompleteFeatures.length} feature(s) awaiting developer verification`,
+    );
   }
 
   const pending = getPendingGates(approvals);
@@ -165,12 +186,17 @@ export function assessReadiness(input: {
   } else if (
     blockingIssues.some((b) => b.startsWith("Security:") || b.startsWith("Standards:")) &&
     pending.length === 0 &&
+    featuresComplete &&
     (approvals?.gates?.length ?? 0) > 0
   ) {
     readiness = "not_ready";
-  } else if (pending.length > 0) {
+  } else if (incompleteFeatures.length > 0 || pending.length > 0) {
     readiness = "needs_human";
-  } else if (allReleaseGatesApproved(approvals) && blockingIssues.length === 0) {
+  } else if (
+    featuresComplete &&
+    allReleaseGatesApproved(approvals) &&
+    blockingIssues.length === 0
+  ) {
     readiness = "ready";
   } else if (specialistTasks.length === 0) {
     readiness = "unknown";
@@ -180,7 +206,7 @@ export function assessReadiness(input: {
       .every((t) => t.status === "completed") &&
     blockingIssues.length === 0
   ) {
-    // Clean specialists but release not approved yet.
+    // Clean specialists but release / feature sign-off not finished yet.
     readiness = "needs_human";
   } else if (blockingIssues.length > 0) {
     readiness = "not_ready";
@@ -195,6 +221,9 @@ export function assessReadiness(input: {
   const summaryParts = [
     `Specialists: ${allSpecialists.filter((s) => s.status === "completed").length}/${allSpecialists.length} completed`,
     blockingIssues.length ? `Blocking: ${blockingIssues.length}` : "No blocking issues",
+    incompleteFeatures.length
+      ? `Pending feature sign-offs: ${incompleteFeatures.length}`
+      : "Feature sign-offs complete (or none)",
     pending.length ? `Pending approvals: ${pending.length}` : "No pending approvals",
     `Readiness: ${readiness}`,
   ];

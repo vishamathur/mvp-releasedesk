@@ -97,7 +97,8 @@ console.log(report.checkpoints, report.pullRequests, report.approvals);
 | PR workflow | Open/track/poll; MOCK or real GitHub; never auto-merge |
 | Task status + evidence | Real store mutations; stubs labeled `MOCK:` |
 | Retry / failure | `failTask` + retry budget; recorded in audit |
-| Human gates | `merge` + `release`; **never** auto-approved |
+| Feature sign-off | Per AI-produced feature: developer checklist (`feature_review`); **never** auto-signed |
+| Human gates | `merge` + `release` (run-level); **never** auto-approved; require feature sign-offs first when features exist |
 | Readiness | `ready` \| `not_ready` \| `needs_human` \| `unknown` |
 
 ## Layout
@@ -115,7 +116,7 @@ packages/releasedesk-lead/
 
 ## Handoff notes for Milestone 7 (UI)
 
-1. Surface `report.checkpoints`, `report.pullRequests`, and `report.approvals` in the Release Desk UI.
+1. Surface `report.checkpoints`, `report.pullRequests`, `report.featureSignOffs`, and `report.approvals` in the Release Desk UI.
 2. Use `lead.pollPullRequestStatus(runId)` for live PR status panels.
-3. Wire human approve/reject controls to `applyApprovalsToReport` / `recordHumanApproval` — never call merge APIs.
-4. Demo scenarios: fail checkpoint → remediate → pass → pending approval; rejection path; audit timeline.
+3. Wire feature checklist item sign-off to `applyFeatureSignOffsToReport` / `recordFeatureSignOffItem`, and merge/release approve/reject to `applyApprovalsToReport` / `recordHumanApproval` — never call merge APIs; never auto-sign checklists.
+4. Demo scenarios: fail checkpoint → remediate → pass → feature checklist → pending merge/release; rejection path; audit timeline.

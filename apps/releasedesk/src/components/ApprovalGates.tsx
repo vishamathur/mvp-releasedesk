@@ -44,9 +44,10 @@ export function ApprovalGates({ runId, gates }: { runId: string; gates: Gate[] }
 
   return (
     <section>
-      <h2 className="font-display text-2xl text-rd-ink">Human approval gates</h2>
+      <h2 className="font-display text-2xl text-rd-ink">Merge & release gates</h2>
       <p className="mt-2 text-sm text-rd-forest/70">
-        Merge and release require explicit DM decisions. Approving merge never auto-merges.
+        Run-level merge and release decisions (after feature checklist sign-offs). Approving merge
+        never auto-merges.
       </p>
       {error ? <p className="mt-3 text-sm text-rd-alert">{error}</p> : null}
       <ul className="mt-6 space-y-5">
