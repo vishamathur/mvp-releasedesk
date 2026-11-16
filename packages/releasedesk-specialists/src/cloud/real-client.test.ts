@@ -1,5 +1,47 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRealCloudAgentClient } from "./real-client.js";
+import {
+  createRealCloudAgentClient,
+  resolveCursorApiKeyForAgent,
+} from "./real-client.js";
+
+describe("resolveCursorApiKeyForAgent", () => {
+  it("never falls back to shared CURSOR_API_KEY", () => {
+    expect(
+      resolveCursorApiKeyForAgent("coding", {
+        CURSOR_API_KEY: "shared",
+        CURSOR_SERVICE_ACCOUNT_KEY: "sa",
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveCursorApiKeyForAgent("testing", {
+        RELEASEDESK_CURSOR_API_KEY_CODING: "coding-only",
+        CURSOR_API_KEY: "shared",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("reads exclusive kind key", () => {
+    expect(
+      resolveCursorApiKeyForAgent("review", {
+        RELEASEDESK_CURSOR_API_KEY_REVIEW: "review-key",
+        CURSOR_API_KEY: "shared",
+      }),
+    ).toBe("review-key");
+  });
+});
+
+describe("createRealCloudAgentClient", () => {
+  it("requires explicit per-agent apiKey or agentKind (no shared env fallback)", () => {
+    const prev = process.env.CURSOR_API_KEY;
+    process.env.CURSOR_API_KEY = "shared-present";
+    try {
+      expect(() => createRealCloudAgentClient()).toThrow(/per-agent apiKey|agentKind/);
+    } finally {
+      if (prev === undefined) delete process.env.CURSOR_API_KEY;
+      else process.env.CURSOR_API_KEY = prev;
+    }
+  });
+});
 
 describe("Real Cloud Agent client (fetch stub)", () => {
   it("creates agent, polls to FINISHED, extracts branch and PR", async () => {

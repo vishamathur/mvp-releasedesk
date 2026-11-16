@@ -60,7 +60,7 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
-Optional Grok enrichment via `XAI_API_KEY` / `GROK_API_KEY`. Without credentials, local analysis still runs; Grok calls are skipped or `MOCK:`-labeled.
+Optional Grok enrichment: specialists may still accept injected keys; the **shipped-code intel path** (`grok-api-intel`) uses the Builder's exclusive `RELEASEDESK_GROK_API_KEY_BUILDER` via `resolveAgentGrokApiKey('builder')` — never shared `XAI_API_KEY` / `GROK_API_KEY`. Without that key, classify/extract/score/summarize return `MOCK:`-labeled local fallbacks.
 
 ## Cursor Cloud Agents (Milestone 5)
 
@@ -69,21 +69,23 @@ Builder plans three handoffs (`coding`, `testing`, `review`), then runs:
 1. **Coding** (sequential, with retries)
 2. **Testing** and **Review** in parallel after Coding completes
 
-Results land on the Builder task output / evidence / `cloudAgentAudit` trail in the shared run context. Lead human **merge** and **release** gates remain pending — Cloud Agents must not merge.
+Each Cloud Agent uses its **own** Cursor API key (`RELEASEDESK_CURSOR_API_KEY_CODING` / `_TESTING` / `_REVIEW`). Shared `CURSOR_API_KEY` does **not** unlock the SDLC real path. Results land on the Builder task output / evidence / `cloudAgentAudit` trail. Lead human **merge** and **release** gates remain pending — Cloud Agents must not merge.
 
 ### MOCK vs real client
 
 | Mode | How to enable | CI |
 | --- | --- | --- |
 | **MOCK** (default) | unset `RELEASEDESK_CLOUD_CLIENT`, or set `=mock` | Passes without Cursor credentials |
-| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** `CURSOR_API_KEY` (or `CURSOR_SERVICE_ACCOUNT_KEY`) | Not required for CI |
+| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** the matching `RELEASEDESK_CURSOR_API_KEY_{CODING\|TESTING\|REVIEW}` | Not required for CI |
 
 ```bash
 # Default / CI — MOCK client (same interface as real)
 npm run test:specialists
 
-# Opt-in live Cursor Cloud Agents API
-export CURSOR_API_KEY=...          # Dashboard → API Keys
+# Opt-in live Cursor Cloud Agents API (per-agent keys)
+export RELEASEDESK_CURSOR_API_KEY_CODING=...
+export RELEASEDESK_CURSOR_API_KEY_TESTING=...
+export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
 export RELEASEDESK_CLOUD_CLIENT=real
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
@@ -95,7 +97,8 @@ import {
   createBuilderRunner,
   createMockCloudAgentClient,
   createRealCloudAgentClient,
-  resolveCloudAgentClient,
+  resolveCloudAgentClientForKind,
+  resolveCursorApiKeyForAgent,
 } from "@releasedesk/specialists";
 
 createBuilderRunner({
@@ -103,12 +106,16 @@ createBuilderRunner({
   cloudMaxAttempts: 2,
 });
 
-// Pluggable real client when credentials exist:
-resolveCloudAgentClient({
+// Per-agent real client (SDLC MVP):
+resolveCloudAgentClientForKind("coding", {
   mode: "real",
-  real: { apiKey: process.env.CURSOR_API_KEY },
+  real: { apiKey: resolveCursorApiKeyForAgent("coding") },
 });
 ```
+
+### Grok API intel (post-ship)
+
+After Coding ships repo code, `classifyReleaseFindings` / `extractReleaseActions` / `scoreReleaseRisk` / `summarizeReleaseFindings` call Grok with the Builder exclusive key (`RELEASEDESK_GROK_API_KEY_BUILDER`). Optional `role: "security"` uses `RELEASEDESK_GROK_API_KEY_SECURITY` instead.
 
 Tracked fields on Builder output:
 
@@ -137,7 +144,7 @@ packages/releasedesk-specialists/
     change-analyst.ts, standards.ts, security.ts, builder.ts
     cloud/              # MOCK + real Cursor Cloud Agent clients + dispatch
     runners.ts, git-diff.ts, policy-corpus.ts, advisories.ts
-    grok.ts, cli.ts, *.test.ts
+    grok.ts, grok-api-intel.ts, cli.ts, *.test.ts
   README.md
 ```
 
