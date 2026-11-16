@@ -34,8 +34,19 @@ When operating Cloud Agents or reviewing a run:
 3. Do not collapse Verification into checkpoint remediation or into “tests ran.”
 4. No Zscaler subscription is required for local MVP (optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` stays MOCK without credentials).
 
+## On-demand Desk → Lead (no scheduler)
+
+Release Desk UI + KYC are the **always-on** served layer. Lead (and specialists) are **request-scoped**:
+
+1. Dual human intake approvals must clear (`approved_for_dev`) — see [`customer-intake.md`](./customer-intake.md).
+2. An operator (or Automation) starts Lead **on demand** via Desk `POST /api/checks`, intake “start Lead”, or CLI `check:release` / `check:release:stubs`.
+3. There is **no** background process that polls the backlog queue and auto-starts Lead.
+
+Cursor-maximized target: Lead/specialists/AI Red Teaming become ephemeral Cloud Agents; Coding/Testing/Review already are. Mermaid updates for that layout are owned by the Cursor-maximized architecture PR — see [`architecture-mermaid.md`](./architecture-mermaid.md).
+
 ## How this maps to Cursor Cloud Agents
 
 - Keep the repo **locally runnable** (`npm test`, seed, desk UI) so Testing Cloud Agents can execute the same suites humans use.
 - Prefer MOCK Cloud Agent clients in CI; enable real Coding/Testing/Review only when `CURSOR_API_KEY` (or service account) is present.
-- Use Automations for PR/CI follow-ups; keep merge/release as human gates in Release Desk (never auto-merge).
+- Use Automations for PR/CI follow-ups and optional Desk→Lead triggers; keep merge/release as human gates in Release Desk (never auto-merge).
+- Do not run an always-on Lead daemon — on-demand only.
