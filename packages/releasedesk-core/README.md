@@ -24,7 +24,7 @@ npm run typecheck -w @releasedesk/core
 | Parallel-safe tasks | `task` | Status, `dependsOn`, retry/failure, evidence |
 | Audit trail | `audit` | Action enum + events appended on every store mutation |
 | Run context | `run-context` | Goal, target repo refs, tasks, audit trail, status |
-| Store | `store` | `InMemoryRunContextStore` and `FileBackedRunContextStore` |
+| Store | `store` | `InMemoryRunContextStore` and `FileBackedRunContextStore` (reload-on-read for shared ephemeral Cloud Agents) |
 | Agent contracts | `agents/*` | Lead, Change Analyst, Standards, Security, Builder, AI Red Teaming I/O |
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 | Mandatory gates | `gates` | Security always required; AI Red Teaming ATLAS/OWASP hard block (`evaluateAiRedTeamingHardBlock`, drafts exempt) + realtime Lead flags |

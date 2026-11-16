@@ -178,8 +178,13 @@ export class CustomerIntake {
   }
 
   /**
-   * Start Lead/SDLC only from a dual-approved backlog item.
+   * Start Lead/SDLC only from a dual-approved backlog item (on-demand).
    * Blocks when queue approval or cost approval is missing/rejected.
+   *
+   * Desk / callers should prefer wiring this through
+   * `@releasedesk/specialists` `startLeadCloudAgent` so Lead is an ephemeral
+   * Cloud Agent. This method never polls — it runs only when invoked after
+   * human dual approval.
    */
   async startLeadFromApprovedQueueItem(
     itemId: string,

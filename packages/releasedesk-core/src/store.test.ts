@@ -171,6 +171,7 @@ describe("FileBackedRunContextStore", () => {
     const filePath = path.join(dir, "runs.json");
 
     const store1 = new FileBackedRunContextStore(filePath);
+    expect(store1.storePath).toBe(filePath);
     const created = await store1.create({
       goal: "Durable run",
       target: { repository: "vishamathur/mvp-releasedesk" },
@@ -184,5 +185,34 @@ describe("FileBackedRunContextStore", () => {
     const loaded = await store2.get(created.runId);
     expect(loaded?.status).toBe("completed");
     expect(loaded?.auditTrail.some((e) => e.action === "run.completed")).toBe(true);
+  });
+
+  it("reloads peer writes so ephemeral Cloud Agents share durable state", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "rd-core-share-"));
+    const filePath = path.join(dir, "runs.json");
+
+    const leadStore = new FileBackedRunContextStore(filePath);
+    const run = await leadStore.create({
+      goal: "Shared cloud context",
+      target: { repository: "vishamathur/mvp-releasedesk" },
+    });
+
+    const specialistStore = new FileBackedRunContextStore(filePath);
+    const { task } = await specialistStore.addTask(run.runId, {
+      name: "Change analysis",
+      agentRole: "change_analyst",
+      status: "ready",
+    });
+    await specialistStore.startTask(run.runId, task.id);
+    await specialistStore.completeTask(run.runId, task.id, {
+      ephemeralCloudAgent: true,
+    });
+
+    // Lead's handle must see specialist writes after reload-on-read.
+    const fromLead = await leadStore.get(run.runId);
+    expect(fromLead?.tasks.find((t) => t.id === task.id)?.status).toBe("completed");
+    expect(fromLead?.tasks.find((t) => t.id === task.id)?.output).toMatchObject({
+      ephemeralCloudAgent: true,
+    });
   });
 });

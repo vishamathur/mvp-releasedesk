@@ -1,8 +1,8 @@
 # `@releasedesk/specialists`
 
-Milestone 4–5 — **specialist Agent runners** for Release Desk, including Builder → Cursor Cloud Agents (Coding / Testing / Review).
+Milestone 4–5+ — **specialist + Lead Cloud Agents** for Release Desk.
 
-Implements Change Analyst, Standards, Security, Builder, and **AI Red Teaming** as real executions that return independently recorded results for the Lead’s shared run context (not hardcoded simulated conversations). **Today** these runners are in-process Node; Cursor-maximized target is ephemeral Cloud Agents for the same roles (Desk still triggers Lead on-demand only).
+Change Analyst, Standards, Security, Builder, AI Red Teaming, and **Lead** dispatch through the same pluggable `CloudAgentClient` as Coding/Testing/Review (**MOCK** default). Desk UI triggers Lead **on-demand only** (no queue scheduler). Ephemeral agents share a durable file-backed run context and return independently recorded results (not hardcoded simulated conversations).
 
 ## Install / test
 
@@ -21,35 +21,38 @@ On-demand check with real specialists (Cloud Agents default to **MOCK**):
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
 
-## How Lead invokes specialists
+## How Desk invokes Lead (on-demand Cloud Agent)
 
 ```ts
-import { createInMemoryStore } from "@releasedesk/core";
-import { LeadOrchestrator } from "@releasedesk/lead";
-import { createSpecialistRunners } from "@releasedesk/specialists";
+import { FileBackedRunContextStore } from "@releasedesk/core";
+import {
+  createMockCloudAgentClient,
+  startLeadCloudAgent,
+} from "@releasedesk/specialists";
 
-const store = createInMemoryStore();
-const lead = new LeadOrchestrator({
+const store = new FileBackedRunContextStore("./data/runs.json");
+const cloudClient = createMockCloudAgentClient(); // CI-safe default
+
+const { report, leadCloud } = await startLeadCloudAgent({
   store,
-  runners: createSpecialistRunners({
-    workspaceRoot: process.cwd(),
-    skipGrok: !process.env.XAI_API_KEY,
-    // Cloud Agents: omit to use MOCK client (CI-safe).
-    // cloudClient: createMockCloudAgentClient(),
-  }),
-});
-
-const report = await lead.startOnDemandCheck({
-  goal: "Release readiness for Northwind KYC",
-  target: {
-    repository: "vishamathur/mvp-releasedesk",
-    baseRef: "main",
-    headRef: "HEAD",
+  storeUri: store.storePath,
+  cloudClient,
+  specialists: { cloudClient, storeUri: store.storePath, skipGrok: true },
+  check: {
+    goal: "Release readiness for Northwind KYC",
+    target: {
+      repository: "vishamathur/mvp-releasedesk",
+      baseRef: "main",
+      headRef: "HEAD",
+    },
   },
 });
+// leadCloud.agentKind === "lead"; specialists also dispatched as Cloud Agents
 ```
 
-Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutate the store — they return `payload` + `evidence`; the Lead persists task results onto the run context.
+`createCloudSpecialistRunners()` wraps each specialist so Lead fans out via `CloudAgentClient`. In MOCK mode the client allocates cloud identity then runs local analysis (no `CURSOR_API_KEY`). Runners still **must not** mutate the store — they return `payload` + `evidence`; Lead persists results.
+
+Legacy `createSpecialistRunners()` (in-process, no cloud dispatch wrapper) remains for unit tests.
 
 ## Agents
 
@@ -63,7 +66,16 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 
 Optional Grok enrichment via `XAI_API_KEY` / `GROK_API_KEY`. Without credentials, local analysis still runs; Grok calls are skipped or `MOCK:`-labeled.
 
-## Cursor Cloud Agents (Milestone 5 — under Builder today)
+## Cursor Cloud Agents
+
+### Orchestration kinds (Lead + specialists)
+
+| Kind | Trigger |
+| --- | --- |
+| `lead` | Desk UI on-demand (`startLeadCloudAgent`) — **no scheduler** |
+| `change_analyst` / `standards` / `security` / `builder` / `ai_red_teaming` | Lead fans out via `createCloudSpecialistRunners` |
+
+### Builder nested kinds (Milestone 5)
 
 Builder plans three handoffs (`coding`, `testing`, `review`), then runs:
 
@@ -80,15 +92,17 @@ Results land on the Builder task output / evidence / `cloudAgentAudit` trail in 
 | **real** (NHI preferred) | `RELEASEDESK_CLOUD_CLIENT=real` + per-agent `RELEASEDESK_CURSOR_API_KEY_*` in **Cursor Dashboard** | Not required for CI |
 | **real** (legacy) | `RELEASEDESK_CLOUD_CLIENT=real` **and** shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` | Local/dev fallback |
 
-Named NHI secrets (no external vault): [`docs/nhi-cursor-secrets.md`](../../docs/nhi-cursor-secrets.md).
+Named NHI secrets (no external vault; prefer OIDC): [`docs/nhi-cursor-secrets.md`](../../docs/nhi-cursor-secrets.md). Zscaler stub name: `RELEASEDESK_ZSCALER_AI_RED_TEAM_API_KEY`.
 
 ```bash
 # Default / CI — MOCK client (same interface as real)
 npm run test:specialists
 
-# Opt-in live Cursor Cloud Agents API (prefer Dashboard NHI secrets;
-# shell shared key is legacy fallback only)
-export CURSOR_API_KEY=...          # or RELEASEDESK_CURSOR_API_KEY_CODING / _TESTING / _REVIEW
+# Opt-in live Cursor Cloud Agents API (prefer Dashboard NHI secrets)
+export RELEASEDESK_CURSOR_API_KEY_LEAD=...
+export RELEASEDESK_CURSOR_API_KEY_CODING=...
+# …see .env.example for the full list
+# Legacy shell fallback only: CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY
 export RELEASEDESK_CLOUD_CLIENT=real
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```

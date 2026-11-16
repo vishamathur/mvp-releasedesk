@@ -39,7 +39,7 @@ Legacy shared fallback (local/dev only, discouraged for NHI): `CURSOR_API_KEY` /
 
 ## Runtime resolution
 
-Package `@releasedesk/specialists` (`cloud/agent-keys.ts` / `resolveCloudAgentClient` — lands with Lead/specialists Cloud Agents conversion):
+Package `@releasedesk/specialists` (`cloud/agent-keys.ts` / `resolveCloudAgentClient` — shipped with Lead/specialists Cloud Agents conversion):
 
 1. MOCK default — no secrets required (`RELEASEDESK_CLOUD_CLIENT` unset/`mock`).
 2. Real mode — each dispatch picks the key for `agentKind` from the matching `RELEASEDESK_CURSOR_API_KEY_*` env (injected by Cursor named secrets).

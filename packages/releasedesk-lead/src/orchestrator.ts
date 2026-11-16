@@ -92,6 +92,16 @@ type LeadDelegation = {
   rationale: string;
 };
 
+/**
+ * How a release check was started.
+ *
+ * Production path: **on_demand** only — Release Desk UI (or intake after dual
+ * human approval) triggers an ephemeral Lead Cloud Agent directly.
+ * There is **no** background scheduler polling the backlog queue.
+ *
+ * `scheduled` remains as legacy trigger *metadata* for tests / older callers;
+ * it does not start a daemon or poller.
+ */
 export type ReleaseCheckTrigger = {
   kind: "scheduled" | "on_demand" | "remediation";
   requestedBy?: string;
@@ -214,6 +224,11 @@ export class LeadOrchestrator {
     return this.prClient;
   }
 
+  /**
+   * Primary production entry: on-demand release check.
+   * Prefer `@releasedesk/specialists` `startLeadCloudAgent` from Desk UI so
+   * Lead + specialists run as ephemeral Cursor Cloud Agents (MOCK by default).
+   */
   async startOnDemandCheck(input: Omit<StartReleaseCheckInput, "trigger"> & {
     trigger?: Omit<ReleaseCheckTrigger, "kind">;
   }): Promise<ReleaseCheckReport> {
@@ -229,6 +244,11 @@ export class LeadOrchestrator {
     });
   }
 
+  /**
+   * @deprecated Production must use on-demand Desk UI → Lead Cloud Agent.
+   * Kept for unit tests that assert trigger metadata only — does **not**
+   * start a scheduler or poll the intake queue.
+   */
   async startScheduledCheck(input: Omit<StartReleaseCheckInput, "trigger"> & {
     trigger?: Omit<ReleaseCheckTrigger, "kind">;
   }): Promise<ReleaseCheckReport> {
@@ -239,7 +259,12 @@ export class LeadOrchestrator {
         ...(input.trigger?.requestedBy !== undefined
           ? { requestedBy: input.trigger.requestedBy }
           : {}),
-        ...(input.trigger?.notes !== undefined ? { notes: input.trigger.notes } : {}),
+        ...(input.trigger?.notes !== undefined
+          ? { notes: input.trigger.notes }
+          : {
+              notes:
+                "Legacy scheduled trigger metadata only — no queue poller; prefer Desk on-demand",
+            }),
       },
     });
   }
