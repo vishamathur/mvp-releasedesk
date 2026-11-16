@@ -24,6 +24,17 @@ import {
   type ApprovalKind,
   type ApprovalRecord,
 } from "./approval.js";
+import {
+  createChecklistsForFeatures,
+  detectNewFeaturesFromTasks,
+  mergeFeatureSignOffRecords,
+  parseFeatureSignOffRecord,
+  signOffChecklistItem,
+  signOffEntireChecklist,
+  type FeatureSignOffChecklist,
+  type FeatureSignOffItemId,
+  type FeatureSignOffRecord,
+} from "./feature-signoff.js";
 import { createDefaultStubRunners } from "./stub-runners.js";
 import { assessReadiness, type ReadinessAssessment } from "./readiness.js";
 import {
@@ -87,6 +98,8 @@ export type ReleaseCheckReport = {
   assessment: ReadinessAssessment;
   delegations: LeadDelegation[];
   approvals: ApprovalRecord;
+  /** Per-feature developer checklist sign-offs for AI-produced code. */
+  featureSignOffs: FeatureSignOffRecord;
   checkpoints: CheckpointRecord;
   pullRequests: PullRequestRecord;
   dmSession: DmSession;
@@ -193,8 +206,9 @@ export class LeadOrchestrator {
 
   /**
    * Full path: create run → delegate specialists → checkpoint verify →
-   * remediation/reverify loops → PR track/poll → human approval gates → readiness.
-   * Never auto-merges.
+   * remediation/reverify loops → PR track/poll → feature checklist sign-offs →
+   * human merge/release gates → readiness.
+   * Never auto-merges. Never auto-signs feature checklists.
    */
   async startReleaseCheck(input: StartReleaseCheckInput): Promise<ReleaseCheckReport> {
     const trigger = input.trigger ?? { kind: "on_demand" as const };
@@ -218,6 +232,7 @@ export class LeadOrchestrator {
         trigger,
         leadAgent: "lead",
         approvals: { gates: [] } satisfies ApprovalRecord,
+        featureSignOffs: { checklists: [] } satisfies FeatureSignOffRecord,
         checkpoints: { checkpoints: [] } satisfies CheckpointRecord,
         pullRequests: { pullRequests: [] } satisfies PullRequestRecord,
         prClientMode: this.prClient.mode,
@@ -277,6 +292,7 @@ export class LeadOrchestrator {
       const assessment = assessReadiness({
         tasks: current.tasks,
         approvals: parseApprovalRecord(current.metadata.approvals),
+        featureSignOffs: parseFeatureSignOffRecord(current.metadata.featureSignOffs),
         considerRemediation: true,
       });
 
@@ -378,7 +394,10 @@ export class LeadOrchestrator {
       await this.pollAllTrackedPullRequests(run.runId);
     }
 
-    // Human approval gates — modeled, never auto-approved / never auto-merged.
+    // Feature checklist sign-offs for AI-produced code — before merge/release gates.
+    await this.requestFeatureSignOffsForNewFeatures(run.runId);
+
+    // Human merge/release gates — modeled, never auto-approved / never auto-merged.
     await this.requestApproval(run.runId, "release", "Release decision requires human approval");
     await this.requestApproval(
       run.runId,
@@ -388,11 +407,13 @@ export class LeadOrchestrator {
 
     const finalRun = await this.requireRun(run.runId);
     const approvals = parseApprovalRecord(finalRun.metadata.approvals);
+    const featureSignOffs = parseFeatureSignOffRecord(finalRun.metadata.featureSignOffs);
     const checkpoints = parseCheckpointRecord(finalRun.metadata.checkpoints);
     const pullRequests = parsePullRequestRecord(finalRun.metadata.pullRequests);
     const assessment = assessReadiness({
       tasks: finalRun.tasks,
       approvals,
+      featureSignOffs,
       considerRemediation: this.enableRemediation,
       checkpoints,
     });
@@ -448,10 +469,65 @@ export class LeadOrchestrator {
       assessment,
       delegations,
       approvals,
+      featureSignOffs,
       checkpoints,
       pullRequests,
       dmSession: this.dmSession,
     };
+  }
+
+  /**
+   * Detect Builder / Cloud Coding features and create pending checklist sign-offs.
+   * Never auto-completes items.
+   */
+  async requestFeatureSignOffsForNewFeatures(runId: string): Promise<FeatureSignOffRecord> {
+    const run = await this.requireRun(runId);
+    const features = detectNewFeaturesFromTasks(run.tasks);
+    if (features.length === 0) {
+      return parseFeatureSignOffRecord(run.metadata.featureSignOffs);
+    }
+
+    for (const feature of features) {
+      await this.store.appendAudit({
+        runId,
+        action: "feature.detected",
+        message: `New feature detected from ${feature.sourceAgent}: ${feature.title}`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: {
+          featureId: feature.id,
+          sourceAgent: feature.sourceAgent,
+          branch: feature.branch,
+          prUrl: feature.prUrl,
+          taskId: feature.taskId,
+        },
+      });
+    }
+
+    const checklists = createChecklistsForFeatures(features);
+    const record = mergeFeatureSignOffRecords(
+      parseFeatureSignOffRecord(run.metadata.featureSignOffs),
+      checklists,
+    );
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, featureSignOffs: record },
+    });
+
+    for (const checklist of checklists) {
+      await this.store.appendAudit({
+        runId,
+        action: "feature.signoff_requested",
+        message: `Feature sign-off checklist requested (${checklist.kind}): ${checklist.feature.title}`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: {
+          checklistId: checklist.id,
+          kind: checklist.kind,
+          featureId: checklist.feature.id,
+          itemCount: checklist.items.length,
+        },
+      });
+    }
+
+    return record;
   }
 
   async requestApproval(
@@ -526,9 +602,80 @@ export class LeadOrchestrator {
     const assessment = assessReadiness({
       tasks: next.tasks,
       approvals: record,
+      featureSignOffs: parseFeatureSignOffRecord(next.metadata.featureSignOffs),
       checkpoints: parseCheckpointRecord(next.metadata.checkpoints),
     });
     return { run: next, gate: updated, assessment };
+  }
+
+  /**
+   * Record a single checklist item sign-off on a live (non-terminal) run.
+   * Never auto-signs remaining items.
+   */
+  async recordFeatureSignOffItem(
+    runId: string,
+    checklistId: string,
+    itemId: FeatureSignOffItemId,
+    opts?: { signedOffBy?: string; notes?: string },
+  ): Promise<{
+    run: RunContext;
+    checklist: FeatureSignOffChecklist;
+    assessment: ReadinessAssessment;
+  }> {
+    const run = await this.requireRun(runId);
+    if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") {
+      throw new Error(
+        `Run ${runId} is ${run.status}; record feature sign-offs before the Lead completes the run, or use applyFeatureSignOffsToReport`,
+      );
+    }
+
+    const record = parseFeatureSignOffRecord(run.metadata.featureSignOffs);
+    const idx = record.checklists.findIndex((c) => c.id === checklistId);
+    if (idx < 0) throw new Error(`Feature sign-off checklist ${checklistId} not found`);
+    const existing = record.checklists[idx]!;
+    const updated = signOffChecklistItem(existing, itemId, opts);
+    record.checklists[idx] = updated;
+
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, featureSignOffs: record },
+    });
+    await this.store.appendAudit({
+      runId,
+      action: "feature.signoff_item_recorded",
+      message: `Feature checklist item signed off: ${itemId} on ${checklistId}`,
+      actor: {
+        kind: "human",
+        ...(opts?.signedOffBy !== undefined ? { name: opts.signedOffBy } : {}),
+      },
+      details: {
+        checklistId,
+        itemId,
+        featureId: updated.feature.id,
+        checklistStatus: updated.status,
+      },
+    });
+
+    if (updated.status === "completed") {
+      await this.store.appendAudit({
+        runId,
+        action: "feature.signoff_completed",
+        message: `Feature sign-off checklist completed: ${updated.feature.title}`,
+        actor: {
+          kind: "human",
+          ...(updated.completedBy !== undefined ? { name: updated.completedBy } : {}),
+        },
+        details: { checklistId, featureId: updated.feature.id, kind: updated.kind },
+      });
+    }
+
+    const next = await this.requireRun(runId);
+    const assessment = assessReadiness({
+      tasks: next.tasks,
+      approvals: parseApprovalRecord(next.metadata.approvals),
+      featureSignOffs: record,
+      checkpoints: parseCheckpointRecord(next.metadata.checkpoints),
+    });
+    return { run: next, checklist: updated, assessment };
   }
 
   /**
@@ -556,6 +703,7 @@ export class LeadOrchestrator {
     const assessment = assessReadiness({
       tasks: report.run.tasks,
       approvals,
+      featureSignOffs: report.featureSignOffs,
       checkpoints: report.checkpoints,
     });
     const leadOutput = LeadAgentOutputSchema.parse({
@@ -567,6 +715,63 @@ export class LeadOrchestrator {
       completedAt: nowIso(),
     });
     return { ...report, approvals, assessment, leadOutput };
+  }
+
+  /**
+   * Apply feature checklist item sign-offs to a finished report (in-memory).
+   * Explicit human/demo action — never called automatically by the Lead.
+   */
+  applyFeatureSignOffsToReport(
+    report: ReleaseCheckReport,
+    decisions: Array<{
+      checklistId: string;
+      /** Sign a single item; omit with `signOffAll: true` to complete the checklist. */
+      itemId?: FeatureSignOffItemId;
+      signOffAll?: boolean;
+      signedOffBy?: string;
+      notes?: string;
+    }>,
+  ): ReleaseCheckReport {
+    let featureSignOffs: FeatureSignOffRecord = {
+      checklists: report.featureSignOffs.checklists.map((c) => ({
+        ...c,
+        items: c.items.map((i) => ({ ...i })),
+        feature: { ...c.feature },
+      })),
+    };
+
+    for (const d of decisions) {
+      const idx = featureSignOffs.checklists.findIndex((c) => c.id === d.checklistId);
+      if (idx < 0) throw new Error(`Feature sign-off checklist ${d.checklistId} not found`);
+      const existing = featureSignOffs.checklists[idx]!;
+      const opts = {
+        ...(d.signedOffBy !== undefined ? { signedOffBy: d.signedOffBy } : {}),
+        ...(d.notes !== undefined ? { notes: d.notes } : {}),
+      };
+      if (d.signOffAll) {
+        featureSignOffs.checklists[idx] = signOffEntireChecklist(existing, opts);
+      } else if (d.itemId) {
+        featureSignOffs.checklists[idx] = signOffChecklistItem(existing, d.itemId, opts);
+      } else {
+        throw new Error("itemId or signOffAll is required");
+      }
+    }
+
+    const assessment = assessReadiness({
+      tasks: report.run.tasks,
+      approvals: report.approvals,
+      featureSignOffs,
+      checkpoints: report.checkpoints,
+    });
+    const leadOutput = LeadAgentOutputSchema.parse({
+      ...report.leadOutput,
+      readiness: assessment.readiness,
+      blockingIssues: assessment.blockingIssues,
+      remediationRecommended: assessment.remediationRecommended,
+      summary: assessment.summary,
+      completedAt: nowIso(),
+    });
+    return { ...report, featureSignOffs, assessment, leadOutput };
   }
 
   /** Poll status for all tracked PRs (public status-polling interface). */

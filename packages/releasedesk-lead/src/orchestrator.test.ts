@@ -446,8 +446,10 @@ describe("Milestone 6 — verification loops + PR workflow", () => {
       report.pullRequests.pullRequests.every((p) => p.humanMergeGateRequired === true),
     ).toBe(true);
 
-    // Human gates pending — not auto-approved.
+    // Feature checklist + human merge/release gates pending — not auto-approved / not auto-signed.
     expect(report.leadOutput.readiness).toBe("needs_human");
+    expect(report.featureSignOffs.checklists.length).toBeGreaterThanOrEqual(1);
+    expect(report.featureSignOffs.checklists.every((c) => c.status === "pending")).toBe(true);
     expect(getPendingGates(report.approvals).length).toBe(2);
 
     const actions = report.run.auditTrail.map((e) => e.action);
@@ -457,8 +459,11 @@ describe("Milestone 6 — verification loops + PR workflow", () => {
     expect(actions).toContain("pr.tracked");
     expect(actions).toContain("pr.status_polled");
     expect(actions).toContain("pr.merge_blocked");
+    expect(actions).toContain("feature.detected");
+    expect(actions).toContain("feature.signoff_requested");
     expect(actions).toContain("human.approval_requested");
     expect(actions).not.toContain("human.approval_recorded");
+    expect(actions).not.toContain("feature.signoff_completed");
   });
 
   it("rejection path yields not_ready with audit-friendly report", async () => {

@@ -40,6 +40,11 @@ export const AuditActionSchema = z.enum([
   "pr.tracked",
   "pr.status_polled",
   "pr.merge_blocked",
+  /** Feature sign-off checklist (AI-produced code must be manually verified) */
+  "feature.detected",
+  "feature.signoff_requested",
+  "feature.signoff_item_recorded",
+  "feature.signoff_completed",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;
