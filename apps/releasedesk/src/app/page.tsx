@@ -30,6 +30,12 @@ export default function HomePage() {
             >
               Enter the desk
             </Link>
+            <Link
+              href="/mvp"
+              className="btn-secondary !border-white/25 !bg-white/10 !text-white hover:!bg-white/20"
+            >
+              SDLC MVP
+            </Link>
             <span className="inline-flex items-center gap-2 text-sm text-white/55">
               <MockLabel>MOCK integrations labeled</MockLabel>
             </span>

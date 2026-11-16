@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:demos": "tsx scripts/generate-demos.ts",
+    "sdlc:mvp": "tsx scripts/run-sdlc-mvp.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

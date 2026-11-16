@@ -20,6 +20,16 @@ export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
       </Link>
       <nav className="flex items-center gap-2">
         <Link
+          href="/mvp"
+          className={
+            dark
+              ? "text-sm font-medium text-white/70 underline-offset-4 hover:text-white hover:underline"
+              : "text-sm font-medium text-rd-forest/70 underline-offset-4 hover:text-rd-ink hover:underline"
+          }
+        >
+          SDLC MVP
+        </Link>
+        <Link
           href="/desk"
           className={
             dark
