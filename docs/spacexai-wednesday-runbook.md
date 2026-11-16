@@ -33,6 +33,14 @@
 | 25–35 | **Grok API depth** — run intel; point at trustCheck + MOCK if no key |
 | 35–45 | Live change request + Q&A |
 
+## Ranked risks (what looks fake / can fail)
+
+1. **No x.ai/bot live UI** — Desk pack browser is real; say packs paste into Grok Bot; don’t claim native x.ai UI if not logged in.
+2. **MOCK Grok without key** — fine if labeled; looks fake if you say “live API” without `XAI_API_KEY`.
+3. **Cloud Agents MOCK by default** — Builder→Cursor path is rules/skills + trigger narrative; live cloud launch may be stubbed — name it.
+4. **Architecture slide out of date** — old Mermaid still says “Cloud Agents MOCK”; use `spacexai-slide-2-architecture.md`.
+5. **Intake demoted** — don’t start on intake; stay on agent nav → trigger → gate → intel.
+
 ## If something breaks
 
 - No API key → MOCK is intentional; trust story still holds
