@@ -11,7 +11,7 @@ import type { CloudAgentHandoff } from "./builder-types.js";
 import {
   describeCloudClientMode,
   dispatchCloudAgentPipeline,
-  resolveCloudAgentClient,
+  resolveCloudAgentClientForKind,
 } from "./cloud/index.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
@@ -78,6 +78,9 @@ function planHandoffs(args: {
         `Implement remediation for ${repository}.`,
         ...remediationGoals.map((g) => `- ${g}`),
         `Follow the implementation instructions prepared by Builder.`,
+        `If shipping release-intel code, wire packages/releasedesk-specialists/src/grok-api-intel.ts`,
+        `(classify/extract/score/summarize) using exclusive RELEASEDESK_GROK_API_KEY_BUILDER — never shared XAI_API_KEY.`,
+        `Follow .cursor/skills/ship-grok-release-intel/SKILL.md and AGENTS.md.`,
         `Commit on ${proposedBranch}.`,
         `Do NOT merge — human approval required.`,
       ].join("\n"),
@@ -87,6 +90,7 @@ function planHandoffs(args: {
       acceptanceCriteria: [
         "Changes compile / typecheck",
         "Unit tests added or updated for the fix",
+        "Grok API intel path present when remediation includes release-intel",
         "No secrets introduced",
         "PR opened but not merged",
       ],
@@ -205,6 +209,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         `Refine remediation plan for ${repository}: ${remediationGoals.join("; ")}`,
         {
           ...options.grok,
+          agentRole: options.grok?.agentRole ?? "builder",
           fallback: implementationInstructions,
         },
       );
@@ -243,29 +248,40 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         data: { handoffs },
       });
     } else {
-      const client = resolveCloudAgentClient({
-        ...options.cloud,
-        client: options.cloudClient ?? options.cloud?.client,
-      });
-      clientMode = client.mode;
+      const injected = options.cloudClient ?? options.cloud?.client;
+      // Probe coding kind for evidence mode label; each kind resolves its own key at dispatch.
+      const probe = injected
+        ? injected
+        : resolveCloudAgentClientForKind("coding", {
+            ...options.cloud,
+            client: undefined,
+          });
+      clientMode = probe.mode;
 
       evidence.push({
         kind: "artifact",
         title: "Cursor Cloud Agent client",
-        summary: describeCloudClientMode(client),
+        summary: describeCloudClientMode(probe, "coding"),
         source: "builder",
         mock:
-          client.mode === "mock"
+          probe.mode === "mock"
             ? createMockMeta(
                 "cursor-cloud-agents",
                 "Using MOCK Cloud Agent client — no live Cursor credentials required",
               )
             : undefined,
-        data: { mode: client.mode, autoMerge: false },
+        data: {
+          mode: probe.mode,
+          autoMerge: false,
+          perAgentCursorKeys: !injected,
+        },
       });
 
       const pipeline = await dispatchCloudAgentPipeline(handoffs, {
-        client,
+        client: injected,
+        resolve: injected
+          ? undefined
+          : { ...options.cloud, client: undefined },
         maxAttempts: options.cloudMaxAttempts ?? 2,
       });
 
@@ -320,7 +336,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         },
       });
 
-      if (client.mode === "mock" && !mocksUsed.some((m) => m.mockLabel === "cursor-cloud-agents")) {
+      if (probe.mode === "mock" && !mocksUsed.some((m) => m.mockLabel === "cursor-cloud-agents")) {
         mocksUsed.push(
           createMockMeta(
             "cursor-cloud-agents",

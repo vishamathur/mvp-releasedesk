@@ -1,0 +1,17 @@
+{
+  "id": "builder",
+  "displayName": "RD Builder",
+  "definitionPath": "grok-bots/definitions/builder.json",
+  "grokApiKeyEnv": "RELEASEDESK_GROK_API_KEY_BUILDER",
+  "cursorApiKeyEnv": "RELEASEDESK_CURSOR_API_KEY_BUILDER",
+  "nestedCursorKeys": [
+    "RELEASEDESK_CURSOR_API_KEY_CODING",
+    "RELEASEDESK_CURSOR_API_KEY_TESTING",
+    "RELEASEDESK_CURSOR_API_KEY_REVIEW"
+  ],
+  "webhookUrlEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_URL_BUILDER",
+  "webhookKeyEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_KEY_BUILDER",
+  "triad": true,
+  "shipPath": "packages/releasedesk-specialists/src/grok-api-intel.ts",
+  "source": "packages/releasedesk-core/src/grok-bots/definitions.ts"
+}

@@ -13,11 +13,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "generate:demos": "tsx scripts/generate-demos.ts",
+    "sdlc:mvp": "tsx scripts/run-sdlc-mvp.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@releasedesk/core": "0.1.0",
     "@releasedesk/lead": "0.1.0",
+    "@releasedesk/specialists": "0.1.0",
     "next": "^16.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

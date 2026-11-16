@@ -1,14 +1,28 @@
 import { nowIso } from "@releasedesk/core";
 import type { CloudAgentHandoff } from "../builder-types.js";
+import {
+  resolveCloudAgentClientForKind,
+  type ResolveCloudAgentClientOptions,
+} from "./resolve.js";
 import type {
   CloudAgentAuditEvent,
   CloudAgentClient,
   CloudAgentDispatchResult,
+  CloudAgentKind,
   CloudDispatchAttempt,
 } from "./types.js";
 
 export type CloudPipelineOptions = {
-  client: CloudAgentClient;
+  /**
+   * Shared client for every handoff (tests / MOCK injection).
+   * When omitted, each kind resolves via `resolveClient` or
+   * `resolveCloudAgentClientForKind` (exclusive per-agent Cursor keys).
+   */
+  client?: CloudAgentClient;
+  /** Optional factory — wins over env-based per-kind resolve. */
+  resolveClient?: (agentKind: CloudAgentKind) => CloudAgentClient;
+  /** Env/mode options used when resolving per-kind real clients. */
+  resolve?: ResolveCloudAgentClientOptions;
   /** Per-handoff retry budget (total attempts). Default 2. */
   maxAttempts?: number;
 };
@@ -32,8 +46,21 @@ function audit(
   events.push({ at: nowIso(), ...partial });
 }
 
+function clientForKind(
+  agentKind: CloudAgentKind,
+  options: CloudPipelineOptions,
+): CloudAgentClient {
+  if (options.resolveClient) {
+    return options.resolveClient(agentKind);
+  }
+  if (options.client) {
+    return options.client;
+  }
+  return resolveCloudAgentClientForKind(agentKind, options.resolve ?? {});
+}
+
 async function dispatchWithRetry(
-  client: CloudAgentClient,
+  getClient: (agentKind: CloudAgentKind) => CloudAgentClient,
   handoff: CloudAgentHandoff,
   extras: { branch?: string; prUrl?: string },
   maxAttempts: number,
@@ -43,6 +70,8 @@ async function dispatchWithRetry(
   let last: CloudAgentDispatchResult | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const client = getClient(handoff.agentKind);
+
     audit(auditEvents, {
       action: "cloud_agent.dispatch",
       handoffId: handoff.handoffId,
@@ -89,8 +118,10 @@ async function dispatchWithRetry(
           testsPassed: result.testsPassed,
           cloudAgentUrl: result.cloudAgentUrl,
           mocked: result.mocked,
+          mode: client.mode,
         },
       });
+      applyResultToHandoff(handoff, result, client.mode);
       return result;
     }
 
@@ -109,8 +140,12 @@ async function dispatchWithRetry(
       agentKind: handoff.agentKind,
       attempt,
       message: result.error ?? result.summary,
-      data: { willRetry },
+      data: { willRetry, mode: client.mode },
     });
+
+    if (!willRetry) {
+      applyResultToHandoff(handoff, result, client.mode);
+    }
   }
 
   return (
@@ -118,7 +153,7 @@ async function dispatchWithRetry(
       handoffId: handoff.handoffId,
       agentKind: handoff.agentKind,
       status: "failed",
-      mocked: client.mode === "mock",
+      mocked: true,
       summary: `No dispatch result for ${handoff.agentKind}`,
       attempt: maxAttempts,
       error: "empty dispatch",
@@ -151,14 +186,24 @@ function applyResultToHandoff(
  * 1. Coding (sequential, with retries)
  * 2. Testing + Review in parallel after Coding succeeds
  *
+ * Each agent kind resolves its own Cursor API key via
+ * `resolveCloudAgentClientForKind` unless a shared `client` / `resolveClient`
+ * is injected.
+ *
  * Never auto-merges. Records audit events for every dispatch/retry/complete/fail.
  */
 export async function dispatchCloudAgentPipeline(
   planned: CloudAgentHandoff[],
   options: CloudPipelineOptions,
 ): Promise<CloudPipelineResult> {
-  const maxAttempts = options.maxAttempts ?? 2;
-  const client = options.client;
+  const pipelineOptions: CloudPipelineOptions =
+    options.client || options.resolveClient || options.resolve !== undefined
+      ? options
+      : { ...options, resolve: {} };
+
+  const maxAttempts = pipelineOptions.maxAttempts ?? 2;
+  const getClient = (agentKind: CloudAgentKind) =>
+    clientForKind(agentKind, pipelineOptions);
   const handoffs = planned.map((h) => ({
     ...h,
     metadata: { ...h.metadata },
@@ -174,14 +219,16 @@ export async function dispatchCloudAgentPipeline(
   const review = handoffs.find((h) => h.agentKind === "review");
 
   const proposedBranch = coding?.proposedBranch ?? handoffs[0]?.proposedBranch ?? "unknown";
+  const pipelineModeHint = pipelineOptions.client?.mode ?? "per-agent-resolve";
 
   audit(auditEvents, {
     action: "cloud_agent.pipeline_start",
-    message: `Starting Cloud Agent pipeline (${client.mode}) for branch ${proposedBranch}`,
+    message: `Starting Cloud Agent pipeline (${pipelineModeHint}) for branch ${proposedBranch}`,
     data: {
-      mode: client.mode,
+      mode: pipelineModeHint,
       handoffIds: handoffs.map((h) => h.handoffId),
       maxAttempts,
+      perAgentKeys: !pipelineOptions.client,
     },
   });
 
@@ -191,7 +238,7 @@ export async function dispatchCloudAgentPipeline(
 
   if (coding) {
     const codingResult = await dispatchWithRetry(
-      client,
+      getClient,
       coding,
       { branch: proposedBranch },
       maxAttempts,
@@ -199,7 +246,6 @@ export async function dispatchCloudAgentPipeline(
       auditEvents,
     );
     results.push(codingResult);
-    applyResultToHandoff(coding, codingResult, client.mode);
     codingOk = codingResult.status === "completed";
     if (codingResult.branch) branch = codingResult.branch;
     if (codingResult.prUrl) proposedPrUrl = codingResult.prUrl;
@@ -208,14 +254,13 @@ export async function dispatchCloudAgentPipeline(
   let testsPassed: boolean | undefined;
 
   if (codingOk) {
-    // Testing and Review are independent after Coding completes.
     const parallel: Array<Promise<void>> = [];
 
     if (testing) {
       parallel.push(
         (async () => {
           const r = await dispatchWithRetry(
-            client,
+            getClient,
             testing,
             { branch, prUrl: proposedPrUrl },
             maxAttempts,
@@ -223,7 +268,6 @@ export async function dispatchCloudAgentPipeline(
             auditEvents,
           );
           results.push(r);
-          applyResultToHandoff(testing, r, client.mode);
           if (typeof r.testsPassed === "boolean") testsPassed = r.testsPassed;
         })(),
       );
@@ -233,7 +277,7 @@ export async function dispatchCloudAgentPipeline(
       parallel.push(
         (async () => {
           const r = await dispatchWithRetry(
-            client,
+            getClient,
             review,
             { branch, prUrl: proposedPrUrl },
             maxAttempts,
@@ -241,8 +285,6 @@ export async function dispatchCloudAgentPipeline(
             auditEvents,
           );
           results.push(r);
-          applyResultToHandoff(review, r, client.mode);
-          // Review may surface/confirm PR URL.
           if (r.prUrl && !proposedPrUrl) proposedPrUrl = r.prUrl;
         })(),
       );
@@ -250,14 +292,13 @@ export async function dispatchCloudAgentPipeline(
 
     await Promise.all(parallel);
   } else {
-    // Skip dependents; mark as failed with clear notes.
     for (const dep of [testing, review]) {
       if (!dep) continue;
       dep.status = "failed";
       dep.metadata = {
         ...dep.metadata,
         branch,
-        cloudAgentApi: client.mode,
+        cloudAgentApi: pipelineOptions.client?.mode ?? "mock",
         error: "Skipped because Coding Agent did not complete",
       };
       audit(auditEvents, {

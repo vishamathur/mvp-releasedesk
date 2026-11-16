@@ -1,20 +1,32 @@
-import { createMockMeta, formatMockNote } from "@releasedesk/core";
+import {
+  CURSOR_API_KEY_ENV,
+  createMockMeta,
+  formatMockNote,
+  resolveAgentCursorApiKey,
+  type CursorKeyedAgentId,
+} from "@releasedesk/core";
 import type {
   CloudAgentClient,
   CloudAgentDispatchRequest,
   CloudAgentDispatchResult,
+  CloudAgentKind,
 } from "./types.js";
 
 /**
  * Real Cursor Cloud Agents API client (v1 public beta).
- * Enabled when CURSOR_API_KEY or CURSOR_SERVICE_ACCOUNT_KEY is present
- * and RELEASEDESK_CLOUD_CLIENT=real (see resolveCloudAgentClient).
+ * SDLC MVP: each Cloud Agent kind uses its exclusive
+ * RELEASEDESK_CURSOR_API_KEY_CODING|TESTING|REVIEW — never shared CURSOR_API_KEY.
  *
  * Docs: https://cursor.com/docs/cloud-agent/api/endpoints
  */
 
+export type CursorCloudAgentKind = CloudAgentKind;
+
 export type RealCloudAgentClientOptions = {
   apiKey?: string;
+  /** When set, resolves the exclusive per-kind Cursor key (preferred for SDLC). */
+  agentKind?: CloudAgentKind;
+  env?: NodeJS.ProcessEnv;
   /** Default https://api.cursor.com */
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -45,9 +57,23 @@ type ApiCreateResponse = {
   run?: ApiRun;
 };
 
-export function resolveCursorApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const key = env.CURSOR_API_KEY ?? env.CURSOR_SERVICE_ACCOUNT_KEY;
-  return key && key.trim().length > 0 ? key.trim() : undefined;
+/**
+ * Resolve exclusive Cursor API key for a Cloud Agent kind.
+ * Never falls back to shared CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY.
+ */
+export function resolveCursorApiKeyForAgent(
+  kind: CursorCloudAgentKind | CursorKeyedAgentId,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return resolveAgentCursorApiKey(kind, env);
+}
+
+/**
+ * @deprecated Shared CURSOR_* keys are not used on the SDLC path.
+ * Use {@link resolveCursorApiKeyForAgent} instead. Always returns undefined.
+ */
+export function resolveCursorApiKey(_env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return undefined;
 }
 
 function repoHttpsUrl(repository: string): string {
@@ -58,7 +84,6 @@ function repoHttpsUrl(repository: string): string {
 }
 
 function sleep(ms: number, fetchImpl: typeof fetch): Promise<void> {
-  // Prefer timers; fetchImpl unused but keeps signature injectable for tests that stub time.
   void fetchImpl;
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -78,10 +103,17 @@ function authHeaders(apiKey: string): Record<string, string> {
 export function createRealCloudAgentClient(
   options: RealCloudAgentClientOptions = {},
 ): CloudAgentClient {
-  const resolvedKey = options.apiKey ?? resolveCursorApiKey();
+  const env = options.env ?? process.env;
+  const resolvedKey =
+    options.apiKey ??
+    (options.agentKind
+      ? resolveCursorApiKeyForAgent(options.agentKind, env)
+      : undefined);
   if (!resolvedKey) {
     throw new Error(
-      "createRealCloudAgentClient requires CURSOR_API_KEY or CURSOR_SERVICE_ACCOUNT_KEY",
+      options.agentKind
+        ? `createRealCloudAgentClient requires exclusive RELEASEDESK_CURSOR_API_KEY for ${options.agentKind} (shared CURSOR_API_KEY is never used)`
+        : "createRealCloudAgentClient requires per-agent apiKey (or agentKind for exclusive RELEASEDESK_CURSOR_API_KEY_*)",
     );
   }
   const apiKey: string = resolvedKey;
@@ -140,7 +172,6 @@ export function createRealCloudAgentClient(
             : {}),
         },
       ],
-      // Coding may open a PR; never merge.
       autoCreatePR: request.agentKind === "coding",
       skipReviewerRequest: true,
     };
@@ -219,7 +250,6 @@ export function createRealCloudAgentClient(
       } else if (/\b(tests? failed|failing|npm test.*fail)\b/.test(lower)) {
         testsPassed = false;
       } else {
-        // Conservative: finished testing run without clear failure → treat as passed.
         testsPassed = !/\bfail(ed|ure)?\b/.test(lower);
       }
     }
@@ -307,17 +337,20 @@ export function createRealCloudAgentClient(
 }
 
 /**
- * Real-client stub factory that falls back to an explicit error result when
- * credentials are missing — used by resolveCloudAgentClient when mode=real
- * was requested without a key (should not happen if resolve is correct).
+ * Real-mode stub when exclusive per-agent Cursor key is missing.
+ * Never falls back to shared CURSOR_API_KEY.
  */
-export function createUnavailableRealClientStub(): CloudAgentClient {
+export function createUnavailableRealClientStub(
+  agentKind?: CloudAgentKind,
+): CloudAgentClient {
   return {
     mode: "real",
     async dispatch(request): Promise<CloudAgentDispatchResult> {
+      const kind = agentKind ?? request.agentKind;
+      const envVar = CURSOR_API_KEY_ENV[kind];
       const mock = createMockMeta(
         "cursor-cloud-agents",
-        "Real client requested but CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY missing",
+        `Real client requested but ${envVar} missing (shared CURSOR_API_KEY unused)`,
       );
       return {
         handoffId: request.handoffId,
@@ -326,10 +359,10 @@ export function createUnavailableRealClientStub(): CloudAgentClient {
         mocked: true,
         mock,
         summary: formatMockNote(
-          "Cannot dispatch real Cloud Agent — credentials unavailable",
+          `Cannot dispatch real Cloud Agent — missing ${envVar}`,
         ),
         attempt: 1,
-        error: "missing CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY",
+        error: `missing ${envVar}`,
       };
     },
   };

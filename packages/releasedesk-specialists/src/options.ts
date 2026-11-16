@@ -26,10 +26,11 @@ export type SpecialistRunnerOptions = {
   assumeLeadHumanGates?: boolean;
   /**
    * Injected Cursor Cloud Agent client (wins over env resolution).
-   * Prefer for unit tests; production uses resolveCloudAgentClient().
+   * Prefer for unit tests; production resolves per kind via
+   * `resolveCloudAgentClientForKind` (exclusive Cursor keys).
    */
   cloudClient?: CloudAgentClient;
-  /** Extra resolve options when cloudClient is not injected. */
+  /** Extra resolve options when cloudClient is not injected (per-agent keys). */
   cloud?: ResolveCloudAgentClientOptions;
   /** Per-handoff Cloud Agent dispatch attempts (default 2). */
   cloudMaxAttempts?: number;

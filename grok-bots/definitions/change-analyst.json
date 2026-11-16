@@ -1,0 +1,10 @@
+{
+  "id": "change_analyst",
+  "displayName": "RD Change Analyst",
+  "definitionPath": "grok-bots/definitions/change-analyst.json",
+  "grokApiKeyEnv": "RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST",
+  "webhookUrlEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_URL_CHANGE_ANALYST",
+  "webhookKeyEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_KEY_CHANGE_ANALYST",
+  "triad": false,
+  "source": "packages/releasedesk-core/src/grok-bots/definitions.ts"
+}

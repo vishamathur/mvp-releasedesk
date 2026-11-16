@@ -17,11 +17,21 @@ export {
   createRealCloudAgentClient,
   createUnavailableRealClientStub,
   resolveCursorApiKey,
+  resolveCursorApiKeyForAgent,
   type RealCloudAgentClientOptions,
+  type CursorCloudAgentKind,
 } from "./real-client.js";
 
 export {
+  cursorAgentIdForKind,
+  cursorApiKeyEnvForKind,
+  resolveCursorApiKeyForAgentId,
+  resolveCursorApiKeyForKind,
+} from "./per-agent-keys.js";
+
+export {
   resolveCloudAgentClient,
+  resolveCloudAgentClientForKind,
   describeCloudClientMode,
   type ResolveCloudAgentClientOptions,
 } from "./resolve.js";

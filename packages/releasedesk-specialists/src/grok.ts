@@ -1,9 +1,17 @@
-import { createMockMeta, formatMockNote, type MockMeta } from "@releasedesk/core";
+import {
+  createMockMeta,
+  formatMockNote,
+  resolveAgentGrokApiKey,
+  type GrokKeyedAgentRole,
+  type MockMeta,
+} from "@releasedesk/core";
 
 /**
- * Optional xAI / Grok enrichment.
- * When `XAI_API_KEY` (or `GROK_API_KEY`) is absent, returns a MOCK-labeled fallback.
- * Full LLM wiring remains optional — local analysis is the primary M4 path.
+ * Optional xAI / Grok enrichment with STRICT per-agent API keys.
+ *
+ * Shared `XAI_API_KEY` / `GROK_API_KEY` are never consulted. Pass `agentRole`
+ * (or an explicit `apiKey` already resolved via that agent's exclusive env var).
+ * When the exclusive key is absent, returns a MOCK-labeled fallback.
  */
 
 export type GrokCompleteResult = {
@@ -13,29 +21,57 @@ export type GrokCompleteResult = {
 };
 
 export type GrokClientOptions = {
+  /** When set, must already be this agent's exclusive key — never a shared env. */
   apiKey?: string;
+  /** Required for env-based resolution; selects RELEASEDESK_GROK_API_KEY_<ROLE>. */
+  agentRole?: GrokKeyedAgentRole;
   model?: string;
   endpoint?: string;
   fetchImpl?: typeof fetch;
+  env?: NodeJS.ProcessEnv;
 };
 
-export function resolveGrokApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const key = env.XAI_API_KEY ?? env.GROK_API_KEY;
-  return key && key.trim().length > 0 ? key.trim() : undefined;
+/**
+ * Resolve the exclusive Grok key for one agent role.
+ * Never falls back to shared XAI_API_KEY / GROK_API_KEY.
+ */
+export function resolveGrokApiKeyForAgent(
+  role: GrokKeyedAgentRole,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return resolveAgentGrokApiKey(role, env);
+}
+
+/**
+ * @deprecated Shared XAI/GROK keys are not used on the SDLC path.
+ * Use {@link resolveGrokApiKeyForAgent} with an agent role instead.
+ * Always returns undefined so callers cannot accidentally use a shared key.
+ */
+export function resolveGrokApiKey(_env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return undefined;
 }
 
 export async function grokComplete(
   prompt: string,
   opts: GrokClientOptions & { fallback: string } = { fallback: "" },
 ): Promise<GrokCompleteResult> {
-  const apiKey = opts.apiKey ?? resolveGrokApiKey();
+  const env = opts.env ?? process.env;
+  const apiKey =
+    opts.apiKey ??
+    (opts.agentRole !== undefined
+      ? resolveGrokApiKeyForAgent(opts.agentRole, env)
+      : undefined);
+
   if (!apiKey) {
+    const envHint = opts.agentRole
+      ? `exclusive RELEASEDESK_GROK_API_KEY for ${opts.agentRole}`
+      : "agentRole / exclusive RELEASEDESK_GROK_API_KEY_*";
     const mock = createMockMeta(
       "grok-api",
-      "XAI_API_KEY / GROK_API_KEY unavailable; using local heuristic narrative",
+      `${envHint} unavailable; using local heuristic narrative (shared XAI_API_KEY / GROK_API_KEY are never used)`,
     );
     return {
-      text: formatMockNote(opts.fallback || "Grok enrichment skipped (no API key)"),
+      text: formatMockNote(opts.fallback || "Grok enrichment skipped (no per-agent API key)"),
       mocked: true,
       mock,
     };

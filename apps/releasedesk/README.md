@@ -21,8 +21,30 @@ npm run desk                                # http://localhost:3001
 | `npm run build:desk` / `npm run start:desk` | Production build + serve UI |
 | `npm run test:desk` | UI + scenario unit tests |
 | `npm run generate:demos -w @releasedesk/ui` | Re-record demo fixtures via live orchestrator |
+| `npm run sdlc:mvp` | CLI portfolio check (agility · security · token efficiency) |
 
 KYC demo remains on port 3000 (`npm run dev`).
+
+## SDLC MVP (`/mvp`)
+
+Delivery-manager surface for the three ITS requirements on the Northwind KYC / Release Desk workspace:
+
+1. **Agility** — on-demand Lead checks across `DEMO_PORTFOLIO` (customerId-tagged)
+2. **Security** — mandatory Security specialist participation on every change
+3. **Token efficiency** — security-role context slice vs full-run packing (estimated savings)
+
+```bash
+npm run build:core && npm run build:lead
+npm run desk          # open http://localhost:3001/mvp
+npm run sdlc:mvp      # same portfolio check via tsx CLI
+```
+
+API:
+
+- `GET /api/sdlc-mvp` — agent defs + credential present/missing (never secret values)
+- `POST /api/sdlc-mvp` — run portfolio check with MOCK specialists + MOCK PR
+
+Header and home link to **SDLC MVP**. Missing per-agent keys keep that agent on MOCK paths; exclusive env vars never fall back to shared `XAI_API_KEY` / `CURSOR_API_KEY`.
 
 ## Demo script
 
@@ -73,3 +95,4 @@ API surface:
 - `POST /api/runs/:id/approvals` — merge/release gates (never auto-merges)
 - `POST /api/demos` — live or fixture scenarios
 - `POST /api/dm` — text or MOCK voice
+- `GET|POST /api/sdlc-mvp` — SDLC MVP catalog / portfolio check

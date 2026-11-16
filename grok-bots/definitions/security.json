@@ -1,0 +1,11 @@
+{
+  "id": "security",
+  "displayName": "RD Security",
+  "definitionPath": "grok-bots/definitions/security.json",
+  "grokApiKeyEnv": "RELEASEDESK_GROK_API_KEY_SECURITY",
+  "webhookUrlEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_URL_SECURITY",
+  "webhookKeyEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_KEY_SECURITY",
+  "triad": true,
+  "mandatoryOnEveryChange": true,
+  "source": "packages/releasedesk-core/src/grok-bots/definitions.ts"
+}

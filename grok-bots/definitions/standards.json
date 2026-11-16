@@ -1,0 +1,10 @@
+{
+  "id": "standards",
+  "displayName": "RD Standards",
+  "definitionPath": "grok-bots/definitions/standards.json",
+  "grokApiKeyEnv": "RELEASEDESK_GROK_API_KEY_STANDARDS",
+  "webhookUrlEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_URL_STANDARDS",
+  "webhookKeyEnv": "RELEASEDESK_GROK_BOT_WEBHOOK_KEY_STANDARDS",
+  "triad": false,
+  "source": "packages/releasedesk-core/src/grok-bots/definitions.ts"
+}

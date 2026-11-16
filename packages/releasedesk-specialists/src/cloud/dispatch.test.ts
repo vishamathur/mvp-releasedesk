@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { CloudAgentHandoff } from "../builder-types.js";
 import { createMockCloudAgentClient } from "./mock-client.js";
 import { dispatchCloudAgentPipeline } from "./dispatch.js";
-import { resolveCloudAgentClient } from "./resolve.js";
-import type { CloudAgentClient, CloudAgentDispatchRequest } from "./types.js";
+import { resolveCloudAgentClient, resolveCloudAgentClientForKind } from "./resolve.js";
+import type { CloudAgentClient, CloudAgentDispatchRequest, CloudAgentKind } from "./types.js";
 
 function plannedHandoffs(repo = "vishamathur/mvp-releasedesk"): CloudAgentHandoff[] {
   const proposedBranch = "cursor/rd-remediation-test-b5af";
@@ -117,10 +117,10 @@ describe("resolveCloudAgentClient", () => {
     expect(client.mode).toBe("mock");
   });
 
-  it("uses unavailable stub when real requested without key", async () => {
+  it("uses unavailable stub when real requested without exclusive key", async () => {
     const client = resolveCloudAgentClient({
       mode: "real",
-      env: {},
+      env: { CURSOR_API_KEY: "shared-only" },
     });
     expect(client.mode).toBe("real");
     const result = await client.dispatch({
@@ -146,5 +146,58 @@ describe("resolveCloudAgentClient", () => {
       client: injected,
     });
     expect(client).toBe(injected);
+  });
+});
+
+describe("dispatchCloudAgentPipeline per-agent keys", () => {
+  it("resolves a distinct client per agentKind via resolveClient", async () => {
+    const seen: CloudAgentKind[] = [];
+    const pipeline = await dispatchCloudAgentPipeline(plannedHandoffs(), {
+      resolveClient: (kind) => {
+        seen.push(kind);
+        return createMockCloudAgentClient();
+      },
+      maxAttempts: 1,
+    });
+    expect(pipeline.allOk).toBe(true);
+    expect(seen).toEqual(expect.arrayContaining(["coding", "testing", "review"]));
+    expect(new Set(seen).size).toBe(3);
+  });
+
+  it("coding exclusive key does not unlock testing in env resolve path", async () => {
+    const env = {
+      RELEASEDESK_CLOUD_CLIENT: "real",
+      RELEASEDESK_CURSOR_API_KEY_CODING: "coding-key",
+    };
+    const codingClient = resolveCloudAgentClientForKind("coding", { env, mode: "real" });
+    const testingClient = resolveCloudAgentClientForKind("testing", { env, mode: "real" });
+    expect(codingClient.mode).toBe("real");
+
+    const testingResult = await testingClient.dispatch({
+      handoffId: "t",
+      agentKind: "testing",
+      prompt: "x",
+      repository: "owner/repo",
+      baseBranch: "main",
+      proposedBranch: "cursor/x",
+      acceptanceCriteria: [],
+      autoMerge: false,
+    });
+    expect(testingResult.mocked).toBe(true);
+    expect(testingResult.error).toMatch(/TESTING/);
+
+    const kinds: CloudAgentKind[] = [];
+    const pipeline = await dispatchCloudAgentPipeline(plannedHandoffs(), {
+      resolveClient: (kind) => {
+        kinds.push(kind);
+        return resolveCloudAgentClientForKind(kind, {
+          env,
+          mode: "mock",
+        });
+      },
+      maxAttempts: 1,
+    });
+    expect(pipeline.allOk).toBe(true);
+    expect(kinds).toEqual(expect.arrayContaining(["coding", "testing", "review"]));
   });
 });

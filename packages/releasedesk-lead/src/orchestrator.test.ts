@@ -295,9 +295,58 @@ describe("LeadOrchestrator", () => {
 });
 
 describe("assessReadiness", () => {
-  it("returns unknown with no specialist tasks", () => {
+  it("blocks when mandatory Security did not run", () => {
     const result = assessReadiness({ tasks: [] });
-    expect(result.readiness).toBe("unknown");
+    expect(result.readiness).toBe("not_ready");
+    expect(result.blockingIssues.some((b) => b.includes("mandatory specialist did not run"))).toBe(
+      true,
+    );
+  });
+
+  it("blocks when Security completed without a recorded result", () => {
+    const result = assessReadiness({
+      tasks: [
+        {
+          id: "task_sec_empty",
+          runId: "run_test",
+          name: "Security analysis",
+          agentRole: "security",
+          status: "completed",
+          dependsOn: [],
+          evidence: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:01:00.000Z",
+          completedAt: "2026-01-01T00:01:00.000Z",
+        },
+      ],
+    });
+    expect(result.readiness).toBe("not_ready");
+    expect(
+      result.blockingIssues.some((b) => b.includes("without a recorded result")),
+    ).toBe(true);
+  });
+
+  it("does not add security-participation blockers when Security completed with output", () => {
+    const result = assessReadiness({
+      tasks: [
+        {
+          id: "task_sec_ok",
+          runId: "run_test",
+          name: "Security analysis",
+          agentRole: "security",
+          status: "completed",
+          dependsOn: [],
+          evidence: [],
+          output: { releaseBlockingCount: 0, riskLevel: "low", summary: "clear" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:01:00.000Z",
+          completedAt: "2026-01-01T00:01:00.000Z",
+        },
+      ],
+    });
+    expect(result.blockingIssues.some((b) => b.includes("mandatory specialist"))).toBe(false);
+    expect(result.blockingIssues.some((b) => b.includes("recorded result"))).toBe(false);
+    expect(result.readiness).toBe("needs_human");
   });
 });
 
