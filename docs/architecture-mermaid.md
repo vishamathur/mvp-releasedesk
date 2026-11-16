@@ -2,7 +2,7 @@
 
 Last updated: 2026-11-17 (Asia/Calcutta)
 
-Distinct **Testing** (Cloud Testing Agent) and **Verification** (independent result/build quality check) stages before checkpoints.
+Distinct **Testing** (Cloud Testing Agent) and **Verification** (independent result/build quality check) stages before checkpoints. Durable run context is shared across agents, but prompts should use **role-scoped projections** (not the full audit) — see [`token-optimization-plan.md`](./token-optimization-plan.md).
 
 ```mermaid
 flowchart LR
@@ -30,6 +30,8 @@ flowchart LR
     FeatSO["Developer sign-off checklist"]
     Merge["Human merge approval"]
     Rel["Human release approval"]
+    Store["Shared durable run context"]
+    Proj["Context projections<br/>role slice · compact audit"]
   end
 
   subgraph APP["App · Northwind KYC"]
@@ -46,6 +48,12 @@ flowchart LR
   QApprove --> RePri
   RePri --> Lead
   Lead --> CA --> ST --> SE --> BU --> AIRed --> Atlas
+  Lead --> Store
+  Store --> Proj
+  Proj -.->|scoped prompts| Lead
+  Proj -.->|scoped prompts| CA
+  Proj -.->|scoped prompts| SE
+  Proj -.->|scoped prompts| AIRed
   AIRed -.-> Zscal
   Atlas --> Code --> Test --> Ver --> Check --> FeatSO --> Merge --> Rel
   CA -.->|AI output| AIRed
@@ -65,4 +73,4 @@ flowchart LR
   Rel -->|result| Lead
 ```
 
-Dashed `Zscal` = optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` stub (MOCK without credentials). See [`zscaler-ai-red-teaming-provider.md`](./zscaler-ai-red-teaming-provider.md).
+Dashed `Zscal` = optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` stub (MOCK without credentials). See [`zscaler-ai-red-teaming-provider.md`](./zscaler-ai-red-teaming-provider.md). Token budgets / six-area plan: [`token-optimization-plan.md`](./token-optimization-plan.md).
