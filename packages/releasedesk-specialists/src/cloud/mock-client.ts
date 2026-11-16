@@ -1,24 +1,31 @@
 import { createMockMeta, formatMockNote } from "@releasedesk/core";
+import { CURSOR_API_KEY_ENV_BY_AGENT } from "./agent-keys.js";
 import type {
   CloudAgentClient,
   CloudAgentDispatchRequest,
   CloudAgentDispatchResult,
+  CloudAgentKind,
+  OrchestrationCloudAgentKind,
 } from "./types.js";
+import { isBuilderCloudAgentKind, isOrchestrationCloudAgentKind } from "./types.js";
 
 export type MockCloudAgentClientOptions = {
   /**
    * Force failures for specific agent kinds (tests).
    * Attempt numbers are 1-based; fails while attempt <= failUntilAttempt.
    */
-  failUntilAttempt?: Partial<Record<CloudAgentDispatchRequest["agentKind"], number>>;
+  failUntilAttempt?: Partial<Record<CloudAgentKind, number>>;
   /** Override fabricated PR URL host path. */
   prUrlBase?: string;
 };
 
 /**
  * MOCK: Cursor Cloud Agent client — same interface as the real client.
- * Fabricates branch / test / PR metadata without calling Cursor APIs.
+ * Fabricates branch / test / PR / orchestration metadata without calling Cursor APIs.
  * Labeled with `MOCK:` / `mocked: true` so CI never needs live credentials.
+ *
+ * Covers Builder pipeline kinds (coding/testing/review) and orchestration kinds
+ * (lead + specialists) so Desk can dispatch ephemeral Lead Cloud Agents on-demand.
  */
 export function createMockCloudAgentClient(
   options: MockCloudAgentClientOptions = {},
@@ -69,6 +76,32 @@ export function createMockCloudAgentClient(
       const runId = `run-mock-${request.agentKind}-${attempt}`;
       const cloudAgentUrl = `https://cursor.com/agents/${agentId}`;
 
+      if (isOrchestrationCloudAgentKind(request.agentKind)) {
+        return mockOrchestrationResult(request, {
+          mock,
+          agentId,
+          runId,
+          cloudAgentUrl,
+          branch,
+          attempt,
+        });
+      }
+
+      if (!isBuilderCloudAgentKind(request.agentKind)) {
+        return {
+          handoffId: request.handoffId,
+          agentKind: request.agentKind,
+          status: "failed",
+          mocked: true,
+          mock,
+          summary: formatMockNote(`Unknown Cloud Agent kind ${String(request.agentKind)}`),
+          attempt,
+          error: `unknown kind ${String(request.agentKind)}`,
+        };
+      }
+
+      const nhiEnvName = CURSOR_API_KEY_ENV_BY_AGENT[request.agentKind];
+
       if (request.agentKind === "coding") {
         const prUrl = request.prUrl ?? `${prUrlBase}/9001`;
         return {
@@ -90,6 +123,8 @@ export function createMockCloudAgentClient(
             mode: "mock",
             autoCreatePR: true,
             autoMerge: false,
+            nhiEnvName,
+            nhiAgentKind: "coding",
           },
         };
       }
@@ -110,7 +145,7 @@ export function createMockCloudAgentClient(
             `Testing Agent verified ${branch}; npm test passed (fabricated)`,
           ),
           attempt,
-          provider: { mode: "mock", testsPassed: true },
+          provider: { mode: "mock", testsPassed: true, nhiEnvName, nhiAgentKind: "testing" },
         };
       }
 
@@ -134,8 +169,63 @@ export function createMockCloudAgentClient(
           mode: "mock",
           mergeApproved: false,
           humanGateRequired: true,
+          nhiEnvName,
+          nhiAgentKind: "review",
         },
       };
+    },
+  };
+}
+
+function mockOrchestrationResult(
+  request: CloudAgentDispatchRequest,
+  ctx: {
+    mock: ReturnType<typeof createMockMeta>;
+    agentId: string;
+    runId: string;
+    cloudAgentUrl: string;
+    branch: string;
+    attempt: number;
+  },
+): CloudAgentDispatchResult {
+  const kind = request.agentKind as OrchestrationCloudAgentKind;
+  const roleLabel: Record<OrchestrationCloudAgentKind, string> = {
+    lead: "Lead",
+    change_analyst: "Change Analyst",
+    standards: "Standards",
+    security: "Security",
+    builder: "Builder",
+    ai_red_teaming: "AI Red Teaming",
+  };
+
+  return {
+    handoffId: request.handoffId,
+    agentKind: kind,
+    status: "completed",
+    mocked: true,
+    mock: ctx.mock,
+    cloudAgentId: ctx.agentId,
+    cloudRunId: ctx.runId,
+    cloudAgentUrl: ctx.cloudAgentUrl,
+    branch: ctx.branch,
+    summary: formatMockNote(
+      `${roleLabel[kind]} Cloud Agent accepted ephemeral dispatch` +
+        (request.sharedContext?.storeUri
+          ? `; shared store ${request.sharedContext.storeUri}`
+          : ""),
+    ),
+    attempt: ctx.attempt,
+    provider: {
+      mode: "mock",
+      ephemeral: true,
+      orchestration: true,
+      autoMerge: false,
+      sharedContext: request.sharedContext ?? null,
+      nhiEnvName: CURSOR_API_KEY_ENV_BY_AGENT[kind],
+      nhiAgentKind: kind,
+      // Caller (Desk / Lead) executes local orchestration for MOCK; this
+      // dispatch only allocates cloud-agent identity + audit metadata.
+      execution: "caller_local_mock",
     },
   };
 }

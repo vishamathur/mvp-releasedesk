@@ -35,11 +35,12 @@ export function StartCheckForm() {
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="font-display text-2xl text-rd-ink">Start release check</h2>
-        <MockLabel>MOCK specialists + GitHub</MockLabel>
+        <MockLabel>MOCK Lead + specialist Cloud Agents</MockLabel>
       </div>
       <p className="text-sm text-rd-forest/70">
-        Wires to Lead <code className="font-mono text-xs">startOnDemandCheck</code> /{" "}
-        <code className="font-mono text-xs">check:release</code> path with stub runners locally.
+        On-demand only: Desk dispatches an ephemeral Lead Cloud Agent, which
+        invokes specialist Cloud Agents (no queue scheduler). Shared durable run
+        context; human merge/release gates stay here.
       </p>
       <label className="block">
         <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-rd-forest/60">

@@ -15,6 +15,8 @@ import {
  * Zscaler APIs (throws not-wired). Absence → MOCK sample findings for CI/demo.
  */
 export const ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS = [
+  /** Preferred Release Desk NHI slot for the Zscaler provider stub. */
+  "RELEASEDESK_ZSCALER_AI_RED_TEAM_API_KEY",
   "ZSCALER_AI_RED_TEAM_API_KEY",
   "ZSCALER_AIRT_API_KEY",
   "AIGUARD_API_KEY",

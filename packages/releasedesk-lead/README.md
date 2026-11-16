@@ -6,7 +6,7 @@ Creates a shared run context, delegates to specialist runners (pluggable; MOCK s
 
 **On-demand only:** `startOnDemandCheck` / Desk `/api/checks` / intake `startLeadFromApprovedQueueItem` — there is no backlog queue scheduler. Cursor-maximized target: Lead itself becomes an ephemeral Cloud Agent; Coding/Testing/Review already are.
 
-Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for real specialists + Builder Cloud Agents. Release Desk UI is Milestone 7.
+Prefer `@releasedesk/specialists` `startLeadCloudAgent` / `createCloudSpecialistRunners` so Lead + specialists are ephemeral Cursor Cloud Agents (MOCK by default). Desk UI triggers Lead **on-demand only** — no queue scheduler. Release Desk UI is Milestone 7.
 
 ## Install / test
 

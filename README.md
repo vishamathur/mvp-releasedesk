@@ -1,9 +1,10 @@
 # mvp-releasedesk
 
-**Release Desk** orchestrates the full SDLC for the **Northwind Bank KYC** application: multi-customer intake → **dual human approvals** → Desk **on-demand** Lead → specialists (incl. mandatory Security) → AI Red Teaming → ATLAS/OWASP hard block → Cloud Coding / **Testing** / Review (MOCK by default) → independent **Verification** → checkpoints + remediate → feature checklist → human merge/release.
+**Release Desk** orchestrates the full SDLC for the **Northwind Bank KYC** application: multi-customer intake → **dual human approvals** → Desk **on-demand** ephemeral **Lead Cloud Agent** → specialist Cloud Agents (CA / Standards / Security / Builder / AI Red Teaming) → ATLAS/OWASP hard block → Cloud Coding / **Testing** / Review (MOCK by default) → independent **Verification** → checkpoints + remediate → feature checklist → human merge/release. Desk UI + KYC stay always-on; there is **no** backlog queue scheduler.
 
 Architecture diagram (Cursor-maximized): [`docs/architecture-mermaid.md`](./docs/architecture-mermaid.md).  
 Capability map: [`docs/cursor-maximized-architecture.md`](./docs/cursor-maximized-architecture.md).  
+NHI / Cursor named secrets (no external vault): [`docs/nhi-cursor-secrets.md`](./docs/nhi-cursor-secrets.md).  
 Cursor SDLC operator notes (Testing vs Verification + on-demand Desk): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
 Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).  
 Intake dual gates: [`docs/customer-intake.md`](./docs/customer-intake.md).  
@@ -11,12 +12,12 @@ Cursor-maximized deploy checklist (env, Apps, MOCK vs real, Zscaler): [`docs/dep
 
 ### Architecture model (operators)
 
-| Layer | Today (this tip) | Cursor-maximized target |
+| Layer | Today (this tip) | Cursor-maximized hosting |
 | --- | --- | --- |
 | Desk UI + KYC | Always-on local Next.js (`npm run desk` / `dev`) | Prefer **Cursor Apps** hosting |
-| Lead + specialists + AI Red Teaming | In-process Node `AgentRunner`s (MOCK stubs or specialists package) | Ephemeral **Cloud Agents** |
+| Lead + specialists + AI Red Teaming | Ephemeral **Cloud Agents** via `startLeadCloudAgent` / `createCloudSpecialistRunners` (`MOCK` default) | Same; secrets as Cursor named secrets |
 | Coding / Testing / Review | **Cloud Agents** under Builder (`MOCK` default) | Unchanged |
-| Lead trigger | Desk UI / CLI **on-demand only** after dual intake approvals — **no** backlog scheduler | Same + optional Automations |
+| Lead trigger | Desk UI / CLI **on-demand only** after dual intake approvals — **no** backlog scheduler | Same + optional Automations (still on-demand, not a poller) |
 
 License: [GPL-3.0](./LICENSE).
 
@@ -50,7 +51,7 @@ Optional (not required for MVP):
 | Env | Effect |
 | --- | --- |
 | `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` | Optional Zscaler stub; **MOCK** without credentials |
-| `CURSOR_API_KEY` + `RELEASEDESK_CLOUD_CLIENT=real` | Real Cursor Cloud Agents |
+| Per-agent `RELEASEDESK_CURSOR_API_KEY_*` (Cursor named secrets) + `RELEASEDESK_CLOUD_CLIENT=real` | Real Cursor Cloud Agents (NHI; see [`docs/nhi-cursor-secrets.md`](./docs/nhi-cursor-secrets.md)) |
 | `GH_TOKEN` / `GITHUB_TOKEN` | Real GitHub PR client |
 
 ## Quick start (short)
@@ -164,8 +165,9 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 **Target (Cursor-maximized):** Lead, specialists, and AI Red Teaming also run as ephemeral Cloud Agents; Desk remains the always-on on-demand trigger. Enable the real Builder Cloud client with:
 
 ```bash
-export CURSOR_API_KEY=...                 # or CURSOR_SERVICE_ACCOUNT_KEY
+export RELEASEDESK_CURSOR_API_KEY_CODING=...   # prefer per-agent NHI slots — see .env.example
 export RELEASEDESK_CLOUD_CLIENT=real
+# Legacy shared fallback: CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY
 ```
 
 Cloud Agents never auto-merge — Lead human merge/release gates stay pending. See [`packages/releasedesk-specialists/README.md`](./packages/releasedesk-specialists/README.md).

@@ -1,8 +1,8 @@
 # Release Desk UI (Milestone 7)
 
-Always-on delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) **on demand only** (no backlog queue scheduler) — dual intake approvals, specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, **feature sign-off checklists** (AI-produced code), and human merge/release gates.
+Always-on delivery-manager surface for **Northwind Bank KYC** release readiness. Desk triggers an ephemeral **Lead Cloud Agent** **on demand only** (no backlog queue scheduler) — dual intake approvals, specialist Cloud Agents (MOCK by default), checkpoints, cloud-agent handoffs, PR metadata, audit trail, **feature sign-off checklists** (AI-produced code), and human merge/release gates.
 
-Voice is optional and **MOCK**-labeled only. Cursor-maximized target: Lead/specialists become ephemeral Cloud Agents; Desk stays the always-on trigger (prefer Cursor Apps hosting).
+Voice is optional and **MOCK**-labeled only. Prefer Cursor Apps hosting for Desk; Lead/specialists run as ephemeral Cloud Agents.
 
 ## Run locally
 
@@ -41,7 +41,7 @@ KYC demo remains on port 3000 (`npm run dev`).
 6. **Pending approval**
    - Run **Pending approval** (or load fixture) — clean check waiting on DM decisions.
 7. **On-demand check**
-   - Use **Start release check** to call Lead `startOnDemandCheck` with MOCK specialists + MOCK GitHub.
+   - Use **Start release check** → Desk calls `startLeadCloudAgent` (MOCK Lead + specialist Cloud Agents, shared file store, MOCK GitHub). No scheduler.
 8. **MOCK voice**
    - In Lead interface, send **MOCK voice** — reply is labeled `MOCK:`; no fabricated agent transcripts.
 9. **Fixtures**
@@ -51,9 +51,9 @@ KYC demo remains on port 3000 (`npm run dev`).
 
 | Integration | Behavior |
 | --- | --- |
-| Specialist runners (default UI path) | Lead stub runners (`MOCK:` summaries) unless you wire real specialists via CLI |
+| Lead + specialist Cloud Agents | MOCK `CloudAgentClient` via `startLeadCloudAgent` (CI-safe; no Cursor key) |
 | GitHub PR client | MOCK unless `GH_TOKEN` / `GITHUB_TOKEN` is set (UI uses MOCK client) |
-| Cursor Cloud Agents | Coding / Testing / Review under Builder (MOCK by default). Lead/specialists are in-process today; Cloud Agents target for those roles |
+| Nested Coding/Testing/Review | Builder remediation path; MOCK by default |
 | Voice channel | Stub acknowledgment only |
 
 ## Layout

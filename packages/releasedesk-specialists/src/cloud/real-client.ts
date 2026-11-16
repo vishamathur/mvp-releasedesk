@@ -1,20 +1,38 @@
 import { createMockMeta, formatMockNote } from "@releasedesk/core";
+import {
+  CURSOR_API_KEY_ENV_BY_AGENT,
+  describeAgentKeyResolution,
+  resolveCursorApiKeyForAgent,
+  resolveLegacySharedCursorApiKey,
+  type ResolvedAgentApiKey,
+} from "./agent-keys.js";
 import type {
   CloudAgentClient,
   CloudAgentDispatchRequest,
   CloudAgentDispatchResult,
+  CloudAgentKind,
 } from "./types.js";
+import { isBuilderCloudAgentKind, isOrchestrationCloudAgentKind } from "./types.js";
 
 /**
  * Real Cursor Cloud Agents API client (v1 public beta).
- * Enabled when CURSOR_API_KEY or CURSOR_SERVICE_ACCOUNT_KEY is present
- * and RELEASEDESK_CLOUD_CLIENT=real (see resolveCloudAgentClient).
+ * Enabled when RELEASEDESK_CLOUD_CLIENT=real and a per-agent
+ * `RELEASEDESK_CURSOR_API_KEY_*` (preferred) or legacy shared
+ * `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` is present.
  *
  * Docs: https://cursor.com/docs/cloud-agent/api/endpoints
  */
 
 export type RealCloudAgentClientOptions = {
+  /**
+   * Force a single API key for all agent kinds (tests).
+   * Prefer omitting this so each dispatch uses NHI per-agent env slots.
+   */
   apiKey?: string;
+  /** Override env for key resolution (tests). */
+  env?: NodeJS.ProcessEnv;
+  /** Custom per-kind key resolver (defaults to resolveCursorApiKeyForAgent). */
+  resolveApiKeyForAgent?: (agentKind: CloudAgentKind) => ResolvedAgentApiKey;
   /** Default https://api.cursor.com */
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -45,9 +63,21 @@ type ApiCreateResponse = {
   run?: ApiRun;
 };
 
+/**
+ * @deprecated Prefer `resolveCursorApiKeyForAgent(kind)` for NHI attribution.
+ * Legacy shared key fallback for local/dev only.
+ */
 export function resolveCursorApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const key = env.CURSOR_API_KEY ?? env.CURSOR_SERVICE_ACCOUNT_KEY;
-  return key && key.trim().length > 0 ? key.trim() : undefined;
+  return resolveLegacySharedCursorApiKey(env);
+}
+
+/** True when any per-agent or legacy Cursor API key is configured. */
+export function hasAnyCursorApiKey(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (resolveLegacySharedCursorApiKey(env)) return true;
+  for (const kind of Object.keys(CURSOR_API_KEY_ENV_BY_AGENT) as CloudAgentKind[]) {
+    if (resolveCursorApiKeyForAgent(kind, env).present) return true;
+  }
+  return false;
 }
 
 function repoHttpsUrl(repository: string): string {
@@ -72,19 +102,22 @@ function authHeaders(apiKey: string): Record<string, string> {
 
 /**
  * Create a live Cursor Cloud Agents client.
- * Throws only on programmer misuse (missing key). Network/API failures return failed results
- * so Builder retry logic can handle them.
+ * Resolves a distinct API key per `agentKind` on each dispatch (NHI tracking).
+ * Network/API failures return failed results so retry logic can handle them.
  */
 export function createRealCloudAgentClient(
   options: RealCloudAgentClientOptions = {},
 ): CloudAgentClient {
-  const resolvedKey = options.apiKey ?? resolveCursorApiKey();
-  if (!resolvedKey) {
+  const env = options.env ?? process.env;
+  const resolveKey =
+    options.resolveApiKeyForAgent ??
+    ((agentKind: CloudAgentKind) => resolveCursorApiKeyForAgent(agentKind, env));
+
+  if (!options.apiKey && !hasAnyCursorApiKey(env)) {
     throw new Error(
-      "createRealCloudAgentClient requires CURSOR_API_KEY or CURSOR_SERVICE_ACCOUNT_KEY",
+      "createRealCloudAgentClient requires per-agent RELEASEDESK_CURSOR_API_KEY_* or legacy CURSOR_API_KEY",
     );
   }
-  const apiKey: string = resolvedKey;
 
   const baseUrl = (options.baseUrl ?? "https://api.cursor.com").replace(/\/$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -95,6 +128,33 @@ export function createRealCloudAgentClient(
     request: CloudAgentDispatchRequest,
     attempt: number,
   ): Promise<CloudAgentDispatchResult> {
+    const keyInfo = options.apiKey
+      ? {
+          agentKind: request.agentKind,
+          envName: "options.apiKey",
+          usedLegacySharedFallback: false,
+          present: true as const,
+          apiKey: options.apiKey,
+        }
+      : resolveKey(request.agentKind);
+
+    if (!keyInfo.present || !keyInfo.apiKey) {
+      return {
+        handoffId: request.handoffId,
+        agentKind: request.agentKind,
+        status: "failed",
+        mocked: false,
+        summary: `Missing Cursor API key for ${request.agentKind}`,
+        attempt,
+        error: describeAgentKeyResolution(keyInfo),
+        provider: {
+          nhiEnvExpected: CURSOR_API_KEY_ENV_BY_AGENT[request.agentKind],
+          usedLegacySharedFallback: keyInfo.usedLegacySharedFallback,
+        },
+      };
+    }
+
+    const apiKey = keyInfo.apiKey;
     const startingRef =
       request.agentKind === "coding"
         ? request.baseBranch
@@ -108,6 +168,18 @@ export function createRealCloudAgentClient(
       "",
       "IMPORTANT: Do NOT merge any pull request. Human approval is required (Release Desk gate).",
     ];
+
+    if (request.sharedContext?.storeUri) {
+      promptParts.push(
+        "",
+        `Shared durable run context storeUri: ${request.sharedContext.storeUri}`,
+        request.sharedContext.runId
+          ? `runId: ${request.sharedContext.runId}`
+          : "runId: (create or use store as Lead directs)",
+        request.sharedContext.taskId ? `taskId: ${request.sharedContext.taskId}` : "",
+        "Read/write that shared store; do not keep run state only in-process.",
+      );
+    }
 
     if (request.agentKind === "coding") {
       promptParts.push(
@@ -127,6 +199,13 @@ export function createRealCloudAgentClient(
         "Record findings; do not approve merge.",
       );
     }
+    if (isOrchestrationCloudAgentKind(request.agentKind)) {
+      promptParts.push(
+        "You are an ephemeral Release Desk Cloud Agent (not a long-running service).",
+        "Persist results to the shared run-context store; exit when your wave is done.",
+        "Do not start a scheduler or poll the intake queue — Desk UI triggers Lead on-demand.",
+      );
+    }
 
     const body: Record<string, unknown> = {
       prompt: { text: promptParts.join("\n") },
@@ -135,12 +214,12 @@ export function createRealCloudAgentClient(
         {
           url: repoHttpsUrl(request.repository),
           startingRef,
-          ...(request.prUrl && request.agentKind !== "coding"
+          ...(request.prUrl && isBuilderCloudAgentKind(request.agentKind) && request.agentKind !== "coding"
             ? { prUrl: request.prUrl }
             : {}),
         },
       ],
-      // Coding may open a PR; never merge.
+      // Only Coding may open a PR; never merge. Orchestration agents never autoCreatePR.
       autoCreatePR: request.agentKind === "coding",
       skipReviewerRequest: true,
     };
@@ -186,7 +265,7 @@ export function createRealCloudAgentClient(
     const cloudAgentUrl =
       created.agent?.url ?? `https://cursor.com/agents/${agentId}`;
 
-    const terminal = await pollRun(agentId, runId);
+    const terminal = await pollRun(agentId, runId, apiKey);
     const branches = terminal.git?.branches ?? [];
     const primary = branches[0];
     const branch = primary?.branch ?? request.branch ?? request.proposedBranch;
@@ -243,17 +322,24 @@ export function createRealCloudAgentClient(
         runStatus: terminal.status,
         git: terminal.git,
         autoMerge: false,
+        nhiEnvName: keyInfo.envName,
+        nhiUsedLegacySharedFallback: keyInfo.usedLegacySharedFallback,
+        nhiAgentKind: request.agentKind,
       },
     };
   }
 
-  async function pollRun(agentId: string, runId: string): Promise<ApiRun> {
+  async function pollRun(
+    agentId: string,
+    runId: string,
+    pollApiKey: string,
+  ): Promise<ApiRun> {
     const deadline = Date.now() + pollTimeoutMs;
     let last: ApiRun = { id: runId, status: "CREATING" };
 
     while (Date.now() < deadline) {
       const res = await fetchImpl(`${baseUrl}/v1/agents/${agentId}/runs/${runId}`, {
-        headers: authHeaders(apiKey),
+        headers: authHeaders(pollApiKey),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -315,9 +401,10 @@ export function createUnavailableRealClientStub(): CloudAgentClient {
   return {
     mode: "real",
     async dispatch(request): Promise<CloudAgentDispatchResult> {
+      const expected = CURSOR_API_KEY_ENV_BY_AGENT[request.agentKind];
       const mock = createMockMeta(
         "cursor-cloud-agents",
-        "Real client requested but CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY missing",
+        `Real client requested but ${expected} (or legacy CURSOR_API_KEY) missing`,
       );
       return {
         handoffId: request.handoffId,
@@ -326,10 +413,11 @@ export function createUnavailableRealClientStub(): CloudAgentClient {
         mocked: true,
         mock,
         summary: formatMockNote(
-          "Cannot dispatch real Cloud Agent — credentials unavailable",
+          "Cannot dispatch real Cloud Agent — per-agent NHI credentials unavailable",
         ),
         attempt: 1,
-        error: "missing CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY",
+        error: `missing ${expected} / legacy CURSOR_API_KEY`,
+        provider: { nhiEnvExpected: expected },
       };
     },
   };
