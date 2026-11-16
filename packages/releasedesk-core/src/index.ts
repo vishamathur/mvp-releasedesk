@@ -77,4 +77,26 @@ export {
   type RunContextStore,
 } from "./store.js";
 
+export {
+  MANDATORY_ANALYSIS_ROLES,
+  evaluateSecurityParticipation,
+  type SecurityParticipationResult,
+} from "./security-gate.js";
+
+export {
+  CHARS_PER_TOKEN,
+  estimateTokensFromText,
+  estimateTokensFromJson,
+  buildRoleContextSlice,
+  compareFullRunVsSlice,
+  type RoleContextSlice,
+  type TokenBudgetComparison,
+} from "./token-budget.js";
+
+export {
+  DEMO_PORTFOLIO,
+  type PortfolioCustomerApp,
+  type PortfolioCheckGoal,
+} from "./portfolio.js";
+
 export * from "./agents/index.js";
