@@ -1,40 +1,54 @@
 # mvp-releasedesk
 
-**Release Desk** will orchestrate release checks for the **Northwind Bank KYC** application.
+**Release Desk** orchestrates the full SDLC for the **Northwind Bank KYC** application: multi-customer intake → Lead specialists → AI Red Teaming → ATLAS/OWASP hard block → Cloud Coding / **Testing** / Review (MOCK by default) → independent **Verification** → checkpoints + remediate → feature checklist → human merge/release.
 
-This repository currently includes:
-
-- **Milestone 1** — working KYC demo app (`apps/kyc`)
-- **Milestone 2** — shared execution context + agent contracts (`packages/releasedesk-core`)
-- **Milestone 3** — Lead Agent orchestrator (`packages/releasedesk-lead`)
-- **Milestone 4** — specialist agents (`packages/releasedesk-specialists`)
-- **Milestone 5** — Builder → Cursor Cloud Agents (Coding / Testing / Review; MOCK by default)
-- **Milestone 6** — Verification checkpoints, remediation loops, PR workflow + human gates
-- **Milestone 7** — Release Desk UI + demo scenarios (`apps/releasedesk`)
+Architecture diagram: [`docs/architecture-mermaid.md`](./docs/architecture-mermaid.md).  
+Cursor SDLC operator notes (Testing vs Verification): [`docs/cursor-sdlc-guidance.md`](./docs/cursor-sdlc-guidance.md).  
+Optional Zscaler provider (flag off / MOCK): [`docs/zscaler-ai-red-teaming-provider.md`](./docs/zscaler-ai-red-teaming-provider.md).
 
 License: [GPL-3.0](./LICENSE).
 
-## Quick start
+## How to run the MVP (no Zscaler / Cloud credentials required)
 
-Requires Node.js 20+.
+Requires Node.js 20+. Everything below uses **MOCK** specialists, Cloud Agents, GitHub PR client, and AI Red Teaming (`custom` provider) by default.
+
+```bash
+npm install
+
+# 1) Northwind KYC app (port 3000)
+npm run seed
+npm run dev
+# → http://localhost:3000
+
+# 2) Release Desk UI (port 3001) — full Lead orchestration demos
+npm run build:core && npm run build:lead && npm run build:specialists
+npm run generate:demos
+npm run desk
+# → http://localhost:3001
+
+# 3) On-demand release check (CLI, MOCK stubs)
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
+
+# 4) Unit tests across the monorepo
+npm test
+```
+
+Optional (not required for MVP):
+
+| Env | Effect |
+| --- | --- |
+| `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` | Optional Zscaler stub; **MOCK** without credentials |
+| `CURSOR_API_KEY` + `RELEASEDESK_CLOUD_CLIENT=real` | Real Cursor Cloud Agents |
+| `GH_TOKEN` / `GITHUB_TOKEN` | Real GitHub PR client |
+
+## Quick start (short)
 
 ```bash
 npm install
 npm run seed
-npm run dev
+npm run dev          # KYC → :3000
+npm run desk         # after build:core/lead (+ generate:demos) → :3001
 ```
-
-Open [http://localhost:3000](http://localhost:3000) for KYC.
-
-**Release Desk UI (M7):**
-
-```bash
-npm run build:core && npm run build:lead
-npm run generate:demos
-npm run desk
-```
-
-Open [http://localhost:3001](http://localhost:3001).
 
 | Command | Description |
 | --- | --- |

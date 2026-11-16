@@ -109,6 +109,30 @@ export {
 export * from "./agents/index.js";
 
 export {
+  SdlcPipelineStageSchema,
+  SdlcStageStatusSchema,
+  SdlcStageIssueSchema,
+  TestingStageEvidenceSchema,
+  VerificationStageEvidenceSchema,
+  SdlcStageResultSchema,
+  SdlcStageRecordSchema,
+  SDLC_POST_CODING_ORDER,
+  createSdlcStageId,
+  parseSdlcStageRecord,
+  latestSdlcStage,
+  assertTestingBeforeVerification,
+  buildTestingStageResult,
+  buildVerificationStageResult,
+  type SdlcPipelineStage,
+  type SdlcStageStatus,
+  type SdlcStageIssue,
+  type TestingStageEvidence,
+  type VerificationStageEvidence,
+  type SdlcStageResult,
+  type SdlcStageRecord,
+} from "./sdlc-stages.js";
+
+export {
   FeatureSignOffItemIdSchema,
   DEFAULT_FEATURE_SIGNOFF_ITEM_DEFS,
   FeatureArtifactSchema,

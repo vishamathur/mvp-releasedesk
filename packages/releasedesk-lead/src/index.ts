@@ -68,6 +68,14 @@ export {
 } from "./verification.js";
 
 export {
+  evaluateTestingStage,
+  evaluateVerificationStage,
+  appendSdlcStage,
+  validateStageOrder,
+  parseSdlcStageRecord,
+} from "./stages.js";
+
+export {
   createDmSession,
   receiveDmText,
   receiveDmVoiceStub,

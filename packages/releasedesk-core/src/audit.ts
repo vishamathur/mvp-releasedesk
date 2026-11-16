@@ -58,6 +58,11 @@ export const AuditActionSchema = z.enum([
   "ai_red_teaming.hard_block_evaluated",
   "ai_red_teaming.hard_block_blocked",
   "ai_red_teaming.hard_block_exempt_draft",
+  /** Distinct Testing / Verification pipeline stages (pre-checkpoint) */
+  "sdlc.testing_started",
+  "sdlc.testing_completed",
+  "sdlc.verification_started",
+  "sdlc.verification_completed",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;

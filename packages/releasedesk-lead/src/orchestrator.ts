@@ -11,6 +11,7 @@ import {
   MANDATORY_SECURITY_ROLE,
   nowIso,
   parseAiRedTeamingFlagRecord,
+  parseSdlcStageRecord,
   SECURITY_TASK_KIND,
   type AiRedTeamingLeadFlag,
   type AiRedTeamingPassKind,
@@ -18,8 +19,16 @@ import {
   type LeadAgentOutput,
   type RunContext,
   type RunContextStore,
+  type SdlcStageRecord,
+  type SdlcStageResult,
   type TaskRecord,
 } from "@releasedesk/core";
+import {
+  appendSdlcStage,
+  evaluateTestingStage,
+  evaluateVerificationStage,
+  validateStageOrder,
+} from "./stages.js";
 import {
   isSpecialistRole,
   type AgentRunner,
@@ -113,6 +122,8 @@ export type ReleaseCheckReport = {
   /** Per-feature developer checklist sign-offs for AI-produced code. */
   featureSignOffs: FeatureSignOffRecord;
   checkpoints: CheckpointRecord;
+  /** Distinct Testing + Verification stages (Coding → Testing → Verification → Checkpoints). */
+  sdlcStages: SdlcStageRecord;
   pullRequests: PullRequestRecord;
   dmSession: DmSession;
 };
@@ -263,6 +274,7 @@ export class LeadOrchestrator {
         approvals: { gates: [] } satisfies ApprovalRecord,
         featureSignOffs: { checklists: [] } satisfies FeatureSignOffRecord,
         checkpoints: { checkpoints: [] } satisfies CheckpointRecord,
+        sdlcStages: { stages: [] } satisfies SdlcStageRecord,
         pullRequests: { pullRequests: [] } satisfies PullRequestRecord,
         aiRedTeamingFlags: { flags: [] },
         prClientMode: this.prClient.mode,
@@ -429,14 +441,6 @@ export class LeadOrchestrator {
         cycle,
       );
 
-      // Checkpoint after cloud-agent / builder stage.
-      const cloudCheckpoint = await this.runCheckpoint(run.runId, "cloud_agents", cycle);
-
-      // Track / open PR from builder output (never merge).
-      if (this.enablePrWorkflow) {
-        await this.syncPullRequestFromBuilder(run.runId, input, builderTask.id);
-      }
-
       // Dedicated post-Builder AI Red Teaming pass, then ATLAS/OWASP hard block.
       await this.runDedicatedPostBuilderAiRedTeaming(
         run.runId,
@@ -446,6 +450,18 @@ export class LeadOrchestrator {
         cycle,
       );
       await this.recordAiRedTeamingHardBlock(run.runId);
+
+      // Distinct Testing → Verification (Cloud Testing Agent + independent quality check).
+      // Verification must not auto-pass merely because Testing ran.
+      await this.runTestingAndVerificationStages(run.runId, cycle);
+
+      // Checkpoint after Coding → Testing → Verification.
+      const cloudCheckpoint = await this.runCheckpoint(run.runId, "cloud_agents", cycle);
+
+      // Track / open PR from builder output (never merge).
+      if (this.enablePrWorkflow) {
+        await this.syncPullRequestFromBuilder(run.runId, input, builderTask.id);
+      }
 
       // If cloud checkpoint fails remediably and we have cycles left, continue
       // after reverify so the next loop can rebuild — still reverify first.
@@ -520,6 +536,7 @@ export class LeadOrchestrator {
     const approvals = parseApprovalRecord(finalRun.metadata.approvals);
     const featureSignOffs = parseFeatureSignOffRecord(finalRun.metadata.featureSignOffs);
     const checkpoints = parseCheckpointRecord(finalRun.metadata.checkpoints);
+    const sdlcStages = parseSdlcStageRecord(finalRun.metadata.sdlcStages);
     const pullRequests = parsePullRequestRecord(finalRun.metadata.pullRequests);
     const finalPrState = this.resolvePrDraftState(finalRun);
     const assessment = assessReadiness({
@@ -585,6 +602,7 @@ export class LeadOrchestrator {
       approvals,
       featureSignOffs,
       checkpoints,
+      sdlcStages,
       pullRequests,
       dmSession: this.dmSession,
     };
@@ -1311,6 +1329,81 @@ export class LeadOrchestrator {
       },
       nameSuffix: `hard-block-c${cycle}`,
     });
+  }
+
+  /**
+   * Distinct Testing (Cloud Testing Agent) → Verification (independent quality check)
+   * before checkpoints. Verification never auto-passes merely because Testing ran.
+   */
+  private async runTestingAndVerificationStages(
+    runId: string,
+    cycle: number,
+  ): Promise<{ testing: SdlcStageResult; verification: SdlcStageResult }> {
+    const run = await this.requireRun(runId);
+
+    await this.store.appendAudit({
+      runId,
+      action: "sdlc.testing_started",
+      message: `Testing stage started (cycle ${cycle})`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: { cycle },
+    });
+
+    const testing = evaluateTestingStage({ tasks: run.tasks, cycle });
+    let record = appendSdlcStage(parseSdlcStageRecord(run.metadata.sdlcStages), testing);
+
+    await this.store.appendAudit({
+      runId,
+      action: "sdlc.testing_completed",
+      message: testing.summary,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: {
+        stageId: testing.id,
+        status: testing.status,
+        cycle,
+        evidence: testing.evidence,
+        issues: testing.issues,
+      },
+    });
+
+    await this.store.appendAudit({
+      runId,
+      action: "sdlc.verification_started",
+      message: `Verification stage started (cycle ${cycle}) — independent of Testing run alone`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: { cycle, testingStageId: testing.id },
+    });
+
+    const verification = evaluateVerificationStage({
+      tasks: run.tasks,
+      testingStage: testing,
+      cycle,
+    });
+    record = appendSdlcStage(record, verification);
+
+    const orderError = validateStageOrder(record, cycle);
+    const latest = await this.requireRun(runId);
+    await this.store.update(runId, {
+      metadata: { ...latest.metadata, sdlcStages: record },
+    });
+
+    await this.store.appendAudit({
+      runId,
+      action: "sdlc.verification_completed",
+      message: orderError ? `${verification.summary} (${orderError})` : verification.summary,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: {
+        stageId: verification.id,
+        status: verification.status,
+        cycle,
+        evidence: verification.evidence,
+        issues: verification.issues,
+        independentDecision: true,
+        ...(orderError ? { orderError } : {}),
+      },
+    });
+
+    return { testing, verification };
   }
 
   private async runCheckpoint(
