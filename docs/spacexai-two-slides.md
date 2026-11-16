@@ -38,14 +38,18 @@ Constraint implied by the whole brief: slides are **short framing only** — not
 ## Recommended two slides (Wednesday)
 
 ### Slide 1 — Problem statement and assumptions
-**Title:** Northwind KYC release readiness — the problem  
-**One-liner content:** Delivery managers can’t tell if a KYC release is safe to ship; late security/policy blockers burn release windows.  
-**Assumptions (3 bullets max on slide):**  
-1. Space 1 — software delivery & release readiness.  
+**Title:** SDLC optimization for multi-customer IT services — the problem  
+**One-liner content:** An IT services org delivering apps to many clients needs faster, safer release cycles across the portfolio; late security/policy findings burn delivery windows; decision-makers can’t tell what’s safe to ship. Shown here with Northwind KYC.  
+**Assumptions:**  
+1. Space 1 — software delivery & release readiness (KYC = worked example).  
 2. Humans keep merge/release authority (bots advise; gates decide).  
-3. Required stack: Grok Bot host + Cursor cloud agent + Grok API in the shipped path.
+3. Required stack: Grok Bot → Cursor cloud agent → Grok API.  
+4. MOCK only without keys.  
 
-**Say (≤45s):** who feels it (DM), what it costs (missed window / rework), who buys (eng + risk leaders). Then: “Slide two is the map — then we live in the bots.”
+**Business requirements:** agility, security, token optimization.
+
+**Say (≤45s):** portfolio SDLC problem → three requirements → KYC as example → eng + risk keep merge authority. Then: “Slide two is the map — then we live in the bots.”  
+**Canonical deck:** [spacexai-demo-slides.md](./spacexai-demo-slides.md)
 
 ### Slide 2 — Architecture / workflow
 **Title:** Release Desk — Grok Bot → Cursor → Grok API  
