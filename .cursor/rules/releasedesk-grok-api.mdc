@@ -1,0 +1,16 @@
+---
+description: SpaceXAI — shipped code must call Grok API for release intel
+globs: apps/releasedesk/**/*
+---
+
+# Grok API shipping rule
+
+When implementing Builder / Coding-agent remediation for Release Desk:
+
+1. Keep or extend `apps/releasedesk/src/lib/grok-release-intel.ts`.
+2. Expose via `POST /api/grok/release-intel`.
+3. Return structured classify + extract + score + summarize.
+4. `trustCheck.humanGateStillRequired` must stay `true`.
+5. Without `XAI_API_KEY` / `GROK_API_KEY`, return MOCK-labeled fallback — never fake a live mode.
+6. Do not auto-approve merge/release from Grok scores.
+7. Preserve iteration gate + ATLAS/OWASP merge block behavior.
