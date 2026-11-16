@@ -22,6 +22,8 @@ flowchart LR
     BU["Builder"]
     AIRed["AI Red Teaming · all AI/prompt touchpoints"]
     Zscal["Zscaler provider · optional MOCK"]
+    Gate["Collapsed AI Red Team gate<br/>pre+post in one pass"]
+    SideQ["Remediation side-queue · non-blocking"]
     Atlas["ATLAS / OWASP LLM Top 10<br/>hard block · review-ready PRs only"]
     Cloud["Cloud Agents"]
     Verify["Checkpoints + remediate"]
@@ -43,8 +45,12 @@ flowchart LR
   CostApprove --> RePri
   QApprove --> RePri
   RePri --> Lead
-  Lead --> CA --> ST --> SE --> BU --> AIRed --> Atlas
+  Lead --> CA --> ST --> SE --> BU --> AIRed --> Gate
   AIRed -.-> Zscal
+  Gate -.->|Zscaler/MCP context| Zscal
+  Gate -->|red_team OR security approval| Atlas
+  Gate -.-> SideQ
+  SideQ -.->|async remediate| Cloud
   Atlas --> Cloud --> Verify --> FeatSO --> Merge --> Rel
   CA -.->|AI output| AIRed
   ST -.->|AI output| AIRed
@@ -60,4 +66,4 @@ flowchart LR
   Rel -->|result| Lead
 ```
 
-Dashed `Zscal` node = optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` stub (MOCK without credentials). See [`zscaler-ai-red-teaming-provider.md`](./zscaler-ai-red-teaming-provider.md).
+Dashed `Zscal` = optional `RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler` stub (MOCK without credentials). Collapsed gate runs pre-release + post-remediation in one pass; remediation is a non-blocking side-queue; every iteration needs **red_team or security** approval. See [`zscaler-ai-red-teaming-provider.md`](./zscaler-ai-red-teaming-provider.md).
