@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
-import { startOnDemandCheck } from "@/lib/desk";
+import { startOnDemandCheck, applyIterationGateDecision } from "@/lib/desk";
 import { runGrokReleaseIntel } from "@/lib/grok-release-intel";
+import { buildSpaceXaiComplianceSnapshot } from "@/lib/spacexai-compliance";
 
 export const runtime = "nodejs";
 
 /**
  * Challenge trigger: Lead-style on-demand check + Grok API release intel.
  * Mirrors Grok Bot Lead routine `on-demand-release` for Desk live walkthrough.
+ * Returns SpaceXAI LIVE/MOCK chips + trustCheck evidence (never secret values).
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     goal?: string;
     repository?: string;
+    /** When true, also exercise security iteration sign-off (demo). */
+    autoOpenIterationGate?: boolean;
   };
 
   const started = await startOnDemandCheck({
@@ -38,6 +42,23 @@ export async function POST(request: Request) {
     findings,
   });
 
+  let iterationGate = started.desk.iterationGate
+    ? started.iterationGate
+    : null;
+
+  if (body.autoOpenIterationGate !== false && started.desk.iterationGate) {
+    const opened = await applyIterationGateDecision({
+      runId: started.view.runId,
+      decision: "approved",
+      kind: "security",
+      decidedBy: "challenge-trigger",
+      note: "Challenge path: security sign-off so merge/release can be exercised",
+    });
+    iterationGate = opened.iterationGate;
+  }
+
+  const compliance = buildSpaceXaiComplianceSnapshot(process.env, { intel });
+
   return NextResponse.json({
     ok: true,
     handoffs: [
@@ -50,8 +71,12 @@ export async function POST(request: Request) {
     runId: started.view.runId,
     runUrl: `/runs/${started.view.runId}`,
     readiness: started.view.leadOutput.readiness,
-    iterationGate: started.desk.iterationGate ?? null,
+    iterationGate,
     intel,
+    chips: compliance.chips,
+    compliancePct: compliance.compliancePct,
+    nhiMissing: compliance.nhiSlots.missing,
+    trustCheck: intel.trustCheck,
     list: started.list,
   });
 }
