@@ -35,6 +35,7 @@ export {
   type SpecialistSnapshot,
   type ReadinessAssessment,
   type ReadinessCheckpointTrail,
+  type ReadinessTestGateTrail,
 } from "./readiness.js";
 
 export {
@@ -48,6 +49,48 @@ export {
   type CheckpointResult,
   type CheckpointRecord,
 } from "./verification.js";
+
+export {
+  evaluateTestGate,
+  createMockWorkspaceSuiteRunner,
+  parseTestGateRecord,
+  latestTestGate,
+  type TestGateCheckStatus,
+  type TestGateCheck,
+  type TestGateResult,
+  type TestGateRecord,
+  type WorkspaceSuiteResult,
+  type WorkspaceSuiteRunner,
+} from "./test-gate.js";
+
+export {
+  buildReleaseNotesPackage,
+  parseReleaseNotesRecord,
+  latestReleaseNotes,
+  type ReleaseNotesHighlight,
+  type ReleaseNotesPackage,
+  type ReleaseNotesRecord,
+} from "./release-notes.js";
+
+export {
+  buildRollbackPlan,
+  parseRollbackRecord,
+  latestRollbackPlan,
+  type RollbackStep,
+  type RollbackPlan,
+  type RollbackRecord,
+} from "./rollback.js";
+
+export {
+  createMockObservabilitySink,
+  parseObservabilityRecord,
+  summarizeObservability,
+  type ObservabilityEventKind,
+  type ObservabilityEvent,
+  type ObservabilitySink,
+  type ObservabilitySummary,
+  type ObservabilityRecord,
+} from "./observability.js";
 
 export {
   createDmSession,

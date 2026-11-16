@@ -1,6 +1,6 @@
 # Release Desk UI (Milestone 7)
 
-Delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) — specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, and human merge/release gates.
+Delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) — specialist results, checkpoints, automated test gates, release notes, rollback plans, observability, cloud-agent handoffs, PR metadata, audit trail, and human merge/release gates.
 
 Voice is optional and **MOCK**-labeled only.
 
@@ -54,6 +54,8 @@ KYC demo remains on port 3000 (`npm run dev`).
 | GitHub PR client | MOCK unless `GH_TOKEN` / `GITHUB_TOKEN` is set (UI uses MOCK client) |
 | Cursor Cloud Agents | Appear only when Builder remediates; MOCK by default |
 | Voice channel | Stub acknowledgment only |
+| Workspace test suite runner | MOCK green by default (Lead `createMockWorkspaceSuiteRunner`) |
+| Observability sink | In-memory MOCK recorder |
 
 ## Layout
 

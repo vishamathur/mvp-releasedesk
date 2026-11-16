@@ -7,9 +7,13 @@ import { CloudHandoffs } from "@/components/CloudHandoffs";
 import { DeskHeader } from "@/components/DeskHeader";
 import { DmPanel } from "@/components/DmPanel";
 import { MockLabel } from "@/components/MockLabel";
+import { ObservabilityPanel } from "@/components/ObservabilityPanel";
 import { PrPanel } from "@/components/PrPanel";
 import { ReadinessBanner } from "@/components/ReadinessBanner";
+import { ReleaseNotesPanel } from "@/components/ReleaseNotesPanel";
+import { RollbackPanel } from "@/components/RollbackPanel";
 import { SpecialistResults } from "@/components/SpecialistResults";
+import { TestGatePanel } from "@/components/TestGatePanel";
 import { getRun } from "@/lib/desk";
 
 export const dynamic = "force-dynamic";
@@ -57,14 +61,21 @@ export default async function RunPage({ params }: Props) {
           <div className="space-y-16">
             <SpecialistResults specialists={view.assessment.specialists} tasks={tasks} />
             <CheckpointTrail checkpoints={view.checkpoints.checkpoints} />
+            <TestGatePanel gates={view.testGates?.gates ?? []} />
+            <ReleaseNotesPanel packages={view.releaseNotes?.packages ?? []} />
             <CloudHandoffs tasks={tasks} />
             <PrPanel
               pullRequests={view.pullRequests.pullRequests}
               prClientMode={desk.prClientMode}
             />
+            <RollbackPanel plans={view.rollback?.plans ?? []} />
           </div>
           <div className="space-y-16">
             <ApprovalGates runId={view.runId} gates={view.approvals.gates} />
+            <ObservabilityPanel
+              summary={view.observability?.summary}
+              events={view.observability?.events ?? []}
+            />
             <AuditTrail events={view.run.auditTrail} />
             <DmPanel runId={view.runId} initialMessages={desk.dmSession.messages} />
           </div>

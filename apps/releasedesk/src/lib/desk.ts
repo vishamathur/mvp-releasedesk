@@ -49,15 +49,46 @@ async function ensureDirs() {
   return p;
 }
 
+function emptyAgileArtifacts() {
+  return {
+    testGates: { gates: [] as never[] },
+    releaseNotes: { packages: [] as never[] },
+    rollback: { plans: [] as never[] },
+    observability: {
+      summary: {
+        mode: "mock" as const,
+        eventCount: 0,
+        kinds: {},
+        mocked: true,
+        recent: [],
+      },
+      events: [],
+    },
+  };
+}
+
+/** Backfill agile SDLC fields for older recorded fixtures. */
+export function normalizeReport(report: ReleaseCheckReport): ReleaseCheckReport {
+  const defaults = emptyAgileArtifacts();
+  return {
+    ...report,
+    testGates: report.testGates ?? defaults.testGates,
+    releaseNotes: report.releaseNotes ?? defaults.releaseNotes,
+    rollback: report.rollback ?? defaults.rollback,
+    observability: report.observability ?? defaults.observability,
+  };
+}
+
 export function viewReport(desk: DeskReport): ReleaseCheckReport {
-  if (!desk.approvalOverlay) return desk.report;
+  const normalized = normalizeReport(desk.report);
+  if (!desk.approvalOverlay) return normalized;
 
   const lead = new LeadOrchestrator({
     store: createInMemoryStore(),
     enableRemediation: false,
   });
 
-  const baseGates = desk.report.approvals.gates.map((g) => ({
+  const baseGates = normalized.approvals.gates.map((g) => ({
     ...g,
     status: "pending" as const,
     decidedAt: undefined,
@@ -65,7 +96,7 @@ export function viewReport(desk: DeskReport): ReleaseCheckReport {
     notes: undefined,
   }));
   const base: ReleaseCheckReport = {
-    ...desk.report,
+    ...normalized,
     approvals: { gates: baseGates },
   };
 
@@ -78,7 +109,7 @@ export function viewReport(desk: DeskReport): ReleaseCheckReport {
       ...(g.notes !== undefined ? { notes: g.notes } : {}),
     }));
 
-  if (decisions.length === 0) return desk.report;
+  if (decisions.length === 0) return normalized;
   return lead.applyApprovalsToReport(base, decisions);
 }
 

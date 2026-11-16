@@ -11,6 +11,7 @@ This repository currently includes:
 - **Milestone 5** — Builder → Cursor Cloud Agents (Coding / Testing / Review; MOCK by default)
 - **Milestone 6** — Verification checkpoints, remediation loops, PR workflow + human gates
 - **Milestone 7** — Release Desk UI + demo scenarios (`apps/releasedesk`)
+- **Agile SDLC hardening** — automated test gates, release notes package, rollback plan, observability hooks (Lead + UI)
 
 License: [GPL-3.0](./LICENSE).
 

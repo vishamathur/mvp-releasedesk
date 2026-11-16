@@ -1,8 +1,10 @@
 # `@releasedesk/lead`
 
-Lead Agent orchestrator for Release Desk (Milestones 3 + 6).
+Lead Agent orchestrator for Release Desk (Milestones 3 + 6 + agile SDLC hardening).
 
 Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default), runs **checkpoint verification** after specialist and cloud-agent stages, drives **remediation → reverify** loops, tracks **PR workflow** (MOCK GitHub or real via token), models **human approval gates** (never auto-merge), and consolidates release readiness with a full audit trail.
+
+Also packages **automated test gates**, **release notes**, **rollback plans**, and **observability** events onto each run (MOCK sinks/runners by default).
 
 Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for real specialists + Builder Cloud Agents. Release Desk UI is Milestone 7.
 
