@@ -1,43 +1,40 @@
-# Release Desk — Grok Bot pack (SpaceXAI challenge)
+# SpaceXAI Grok Bots — Lead + specialists
 
-**Enterprise problem (Space 1):** Northwind Bank delivery managers cannot tell if a KYC release is safe to ship. Manual chase across git, policy, and security burns days; late blockers cost release windows.
+Roster (≥3 specialists): **Lead**, **Change Analyst**, **Standards**, **Security**, **Builder**.
 
-**System:** Lead Grok Bot + three specialists. Builder hands work to a **Cursor cloud agent** guided by repo rules/skills. What the agent ships calls the **Grok API** to classify / extract / score / summarize release evidence.
+Each bot definition aligns to Grok Bot fields: **persona · skills · routines · connectors** (plus teammates/channels).
 
-> Paste each `bots/*/PERSONA.md` (+ skills/routines) into [Grok Bot](https://x.ai/bot). Connectors listed per bot. Live Desk demo also mirrors handoffs at `POST /api/bots/trigger`.
+## Definitions (source of truth)
 
-## Roster
-
-| Bot | Job | Hands off to |
+| Bot | Definition | Exclusive key |
 | --- | --- | --- |
-| **Lead — Release Desk** | Owns the release-check run; delegates; consolidates readiness; requests human gates | Change Analyst, Standards, Security (parallel); Builder when remediation needed |
-| **Change Analyst** | Diff + release-notes draft + impact | Lead (findings); feeds Standards |
-| **Standards** | Policy/compliance deviations with evidence | Lead |
-| **Security** | Release-blocking risks | Lead; may recommend Builder |
-| **Builder** (specialist #3 if counting CA/Standards/Security — see note) | Turns blockers into Cursor Cloud Agent work | **Cursor Coding agent** → ships Grok API intel endpoint |
+| Lead | `definitions/lead.json` | `RELEASEDESK_GROK_API_KEY_LEAD` |
+| Change Analyst | `definitions/change-analyst.json` | `RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST` |
+| Standards | `definitions/standards.json` | `RELEASEDESK_GROK_API_KEY_STANDARDS` |
+| Security | `definitions/security.json` | `RELEASEDESK_GROK_API_KEY_SECURITY` |
+| Builder | `definitions/builder.json` | `RELEASEDESK_GROK_API_KEY_BUILDER` |
 
-**Note:** Brief requires Lead + ≥3 specialists. Use **Change Analyst, Standards, Security** as the three specialists; **Builder** is the handoff bot that launches Cursor (can be a fourth specialist or a skill on Lead). This pack includes Builder as a fourth named bot for a clear Cursor launch boundary.
+Shared `XAI_API_KEY` / `GROK_API_KEY` are **never** used as fallbacks.
 
-## Human approval points
+`registry.json` stores live bot IDs **only** when the create API returns them. Until then every `liveBotId` is `null` (no invented IDs).
 
-1. Dual intake (cost + queue) — before Lead starts (when intake is enabled)
-2. Feature sign-off checklist — AI-written features before merge/release readiness
-3. Merge gate — never auto-merge
-4. Release gate — ship / hold
-
-## Trust / check output
-
-- Structured Grok API JSON (`classify`, `extract`, `score`, `summarize`) validated by schema in `apps/releasedesk`
-- `mocked: true` when no `XAI_API_KEY` — labeled MOCK in UI
-- Human gates remain authoritative; Grok scores never auto-approve merge/release
-
-## Live demo trigger
+## Create bots when keys exist
 
 ```bash
-# Desk running on :3001
-curl -s -X POST http://localhost:3001/api/bots/trigger \
-  -H 'content-type: application/json' \
-  -d '{"goal":"Release readiness for Northwind KYC","repository":"vishamathur/mvp-releasedesk"}'
+# Dry run (no HTTP)
+npm run create:grok-bots -- --dry-run
+
+# Live create (per-agent keys required)
+export RELEASEDESK_GROK_API_KEY_LEAD=...
+export RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST=...
+export RELEASEDESK_GROK_API_KEY_STANDARDS=...
+export RELEASEDESK_GROK_API_KEY_SECURITY=...
+export RELEASEDESK_GROK_API_KEY_BUILDER=...
+npm run create:grok-bots
 ```
 
-Then open the returned run URL and walk handoffs + Grok API intel panel.
+Optional: `RELEASEDESK_GROK_BOT_API_BASE` (default `https://api.x.ai/v1`), `RELEASEDESK_GROK_BOT_CREATE_PATH` (default `/bots`).
+
+## Desk
+
+`npm run desk` → Grok Bots panel opens persona / skills / routines / connectors from these definitions. Iteration gate (`red_team` \| `security`) from PR #14 is preserved.

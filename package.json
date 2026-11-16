@@ -28,7 +28,8 @@
     "check:release:stubs": "npm run check -w @releasedesk/lead --",
     "lint": "npm run lint -w @northwind/kyc",
     "seed": "npm run seed -w @northwind/kyc",
-    "generate:demos": "npm run generate:demos -w @releasedesk/ui"
+    "generate:demos": "npm run generate:demos -w @releasedesk/ui",
+    "create:grok-bots": "npm exec -w @releasedesk/ui -- tsx ../../scripts/create-grok-bots.ts"
   },
   "engines": {
     "node": ">=20"
