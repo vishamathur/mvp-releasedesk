@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { startOnDemandCheck } from "@/lib/desk";
-import { runGrokReleaseIntel } from "@/lib/grok-release-intel";
+import {
+  describeGrokIntelKeyStatus,
+  runGrokReleaseIntel,
+} from "@/lib/grok-release-intel";
 
 export const runtime = "nodejs";
 
@@ -37,6 +40,7 @@ export async function POST(request: Request) {
     goal: started.view.run.goal,
     findings,
   });
+  const keyStatus = describeGrokIntelKeyStatus();
 
   return NextResponse.json({
     ok: true,
@@ -52,6 +56,16 @@ export async function POST(request: Request) {
     readiness: started.view.leadOutput.readiness,
     iterationGate: started.desk.iterationGate ?? null,
     intel,
+    keyStatus,
+    showcase: {
+      label: intel.label,
+      mocked: intel.mocked,
+      exclusiveKey: intel.trustCheck.keyEnvVar,
+      talkTrack:
+        intel.label === "LIVE"
+          ? `Say: LIVE via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`
+          : `Say: MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE; shared XAI/GROK keys are ignored.`,
+    },
     list: started.list,
   });
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { runGrokReleaseIntel, trustCheckGrokIntelPayload } from "./grok-release-intel";
+import {
+  describeGrokIntelKeyStatus,
+  runGrokReleaseIntel,
+  trustCheckGrokIntelPayload,
+} from "./grok-release-intel";
 
 describe("runGrokReleaseIntel", () => {
   it("returns MOCK without exclusive Lead Grok key (ignores shared XAI/GROK)", async () => {
@@ -22,6 +26,8 @@ describe("runGrokReleaseIntel", () => {
 
     expect(result.mocked).toBe(true);
     expect(result.mode).toBe("mock");
+    expect(result.label).toBe("MOCK");
+    expect(result.keyPresent).toBe(false);
     expect(result.trustCheck.humanGateStillRequired).toBe(true);
     expect(result.trustCheck.schemaValid).toBe(true);
     expect(result.trustCheck.usedSharedFallback).toBe(false);
@@ -62,6 +68,8 @@ describe("runGrokReleaseIntel", () => {
 
     expect(result.mocked).toBe(false);
     expect(result.mode).toBe("live");
+    expect(result.label).toBe("LIVE");
+    expect(result.keyPresent).toBe(true);
     expect(result.classify.category).toBe("routine_release_candidate");
     expect(result.summarize).toContain("human gates");
     expect(result.trustCheck.humanGateStillRequired).toBe(true);
@@ -75,5 +83,23 @@ describe("runGrokReleaseIntel", () => {
         summarize: "ok",
       }),
     ).toEqual({ ok: false, reason: "classify.confidence out of range [0,1]" });
+  });
+
+  it("describeGrokIntelKeyStatus reports presence without reading shared keys", () => {
+    const absent = describeGrokIntelKeyStatus({
+      XAI_API_KEY: "shared",
+      GROK_API_KEY: "shared",
+    });
+    expect(absent.keyPresent).toBe(false);
+    expect(absent.liveReady).toBe(false);
+    expect(absent.mockUnlessLive).toMatch(/MOCK/);
+
+    const present = describeGrokIntelKeyStatus({
+      RELEASEDESK_GROK_API_KEY_LEAD: "lead-key",
+      XAI_API_KEY: "shared-ignored",
+    });
+    expect(present.keyPresent).toBe(true);
+    expect(present.liveReady).toBe(true);
+    expect(present.mockUnlessLive).toMatch(/LIVE/);
   });
 });
