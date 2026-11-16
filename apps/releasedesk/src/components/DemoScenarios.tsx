@@ -50,16 +50,22 @@ export function DemoScenarios({ scenarios }: { scenarios: DemoScenarioMeta[] }) 
                 disabled={busy !== null}
                 onClick={() => void run(s.id, "live")}
               >
-                {busy === `${s.id}:live` ? "Running…" : "Run live"}
+                {busy === `${s.id}:live`
+                  ? "Running…"
+                  : s.id === "iteration-approval-gate"
+                    ? "Open gate demo"
+                    : "Run live"}
               </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                disabled={busy !== null}
-                onClick={() => void run(s.id, "fixture")}
-              >
-                {busy === `${s.id}:fixture` ? "Loading…" : "Load fixture"}
-              </button>
+              {s.id !== "iteration-approval-gate" ? (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={busy !== null}
+                  onClick={() => void run(s.id, "fixture")}
+                >
+                  {busy === `${s.id}:fixture` ? "Loading…" : "Load fixture"}
+                </button>
+              ) : null}
             </div>
           </li>
         ))}

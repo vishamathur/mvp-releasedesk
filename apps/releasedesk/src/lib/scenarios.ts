@@ -37,6 +37,13 @@ export const DEMO_SCENARIOS: DemoScenarioMeta[] = [
     blurb: "Clean check waiting on DM merge + release decisions (gates still pending).",
     expectedReadiness: "needs_human",
   },
+  {
+    id: "iteration-approval-gate",
+    title: "Iteration approval gate",
+    blurb:
+      "Collapsed AI Red Team gate: pending code iteration blocked until red team OR security sign-off. Approve to open; reject to keep blocked. Remediation stays on a non-blocking side-queue.",
+    expectedReadiness: "needs_human (iteration gate pending → open/blocked)",
+  },
 ];
 
 function blockingSecurity(inv: Parameters<AgentRunner>[0]): Awaited<ReturnType<AgentRunner>> {
@@ -132,6 +139,14 @@ export function runnersForScenario(scenarioId: DemoScenarioId): {
         goal: "Demo: persistent security block on Northwind KYC release",
       };
     }
+
+    case "iteration-approval-gate":
+      return {
+        runners: stubs,
+        enableRemediation: false,
+        maxRemediationCycles: 0,
+        goal: "Demo: per-iteration red team|security approval hard gate",
+      };
 
     default: {
       const _exhaustive: never = scenarioId;

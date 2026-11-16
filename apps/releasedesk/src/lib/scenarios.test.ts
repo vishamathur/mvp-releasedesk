@@ -6,9 +6,15 @@ import { viewReport } from "./desk";
 import type { DeskReport } from "./types";
 
 describe("demo scenarios", () => {
-  it("lists the four required scenarios", () => {
+  it("lists the demo scenarios including iteration approval gate", () => {
     expect(DEMO_SCENARIOS.map((s) => s.id).sort()).toEqual(
-      ["blocked-on-security", "happy-path", "pending-approval", "remediation-loop"].sort(),
+      [
+        "blocked-on-security",
+        "happy-path",
+        "iteration-approval-gate",
+        "pending-approval",
+        "remediation-loop",
+      ].sort(),
     );
   });
 

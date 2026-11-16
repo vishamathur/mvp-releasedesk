@@ -5,6 +5,7 @@ import type {
   ReleaseCheckReport,
 } from "@releasedesk/lead";
 import type { RunContext } from "@releasedesk/core";
+import type { IterationGateDemoState } from "./iteration-gate";
 
 /** Persisted desk report — orchestrator output plus UI overlay fields. */
 export type DeskReport = {
@@ -21,6 +22,8 @@ export type DeskReport = {
   approvalOverlay?: ApprovalRecord;
   /** Feature checklist sign-offs applied after the run completed. */
   featureSignOffOverlay?: FeatureSignOffRecord;
+  /** Collapsed AI Red Team iteration gate (red_team|security hard approval). */
+  iterationGate?: IterationGateDemoState;
 };
 
 export type RunListItem = {
@@ -44,7 +47,8 @@ export type DemoScenarioId =
   | "happy-path"
   | "remediation-loop"
   | "blocked-on-security"
-  | "pending-approval";
+  | "pending-approval"
+  | "iteration-approval-gate";
 
 export type DemoScenarioMeta = {
   id: DemoScenarioId;

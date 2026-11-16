@@ -4,6 +4,7 @@ import {
   FileBackedRunContextStore,
   createInMemoryStore,
   nowIso,
+  type IterationApprovalKind,
   type RunContextStore,
 } from "@releasedesk/core";
 import {
@@ -22,6 +23,11 @@ import {
   type FeatureSignOffRecord,
   type ReleaseCheckReport,
 } from "@releasedesk/lead";
+import {
+  applyIterationSignOff,
+  createPendingIterationGateDemo,
+  recomputeIterationGate,
+} from "./iteration-gate";
 import { DEMO_SCENARIOS, isDemoScenarioId, runnersForScenario } from "./scenarios";
 import type { DemoScenarioId, DeskReport, RunListItem } from "./types";
 
@@ -160,7 +166,11 @@ function toListItem(desk: DeskReport): RunListItem {
     blockingCount: report.leadOutput.blockingIssues.length,
     pendingApprovals:
       getPendingGates(report.approvals).length +
-      getIncompleteChecklists(report.featureSignOffs).length,
+      getIncompleteChecklists(report.featureSignOffs).length +
+      (desk.iterationGate &&
+      recomputeIterationGate(desk.iterationGate).uiStatus === "pending"
+        ? 1
+        : 0),
     checkpointCount: report.checkpoints.checkpoints.length,
     prCount: report.pullRequests.pullRequests.length,
     mockIntegrations: desk.prClientMode === "mock",
@@ -244,7 +254,15 @@ export async function getRun(runId: string) {
   const desk = await readDeskReport(runId);
   if (!desk) return undefined;
   const view = viewReport(desk);
-  return { desk, view, list: toListItem({ ...desk, report: view }) };
+  const iterationGate = desk.iterationGate
+    ? recomputeIterationGate(desk.iterationGate)
+    : undefined;
+  return {
+    desk,
+    view,
+    list: toListItem({ ...desk, report: view }),
+    ...(iterationGate !== undefined ? { iterationGate } : {}),
+  };
 }
 
 export async function startOnDemandCheck(input?: {
@@ -311,12 +329,120 @@ export async function loadFixtureScenario(scenarioId: DemoScenarioId) {
   }
 }
 
+export async function startIterationApprovalDemo() {
+  const base = await runDemoScenario("pending-approval");
+  const iterationGate = createPendingIterationGateDemo();
+  const desk: DeskReport = {
+    ...base.desk,
+    scenarioId: "iteration-approval-gate",
+    scenarioLabel: "Iteration approval gate",
+    iterationGate,
+    updatedAt: nowIso(),
+    report: {
+      ...base.desk.report,
+      leadOutput: {
+        ...base.desk.report.leadOutput,
+        readiness: "needs_human",
+        summary: formatIterationGateSummary(iterationGate.iterationId, "pending"),
+        blockingIssues: [
+          ...base.desk.report.leadOutput.blockingIssues.filter(
+            (b) => !b.startsWith("Iteration hard gate:"),
+          ),
+          `Iteration hard gate: ${iterationGate.iterationId} awaiting red_team or security approval`,
+        ],
+      },
+    },
+  };
+  await writeDeskReport(desk);
+  const view = viewReport(desk);
+  return {
+    desk,
+    view,
+    list: toListItem({ ...desk, report: view }),
+    iterationGate: recomputeIterationGate(iterationGate),
+  };
+}
+
+function formatIterationGateSummary(
+  iterationId: string,
+  uiStatus: "pending" | "open" | "blocked",
+): string {
+  if (uiStatus === "open") {
+    return `Iteration ${iterationId} gate OPEN — red_team|security approval satisfied; main flow may proceed (remediation side-queue non-blocking).`;
+  }
+  if (uiStatus === "blocked") {
+    return `Iteration ${iterationId} gate BLOCKED — sign-off rejected; cannot proceed without red_team or security approval.`;
+  }
+  return `Iteration ${iterationId} gate PENDING — hard block until red_team OR security approval.`;
+}
+
+export async function applyIterationGateDecision(input: {
+  runId: string;
+  decision: "approved" | "rejected";
+  kind?: IterationApprovalKind;
+  decidedBy?: string;
+  note?: string;
+}) {
+  const desk = await readDeskReport(input.runId);
+  if (!desk) throw new Error(`Run ${input.runId} not found`);
+  if (!desk.iterationGate) {
+    throw new Error(`Run ${input.runId} has no iteration gate demo state`);
+  }
+
+  const nextState = applyIterationSignOff(desk.iterationGate, {
+    decision: input.decision,
+    ...(input.kind !== undefined ? { kind: input.kind } : {}),
+    decidedBy: input.decidedBy ?? "delivery-manager@northwind",
+    ...(input.note !== undefined ? { note: input.note } : {}),
+  });
+  const computed = recomputeIterationGate(nextState);
+
+  const otherBlockers = desk.report.leadOutput.blockingIssues.filter(
+    (b) => !b.startsWith("Iteration hard gate:"),
+  );
+  const blockingIssues =
+    computed.uiStatus === "open"
+      ? otherBlockers
+      : [
+          ...otherBlockers,
+          computed.uiStatus === "blocked"
+            ? `Iteration hard gate: ${nextState.iterationId} blocked (sign-off rejected)`
+            : `Iteration hard gate: ${nextState.iterationId} awaiting red_team or security approval`,
+        ];
+
+  const updated: DeskReport = {
+    ...desk,
+    iterationGate: nextState,
+    updatedAt: nowIso(),
+    report: {
+      ...desk.report,
+      leadOutput: {
+        ...desk.report.leadOutput,
+        readiness: computed.uiStatus === "open" ? desk.report.leadOutput.readiness : "needs_human",
+        summary: formatIterationGateSummary(nextState.iterationId, computed.uiStatus),
+        blockingIssues,
+      },
+    },
+  };
+  await writeDeskReport(updated);
+  const view = viewReport(updated);
+  return {
+    desk: updated,
+    view,
+    list: toListItem({ ...updated, report: view }),
+    iterationGate: computed,
+  };
+}
+
 export async function startDemoScenario(
   scenarioId: string,
   mode: "live" | "fixture" = "live",
 ) {
   if (!isDemoScenarioId(scenarioId)) {
     throw new Error(`Unknown demo scenario: ${scenarioId}`);
+  }
+  if (scenarioId === "iteration-approval-gate") {
+    return startIterationApprovalDemo();
   }
   if (mode === "fixture") {
     const loaded = await loadFixtureScenario(scenarioId);
