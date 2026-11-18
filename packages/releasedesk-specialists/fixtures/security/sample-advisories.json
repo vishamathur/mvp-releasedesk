@@ -1,0 +1,58 @@
+{
+  "source": "fixtures/security/sample-advisories.json",
+  "note": "Sample advisory corpus for Release Desk Security Agent. Prefer live NVD/OSV when credentials exist; otherwise label MOCK:.",
+  "advisories": [
+    {
+      "id": "RD-ADV-2024-0001",
+      "advisoryId": "CVE-2024-99991",
+      "title": "Prototype pollution in fictional evil-lib",
+      "summary": "evil-lib versions below 9.9.9 allow prototype pollution via merge().",
+      "severity": "critical",
+      "packageName": "evil-lib",
+      "ecosystem": "npm",
+      "vulnerableVersions": "<9.9.9",
+      "fixedVersion": "9.9.9",
+      "releaseBlocking": true,
+      "references": ["https://example.invalid/advisories/CVE-2024-99991"]
+    },
+    {
+      "id": "RD-ADV-2024-0002",
+      "advisoryId": "CVE-2024-99992",
+      "title": "Path traversal in fictional insecure-parser",
+      "summary": "insecure-parser <2.0.0 allows path traversal when unpacking archives.",
+      "severity": "high",
+      "packageName": "insecure-parser",
+      "ecosystem": "npm",
+      "vulnerableVersions": "<2.0.0",
+      "fixedVersion": "2.0.0",
+      "releaseBlocking": true,
+      "references": ["https://example.invalid/advisories/CVE-2024-99992"]
+    },
+    {
+      "id": "RD-ADV-2024-0003",
+      "advisoryId": "CVE-2024-99993",
+      "title": "ReDoS in fictional soft-regex",
+      "summary": "soft-regex <=1.2.3 is susceptible to catastrophic backtracking on crafted input.",
+      "severity": "medium",
+      "packageName": "soft-regex",
+      "ecosystem": "npm",
+      "vulnerableVersions": "<=1.2.3",
+      "fixedVersion": "1.2.4",
+      "releaseBlocking": false,
+      "references": ["https://example.invalid/advisories/CVE-2024-99993"]
+    },
+    {
+      "id": "RD-ADV-2024-0004",
+      "advisoryId": "GHSA-demo-next-info",
+      "title": "Informational advisory template for Next.js documentation hygiene",
+      "summary": "Ensure Next.js apps disable unnecessary public debug endpoints in production. This fixture is informational and not release-blocking.",
+      "severity": "info",
+      "packageName": "next",
+      "ecosystem": "npm",
+      "vulnerableVersions": "*",
+      "fixedVersion": null,
+      "releaseBlocking": false,
+      "references": ["https://example.invalid/advisories/GHSA-demo-next-info"]
+    }
+  ]
+}
