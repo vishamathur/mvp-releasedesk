@@ -1,6 +1,13 @@
 import { nowIso } from "@releasedesk/core";
 import type { PrWorkflowClient, PullRequestRecord, TrackedPullRequest } from "./types.js";
 
+export {
+  evaluatePrAiFrameworkMergeGate,
+  assertPrMergeAllowedForAiFrameworks,
+  latestSecurityFindings,
+  unresolvedAiFrameworkFindingIds,
+} from "./ai-framework-merge.js";
+
 export function parsePullRequestRecord(raw: unknown): PullRequestRecord {
   if (!raw || typeof raw !== "object") return { pullRequests: [] };
   const pullRequests = (raw as { pullRequests?: TrackedPullRequest[] }).pullRequests;
@@ -28,6 +35,8 @@ export async function openAndTrackPullRequest(
     base: string;
     source?: TrackedPullRequest["source"];
     labels?: string[];
+    /** Draft PRs are exempt from ATLAS/OWASP merge block. */
+    draft?: boolean;
   },
 ): Promise<TrackedPullRequest> {
   const pr = await client.openPullRequest({
@@ -36,6 +45,7 @@ export async function openAndTrackPullRequest(
     body: input.body,
     head: input.head,
     base: input.base,
+    draft: input.draft ?? false,
     labels: input.labels ?? ["releasedesk", "needs-human-approval"],
   });
 
@@ -51,6 +61,7 @@ export async function openAndTrackPullRequest(
     source: input.source ?? "lead",
     autoMerge: false,
     humanMergeGateRequired: true,
+    draft: pr.draft,
   };
 }
 
@@ -86,6 +97,7 @@ export async function trackExistingPullRequest(
     source: input.source ?? "builder",
     autoMerge: false,
     humanMergeGateRequired: true,
+    draft: pr.draft,
   };
 }
 
@@ -102,15 +114,24 @@ export async function pollTrackedPullRequest(
     lastStatus: status,
     autoMerge: false,
     humanMergeGateRequired: true,
+    draft: tracked.draft,
   };
 }
 
 /**
  * Explicit guard — always throws. Use Lead human merge gate instead.
+ * Also enforces ATLAS/OWASP open-for-review merge block when `aiFrameworkGate` provided.
  */
 export async function refuseAutoMerge(
   client: PrWorkflowClient,
   tracked: TrackedPullRequest,
+  opts?: {
+    /** When set, open-for-review PRs with unresolved ATLAS/OWASP findings cannot merge. */
+    assertAiFrameworkMerge?: () => void;
+  },
 ): Promise<never> {
+  if (opts?.assertAiFrameworkMerge) {
+    opts.assertAiFrameworkMerge();
+  }
   return client.mergePullRequest(tracked.repository, tracked.prNumber);
 }
