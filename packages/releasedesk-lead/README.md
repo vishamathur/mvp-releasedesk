@@ -93,6 +93,7 @@ console.log(report.checkpoints, report.pullRequests, report.approvals);
 | Unique run IDs | Via `@releasedesk/core` store / `run_` ids |
 | Parallel dispatch | Analysis wave via `Promise.all` (always includes Security) |
 | Mandatory Security | Every change routes Security; readiness blocked without recorded result |
+| ATLAS / OWASP LLM Top 10 | Hard fails on AI findings; block open-for-review PR merge (drafts exempt); human waive only |
 | Checkpoint verification | After `specialist_analysis`, `cloud_agents`, `post_remediation` |
 | Remediation loop | Builder + standards/security reverify when checkpoints fail |
 | PR workflow | Open/track/poll; MOCK or real GitHub; never auto-merge |

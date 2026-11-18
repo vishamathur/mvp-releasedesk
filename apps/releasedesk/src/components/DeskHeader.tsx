@@ -32,6 +32,16 @@ export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
           Agents
         </Link>
         <Link
+          href="/control"
+          className={
+            dark
+              ? "text-sm font-medium text-white/70 underline-offset-4 hover:text-white hover:underline"
+              : "text-sm font-medium text-rd-forest/70 underline-offset-4 hover:text-rd-ink hover:underline"
+          }
+        >
+          Control plane
+        </Link>
+        <Link
           href="/desk"
           className={
             dark

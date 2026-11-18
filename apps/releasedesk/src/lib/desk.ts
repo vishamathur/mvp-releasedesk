@@ -62,6 +62,7 @@ function normalizeReport(report: ReleaseCheckReport): ReleaseCheckReport {
   return {
     ...report,
     featureSignOffs: report.featureSignOffs ?? { checklists: [] },
+    aiFrameworkWaivers: report.aiFrameworkWaivers ?? { waivers: [] },
   };
 }
 
