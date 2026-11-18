@@ -34,7 +34,20 @@ export {
   latestTasksByRole,
   type SpecialistSnapshot,
   type ReadinessAssessment,
+  type ReadinessCheckpointTrail,
 } from "./readiness.js";
+
+export {
+  evaluateCheckpoint,
+  checkpointNeedsRemediation,
+  parseCheckpointRecord,
+  latestCheckpoint,
+  type CheckpointStage,
+  type CheckpointStatus,
+  type CheckpointIssue,
+  type CheckpointResult,
+  type CheckpointRecord,
+} from "./verification.js";
 
 export {
   createDmSession,
@@ -53,3 +66,29 @@ export {
   type ReleaseCheckTrigger,
   type ReleaseCheckReport,
 } from "./orchestrator.js";
+
+export {
+  createMockPrClient,
+  createRealPrClient,
+  resolvePrClient,
+  resolveGithubToken,
+  describePrClientMode,
+  parsePullRequestRecord,
+  parsePrNumberFromUrl,
+  openAndTrackPullRequest,
+  trackExistingPullRequest,
+  pollTrackedPullRequest,
+  refuseAutoMerge,
+  type PrClientMode,
+  type PrState,
+  type PrCheckStatus,
+  type PrMetadata,
+  type PrStatusSnapshot,
+  type OpenPullRequestInput,
+  type PrWorkflowClient,
+  type TrackedPullRequest,
+  type PullRequestRecord,
+  type MockPrClientOptions,
+  type RealPrClientOptions,
+  type ResolvePrClientOptions,
+} from "./pr/index.js";
