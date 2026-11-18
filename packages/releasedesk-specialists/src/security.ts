@@ -200,6 +200,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
         `Security risk narrative for ${repository} using MITRE ATLAS and OWASP LLM Top 10. Findings: ${JSON.stringify(findings)}`,
         {
           ...options.grok,
+          agentRole: options.grok?.agentRole ?? "security",
           fallback:
             findings.length === 0
               ? "No correlated advisories or ATLAS/OWASP findings."

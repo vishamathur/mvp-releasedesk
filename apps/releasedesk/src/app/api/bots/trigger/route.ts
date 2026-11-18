@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { startOnDemandCheck } from "@/lib/desk";
-import { runGrokReleaseIntel } from "@/lib/grok-release-intel";
+import {
+  describeGrokIntelKeyStatus,
+  runGrokReleaseIntel,
+} from "@/lib/grok-release-intel";
 
 export const runtime = "nodejs";
 
@@ -37,14 +40,15 @@ export async function POST(request: Request) {
     goal: started.view.run.goal,
     findings,
   });
+  const keyStatus = describeGrokIntelKeyStatus();
 
   return NextResponse.json({
     ok: true,
     handoffs: [
       "Lead → Change Analyst / Standards / Security (parallel)",
       "Lead → Builder (if remediation)",
-      "Builder → Cursor Coding/Testing/Review (Cloud Agents)",
-      "Shipped path → Grok API release intel (classify/extract/score/summarize)",
+      "Builder → Cursor Coding (ships Grok intel) → Testing ∥ Review (never merge)",
+      "Shipped path → Grok API release intel (classify + summarize + trustCheck)",
       "Human: iteration gate (red_team|security) → feature sign-off → merge → release",
     ],
     runId: started.view.runId,
@@ -52,6 +56,16 @@ export async function POST(request: Request) {
     readiness: started.view.leadOutput.readiness,
     iterationGate: started.desk.iterationGate ?? null,
     intel,
+    keyStatus,
+    showcase: {
+      label: intel.label,
+      mocked: intel.mocked,
+      exclusiveKey: intel.trustCheck.keyEnvVar,
+      talkTrack:
+        intel.label === "LIVE"
+          ? `Say: LIVE via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`
+          : `Say: MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE; shared XAI/GROK keys are ignored.`,
+    },
     list: started.list,
   });
 }

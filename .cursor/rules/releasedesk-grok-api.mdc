@@ -5,12 +5,15 @@ globs: apps/releasedesk/**/*
 
 # Grok API shipping rule
 
-When implementing Builder / Coding-agent remediation for Release Desk:
+When implementing Builder → Cursor remediation for Release Desk:
 
-1. Keep or extend `apps/releasedesk/src/lib/grok-release-intel.ts`.
+1. Keep or extend `apps/releasedesk/src/lib/grok-release-intel.ts` (Coding ship path).
 2. Expose via `POST /api/grok/release-intel`.
-3. Return structured classify + extract + score + summarize.
-4. `trustCheck.humanGateStillRequired` must stay `true`.
-5. Without `XAI_API_KEY` / `GROK_API_KEY`, return MOCK-labeled fallback — never fake a live mode.
-6. Do not auto-approve merge/release from Grok scores.
-7. Preserve iteration gate + ATLAS/OWASP merge block behavior.
+3. Return structured **classify + summarize** + trustCheck.
+4. `trustCheck.humanGateStillRequired` and `trustCheck.noAutoApprove` must stay `true`.
+5. Live path uses **only** `RELEASEDESK_GROK_API_KEY_LEAD`. Shared `XAI_API_KEY` / `GROK_API_KEY` are never consulted.
+6. Without that exclusive key, return MOCK-labeled fallback — never fake a live mode.
+7. Do not auto-approve merge/release from Grok output.
+8. Preserve iteration gate + ATLAS/OWASP merge block behavior.
+9. Keep **Coding + Testing + Review** Cursor cloud agents: Coding ships; Testing verifies; Review reviews; **none merge**.
+10. Each Cloud Agent uses its exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` — no shared `CURSOR_API_KEY` fallback.

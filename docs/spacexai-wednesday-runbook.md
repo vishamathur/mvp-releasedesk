@@ -15,12 +15,24 @@
 
 ## T-30 → T-0
 
-1. `npm install` if needed; `npm run build:core && npm run build:lead`
-2. Start Desk: `npm run dev:desk` (or monorepo script) → `:3001`
-3. Optional: `export XAI_API_KEY=...` for live Grok; else MOCK labeled — say why
-4. Open `/desk`, click through Lead → CA → Standards → **Security** (deep dive) → Builder
-5. Dry-run Challenge Trigger once; confirm run page shows gate + Grok panel
-6. Put two slides fullscreen; kill Slack/email
+1. `npm install` if needed; `npm run build:core && npm run build:lead && npm run build:specialists`
+2. Start Desk: `npm run desk` → `:3001`
+3. Optional live keys (else MOCK chips — say why, do not claim live):
+   - `export RELEASEDESK_GROK_API_KEY_LEAD=...` → Grok intel labels **LIVE**
+   - `export RELEASEDESK_CURSOR_API_KEY_CODING=...` (+ `TESTING` / `REVIEW`) and `RELEASEDESK_CLOUD_CLIENT=real` → Cursor agents live
+4. Sanity: `curl -s localhost:3001/api/grok/release-intel | jq .roomHint` — expect MOCK or LIVE line
+5. Open `/desk`, click through Lead → CA → Standards → **Security** (deep dive) → Builder
+6. Dry-run Challenge Trigger once; run page auto-runs Grok intel with MOCK/LIVE chip
+7. Put two slides fullscreen; kill Slack/email
+
+## Room demo steps (Coding → Grok API)
+
+1. On `/desk`, point at Challenge Trigger chip: **MOCK Grok until Lead key set** or **LIVE Grok key present**.
+2. Trigger workflow → land on run page.
+3. **Grok API release intel** panel auto-runs: chip says **MOCK Grok API** or **LIVE Grok API**; notes cite exclusive `RELEASEDESK_GROK_API_KEY_LEAD`.
+4. Scroll to **Cloud agent handoffs**: Coding ships · Testing verifies · Review reviews · `autoMerge=false`. MOCK Cursor chip unless exclusive Cursor keys + `RELEASEDESK_CLOUD_CLIENT=real`.
+5. Hit iteration gate (`red_team` OR `security`) — humans still decide.
+6. Talk track if MOCK: “Exclusive key absent; shared XAI/GROK/CURSOR keys are never used. Trust story holds.”
 
 ## Live session beat (most time in system)
 
@@ -36,8 +48,8 @@
 ## Ranked risks (what looks fake / can fail)
 
 1. **No x.ai/bot live UI** — Desk pack browser is real; say packs paste into Grok Bot; don’t claim native x.ai UI if not logged in.
-2. **MOCK Grok without key** — fine if labeled; looks fake if you say “live API” without `XAI_API_KEY`.
-3. **Cloud Agents MOCK by default** — Builder→Cursor path is rules/skills + trigger narrative; live cloud launch may be stubbed — name it.
+2. **MOCK Grok without key** — fine if labeled; looks fake if you say “live API” without `RELEASEDESK_GROK_API_KEY_LEAD`.
+3. **Cloud Agents MOCK by default** — need exclusive `RELEASEDESK_CURSOR_API_KEY_CODING` (+ TESTING/REVIEW) and `RELEASEDESK_CLOUD_CLIENT=real` for live; name MOCK otherwise.
 4. **Architecture slide out of date** — old Mermaid still says “Cloud Agents MOCK”; use `spacexai-slide-2-architecture.md`.
 5. **Intake demoted** — don’t start on intake; stay on agent nav → trigger → gate → intel.
 
