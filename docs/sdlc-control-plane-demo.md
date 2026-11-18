@@ -1,14 +1,14 @@
 # One runnable demo — SDLC control plane
 
-**PR tip:** stack on #28 (`cursor/cursor-cloud-grok-api-ship-d498`).  
-**Branch:** `cursor/sdlc-control-plane-2ceb`
+**Showcase tip:** [#30](https://github.com/vishamathur/mvp-releasedesk/pull/30) · `cursor/enterprise-sdlc-showcase-79dc`  
+**Architecture Mermaid:** [`architecture-mermaid.md`](./architecture-mermaid.md) · Slide 2 in [`spacexai-demo-slides.md`](./spacexai-demo-slides.md)
 
 ## Commands
 
 ```bash
 npm install
 npm run build:core && npm run build:lead && npm run build:specialists
-npm run demo:control-plane          # headless snapshot
+npm run demo:control-plane          # headless 7-stage snapshot
 npm run desk                        # http://localhost:3001/control
 ```
 
@@ -29,27 +29,29 @@ export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
 export RELEASEDESK_CLOUD_CLIENT=real
 ```
 
-Create Grok Bots in-app / API script:
+Create Grok Bots:
 
 ```bash
 npm run create:grok-bots -- --dry-run
 ```
 
-## Stages (enterprise depth)
+## Stages (full workflow — do not drop)
 
-1. Multi-customer intake (dual approvals)  
-2. Grok Bots Lead + Change Analyst + Standards + Security + Builder  
-3. ATLAS / OWASP AI Red Team collapsed gate  
-4. Iteration gate `red_team | security`  
-5. Cursor Coding ships → Grok API classify/extract/score/summarize  
-6. Human merge / release (+ feature sign-off)  
-7. Portfolio · token efficiency · NHI exclusive keys  
+1. **Multi-customer intake** — Customer ER · CostEstimate finance · dual cost+queue approvals · fairness priority  
+2. **Grok Bots** — Lead + Change Analyst + Standards + Security + Builder  
+3. **ATLAS / OWASP** — collapsed AI Red Team gate; hard-block review-ready PRs  
+4. **Iteration gate** — `red_team | security` before proceed  
+5. **Cursor → Grok API** — Coding ships; Testing ∥ Review never merge; classify/extract/score/summarize + trustCheck  
+6. **Human merge / release** — feature sign-off + merge + release; readiness **back to Lead**  
+7. **Portfolio · token efficiency · NHI** — DEMO_PORTFOLIO slices; exclusive `RELEASEDESK_*` keys  
 
-## Slides (live-edit)
+## Also open
 
-- `docs/spacexai-two-slides.md`
-- `docs/spacexai-demo-slides.md`
+| Route | Why |
+| --- | --- |
+| `/control` | 7-stage live narrative |
+| `/mvp` | Portfolio + gate + intel panel |
+| `/agents` | Full bot + cloud agent roster |
+| `/desk` | Challenge Trigger + bot nav |
 
-## Showcase desk still available
-
-`http://localhost:3001/desk` — bots panel + Challenge Trigger + runs.
+Never auto-merge. MOCK when exclusive keys absent.

@@ -1,5 +1,7 @@
 # Wednesday 9am — 30-minute morning runbook
 
+> **Superseded for room use by** [spacexai-room-runbook.md](./spacexai-room-runbook.md) (commands + clicks + MOCK vs live). Keep this file for the timed beat sheet.
+
 **Goal:** Minimal prep. Agent navigation first. Then gate. Then Grok API.
 
 ## Optimized file list (open these tabs)

@@ -1,7 +1,9 @@
 # SpaceXAI demo — two slides (+ optional third)
 
-Use as speaker notes / paste into any deck. **≤3 minutes total**, then live system.  
-Brief: two slides mandatory; most time live; expect live bot edits.
+Speaker notes for a ≤3-minute open, then live system.  
+Canonical store copy also lives at the Project docs store.
+
+**Live control plane (enterprise path):** `npm run desk` → http://localhost:3001/control · `npm run demo:control-plane`
 
 **Live control plane (enterprise path):** `npm run desk` → http://localhost:3001/control · `npm run demo:control-plane`
 
@@ -9,95 +11,85 @@ Brief: two slides mandatory; most time live; expect live bot edits.
 
 ## Slide 1 — Problem statement and assumptions
 
-**Title:** SDLC optimization for multi-customer IT services — the problem
+**Title:** SDLC optimization for multi-customer IT services
 
-**Problem statement:** An IT services organization delivering applications to many clients needs faster, safer release cycles across the portfolio. Late security and policy findings burn delivery windows; decision-makers can’t tell what’s safe to ship. Shown here with Northwind KYC as the worked example / proof.
+**Problem statement:** An IT services organization delivering applications to many clients needs faster, safer release cycles across the portfolio. Late security and policy findings burn delivery windows, and decision-makers lack a single trusted view of what is safe to ship versus still blocked.
 
-**Who feels it:** Delivery / release owners across a multi-customer portfolio (illustrated with Northwind KYC).
+**Who feels it:** Delivery and release owners responsible for multiple client applications.
 
-**What it costs today:** Late security/policy findings blow delivery windows; no single view of “safe to ship” vs still blocked across client apps.
+**What it costs today:** Slipped windows, repeated specialist chase-down, and no consolidated readiness signal before merge and release.
 
-**Who buys the fix:** Engineering + risk leaders who keep human merge authority (auditable approvals on merge/release).
-
-**One-liner:** Optimize the SDLC for an IT services org serving many customers — asynchronous multi-bot release readiness, not one mega-prompt — with clear handoffs, real coding work via Cursor, and humans on critical approvals. Shown here with Northwind KYC.
+**Who buys the fix:** Engineering and risk leaders who want speed without giving up human authority on critical decisions.
 
 **Assumptions**
-1. Space 1 — software delivery & release readiness (portfolio SDLC; Northwind KYC as the worked example).
-2. Bots advise and orchestrate; **humans** keep merge/release authority (and red team / security iteration sign-off).
-3. Required stack: **Grok Bot** (Lead + specialists) → **Cursor cloud agent** ships repo code → that code **calls Grok API** for real workflow intel (classify / extract / score / summarize).
-4. MOCK only where keys are absent; live path is designed and rehearsed for the room.
+1. Space 1 focus — software delivery and release readiness across a multi-customer portfolio.
+2. Bots advise and orchestrate; humans keep merge and release authority.
+3. Required stack: Grok Bot (Lead + specialists) → Cursor cloud agent ships real repo changes → shipped code calls Grok API for workflow intel.
+4. MOCK only when credentials are absent; the live path is designed and rehearsed for the room.
 
-**Business requirements:** agility, security, token optimization.
+**Business requirements (IT services org)**
+1. **Agility** — shorter, safer release cycles across many client apps.
+2. **Security** — catch policy and security blockers early enough that they do not blow the delivery window.
+3. **Token optimization = cost / margin** — in an ITS organization every token is a line item on a client invoice; lean orchestration protects margin while still producing auditable readiness.
 
 **Spoken (≤45s):**  
-“IT services org, many client apps — need faster safer releases across the portfolio. Late security and policy findings burn windows; nobody can tell what’s safe to ship. Drivers are agility, security, and token optimization. Shown here with Northwind KYC. Buyers are eng and risk leaders who keep human merge authority. Slide two is the map — then we live in the bots.”
+“IT services org, many client apps — we need faster, safer releases across the portfolio. Late findings burn windows, and nobody has one answer for safe to ship. Three drivers: agility, security, and token optimization as cost and margin control — every token hits a client invoice. Humans keep merge authority. Slide two is the map — then we go live.”
 
 ---
 
 ## Slide 2 — Architecture / workflow
 
-**Title:** Release Desk — Grok Bot → Cursor → Grok API
+**Title:** SDLC control plane → back to Lead
 
-**One-liner:** Lead + specialists hand off asynchronously; Builder launches Cursor; shipped code calls Grok API; iteration gate needs red team **or** security before human merge/release.
+**One-liner:** Intake → Grok Bots → Cursor ships → Grok API → human gates → Lead. Detail lives in code + `/control`; this slide is the room map.
 
 ```mermaid
 flowchart LR
-  subgraph GrokBots["Grok Bots — teammates / channels / routines / skills"]
-    Lead["Lead Bot<br/>orchestrates"]
-    CA["Change Analyst"]
-    Std["Standards"]
-    Sec["Security"]
-    Bld["Builder"]
-    Lead --> CA --> Std --> Sec --> Bld
+  subgraph W1["WIRE 1 · Intake"]
+    A["Customer ER"] --- B["Cost / finance"] --- C["Priority queue"]
   end
 
-  subgraph CursorLane["Cursor cloud agent"]
-    Agent["Coding agent<br/>rules + skills you wrote"]
-    Repo["Ships real change<br/>in mvp-releasedesk"]
-    Agent --> Repo
+  subgraph W2["WIRE 2 · Grok Bots"]
+    D["Lead"] --- E["CA"] --- F["Standards"] --- G["Security"] --- H["Builder"]
   end
 
-  subgraph GrokAPI["Grok API — real work in workflow"]
-    Intel["Classify / extract / score / summarize<br/>e.g. KYC doc or finding intel"]
+  subgraph W3["WIRE 3 · Cursor + Grok API"]
+    I["Coding"] --- J["Testing"] --- K["Review"]
+    I --> L["Grok API intel"]
   end
 
-  subgraph Humans["Human steps in"]
-    Gate["Iteration gate<br/>red_team OR security<br/>evaluateIterationProceedGate"]
-    Merge["Merge + release approval"]
+  subgraph W4["WIRE 4 · Humans"]
+    M["Iteration gate"] --- N["Merge"] --- O["Release"]
   end
 
-  Bld -->|"hand off + context"| Agent
-  Repo --> Intel
-  Intel --> Gate
-  Gate -->|approve| Merge
-  Gate -->|reject| Blocked["Blocked — no ship"]
+  C ==> D
+  H ==> I
+  L ==> M
+  O ==>|"readiness"| D
 ```
 
-**On-slide callouts only (4)**
-1. **Grok Bot lane** — Lead · CA · Standards · Security · Builder (clear jobs/boundaries)
-2. **Cursor** — Builder hands off; agent ships real repo code under your rules/skills
-3. **Grok API** — called by what the agent shipped; bots act on structured result
-4. **Human** — iteration gate (`red_team` \| `security`) then merge/release
+**On-slide callouts (say, don’t draw)**
+1. Security mandatory; ATLAS/OWASP on review-ready PRs  
+2. Coding ships; Testing/Review never merge; exclusive NHI keys  
+3. Iteration gate = red_team OR security; never auto-merge  
 
-**Spoken (≤60s):**  
-“Lead sequences specialists. Builder hands to Cursor with context and our rules. The agent ships code that calls Grok API for intel the workflow consumes. Humans still own the iteration gate and final merge. Now we open the live system.”
+**Detail diagram:** [`architecture-mermaid.md`](./architecture-mermaid.md) (full ER / ATLAS / side-queue) · Live: `/control`
+
+**Spoken (≤40s):**  
+“Intake into Lead, specialists hand off, Cursor Coding ships code that calls Grok API, humans gate iteration and merge, then readiness closes the loop. Detail is in `/control` — let’s open it.”
 
 ---
 
 ## Optional Slide 3 — Trade-offs / what’s next
 
-**Chose not to build (yet):** Full x.ai/bot production import UI; always-on poller; auto-approve of production code; logging-deep audit tour in the demo.
+**Chose not to build (yet):** Full production bot-import UI; always-on pollers; auto-approve of production merges; deep audit-tour as the primary demo beat.
 
-**With more time:** Live Lead wiring every iteration (PR #15 path); real Cursor agent run without MOCK; golden-sample trust harness for Grok API outputs; enterprise SSO/secrets rollout.
+**With more time:** Live Lead wiring on every iteration; real Cursor agent runs without MOCK; stronger trust harness for Grok API outputs; enterprise SSO and secrets rollout.
 
-**Skip Wednesday unless they ask “what’s next.”**
+**Skip unless they ask “what’s next.”**
 
 ---
 
-## After the slides (live — most of the 45 min)
+## After the slides (live)
 
-1. Trigger workflow end to end in Desk / Grok Bot channel  
-2. Open each bot: persona, skills, routines, connectors  
-3. Open repo: rules/skills, cloud agent run, where Grok API is called  
-4. Walk every handoff + every human approve (iteration gate money shot)  
-5. Leave buffer for **live bot change** + Q&A
+Use [spacexai-room-runbook.md](./spacexai-room-runbook.md) for commands + clicks + MOCK vs live matrix.

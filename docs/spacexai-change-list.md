@@ -1,40 +1,34 @@
-# SpaceXAI rebuild — change list
+# SpaceXAI showcase — change list
 
 ## Enterprise problem chosen
 
-Northwind Bank KYC **release readiness** (brief Space 1): DMs cannot tell if a change is safe to ship.
+**SDLC optimization for multi-customer IT services** (Space 1). Northwind Bank KYC is the worked example / proof app — not the problem framing.
 
-## Built (this branch)
+## Built (showcase tip)
 
 | Layer | What |
 | --- | --- |
-| Grok Bots | `grok-bots/bots/{lead,change-analyst,standards,security,builder}` — persona, skills, routines |
-| Desk host | `grok-bots-host.ts`, `GET /api/bots`, `POST /api/bots/trigger`, `GrokBotsPanel`, `ChallengeTrigger` |
-| Cursor guidance | `AGENTS.md`, `.cursor/rules/releasedesk-grok-api.mdc`, `.cursor/skills/ship-grok-release-intel/SKILL.md` |
-| Grok API | `grok-release-intel.ts` + route + panel + tests — classify + summarize + trustCheck |
-| Cursor path | Builder → **Coding** (ships) → **Testing** ∥ **Review**; exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` |
-| UI spine | Desk optimized for agent navigation; run page keeps gate + intel + handoffs |
+| Grok Bots | Lead · Change Analyst · Standards · Security · Builder — defs + packs + Desk panels |
+| Cursor path | Builder → **Coding** (ships) → **Testing** ∥ **Review** (never merge) |
+| Grok API | `grok-release-intel.ts` — classify / extract / score / summarize + trustCheck |
+| Control plane | Desk `/mvp` portfolio (agility · mandatory Security · token slices) + `/agents` |
+| Gates | Iteration `red_team\|security`, ATLAS/OWASP merge hard-block, human merge/release |
+| Keys | Exclusive `RELEASEDESK_*` NHI per agent — no shared XAI/GROK/CURSOR fallback |
+| Intake | Multi-customer dual-approval backlog (still in Desk; demoted from hero) |
 
 ## Preserved
 
 - PR #14 iteration proceed gate (`evaluateIterationProceedGate`, `IterationApprovalGate`)
-- Human merge/release gates; feature sign-off; ATLAS/OWASP merge block spine
-- Specialist orchestration / scenarios under Lead
+- Mandatory Security participation + AI Red Team / ATLAS spine
+- Human merge/release + feature sign-off checklist
 
-## Dropped / demoted (not deleted)
+## Room artifacts
 
-- Intake / demo gallery off Desk hero (still in repo)
-- Architecture-first 20-min recording script → superseded by Wednesday runbook (agent-nav first)
+- [spacexai-demo-slides.md](./spacexai-demo-slides.md)
+- [spacexai-room-runbook.md](./spacexai-room-runbook.md) — commands, clicks, MOCK vs live matrix
 
-## Still open
+## Still open / honest
 
-- Live import into x.ai/bot UI (packs are repo-ready; Desk mirrors open/navigate)
-- Live `RELEASEDESK_GROK_API_KEY_LEAD` for non-MOCK Grok calls in the room
-- Optional slide 3 (trade-offs / next) — only if asked
-
-## Why choices (talk track)
-
-- **Why each bot** — clear job boundaries; Security mandatory every change; Builder alone launches Cursor
-- **Why Cursor** — ships real Desk code under our rules/skills
-- **Why this Grok API** — structured release intel the Lead can act on; not voice/image theater
-- **Trust** — schema validation, MOCK labeling, human gates, red_team|security iteration gate
+- Live x.ai/bot IDs require exclusive Grok keys + `npm run create:grok-bots`
+- Live Cursor dispatch requires exclusive Cursor keys + `RELEASEDESK_CLOUD_CLIENT=real`
+- Without keys, every external call is **MOCK**-labeled

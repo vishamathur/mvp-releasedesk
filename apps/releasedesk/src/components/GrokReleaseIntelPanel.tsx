@@ -9,6 +9,8 @@ type Intel = {
   keyPresent: boolean;
   mocked: boolean;
   classify: { category: string; confidence: number };
+  extract: string[];
+  score: { level: string; rationale: string };
   summarize: string;
   trustCheck: {
     schemaValid: boolean;
@@ -121,11 +123,11 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
         )}
       </div>
       <p className="mt-2 text-sm text-rd-forest/70">
-        Coding Cloud Agent ship path — classify + summarize. Exclusive key{" "}
+        Coding Cloud Agent ship path — classify / extract / score / summarize. Exclusive key{" "}
         <span className="font-mono text-[12px] text-rd-ink">
           {keyStatus?.keyEnvVar ?? "RELEASEDESK_GROK_API_KEY_LEAD"}
         </span>
-        . Shared XAI/GROK keys ignored.
+        . Shared XAI/GROK keys ignored. Trust check keeps human gates authoritative.
       </p>
       {keyStatus ? (
         <p className="mt-2 text-xs text-rd-forest/55">{keyStatus.mockUnlessLive}</p>
@@ -137,10 +139,12 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
       {intel ? (
         <div className="mt-6 space-y-3 text-sm">
           <p className="font-medium text-rd-ink">
-            {label} · {intel.classify.category} · confidence {intel.classify.confidence} · mode{" "}
-            {intel.mode}
+            {label} · {intel.classify.category} · confidence {intel.classify.confidence} · score{" "}
+            {intel.score.level} · mode {intel.mode}
           </p>
           <p className="text-rd-forest/75">{intel.summarize}</p>
+          <p className="text-rd-forest/65">Extract: {intel.extract.join("; ") || "—"}</p>
+          <p className="text-rd-forest/65">Score: {intel.score.rationale}</p>
           <ul className="list-disc pl-5 text-rd-forest/65">
             {intel.trustCheck.notes.map((n) => (
               <li key={n}>{n}</li>

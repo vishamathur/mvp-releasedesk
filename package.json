@@ -31,7 +31,9 @@
     "generate:demos": "npm run generate:demos -w @releasedesk/ui",
     "create:grok-bots": "npm exec -w @releasedesk/ui -- tsx ../../scripts/create-grok-bots.ts",
     "demo:control-plane": "tsx scripts/demo-control-plane.ts",
-    "demo:grok-intel": "tsx scripts/demo-control-plane.ts"
+    "demo:grok-intel": "tsx scripts/demo-control-plane.ts",
+    "sdlc:mvp": "npm exec -w @releasedesk/ui -- tsx scripts/run-sdlc-mvp.ts",
+    "dev:desk": "npm run desk"
   },
   "engines": {
     "node": ">=20"

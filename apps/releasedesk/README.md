@@ -24,10 +24,24 @@ npm run desk                                # http://localhost:3001
 
 KYC demo remains on port 3000 (`npm run dev`).
 
+## SpaceXAI control plane
+
+| Route | Purpose |
+| --- | --- |
+| `/mvp` | Portfolio agility · mandatory Security · token efficiency · gate · Grok intel |
+| `/agents` | Full Grok Bot + Cursor Cloud Agent roster |
+| `/desk` | Challenge trigger + bot navigation |
+
+Room runbook (commands + clicks + MOCK vs live): monorepo `docs/spacexai-room-runbook.md`.
+
+```bash
+npm run sdlc:mvp   # CLI portfolio check
+```
+
 ## Demo script
 
-1. Open [http://localhost:3001](http://localhost:3001) — hero brands **Release Desk** / Northwind Bank.
-2. Click **Enter the desk**.
+1. Open [http://localhost:3001](http://localhost:3001) — hero brands **Release Desk**.
+2. Click **Open control plane** (`/mvp`) or **Challenge desk**.
 3. **Happy path**
    - Under Demo scenarios → **Happy path** → **Run live**.
    - Confirm readiness `needs_human`, specialists completed, pending merge + release gates.
