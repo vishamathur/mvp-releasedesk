@@ -7,6 +7,8 @@ import { CloudHandoffs } from "@/components/CloudHandoffs";
 import { DeskHeader } from "@/components/DeskHeader";
 import { DmPanel } from "@/components/DmPanel";
 import { FeatureSignOffPanel } from "@/components/FeatureSignOffPanel";
+import { GrokBotsPanel } from "@/components/GrokBotsPanel";
+import { GrokReleaseIntelPanel } from "@/components/GrokReleaseIntelPanel";
 import { IterationApprovalGate } from "@/components/IterationApprovalGate";
 import { MockLabel } from "@/components/MockLabel";
 import { PrPanel } from "@/components/PrPanel";
@@ -59,11 +61,13 @@ export default async function RunPage({ params }: Props) {
           <div className="space-y-16">
             <SpecialistResults specialists={view.assessment.specialists} tasks={tasks} />
             <CheckpointTrail checkpoints={view.checkpoints.checkpoints} />
+            <GrokReleaseIntelPanel runId={view.runId} />
             <CloudHandoffs tasks={tasks} />
             <PrPanel
               pullRequests={view.pullRequests.pullRequests}
               prClientMode={desk.prClientMode}
             />
+            <GrokBotsPanel />
           </div>
           <div className="space-y-16">
             {iterationGate ? (
