@@ -91,17 +91,19 @@ describe("runGrokReleaseIntel", () => {
 
   it("describeGrokIntelKeyStatus reports presence without reading shared keys", () => {
     const absent = describeGrokIntelKeyStatus({
+      NODE_ENV: "test",
       XAI_API_KEY: "shared",
       GROK_API_KEY: "shared",
-    } as NodeJS.ProcessEnv);
+    });
     expect(absent.keyPresent).toBe(false);
     expect(absent.liveReady).toBe(false);
     expect(absent.mockUnlessLive).toMatch(/MOCK/);
 
     const present = describeGrokIntelKeyStatus({
+      NODE_ENV: "test",
       RELEASEDESK_GROK_API_KEY_LEAD: "lead-key",
       XAI_API_KEY: "shared-ignored",
-    } as NodeJS.ProcessEnv);
+    });
     expect(present.keyPresent).toBe(true);
     expect(present.liveReady).toBe(true);
     expect(present.mockUnlessLive).toMatch(/LIVE/);
