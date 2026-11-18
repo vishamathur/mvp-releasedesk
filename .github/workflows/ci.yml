@@ -1,0 +1,64 @@
+name: CI
+
+# Pull requests are often stacked, so this runs for every base branch.
+# Pushes are limited to main and cursor/** feature branches.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "cursor/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, typecheck, and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Actions injects GITHUB_TOKEN. Lead treats GH_TOKEN / GITHUB_TOKEN as a
+      # live GitHub PR client. Blank both so checks stay on the labeled MOCK
+      # path. Checkout still authenticates with its own token input.
+      # Do not set RELEASEDESK_CLOUD_CLIENT or any RELEASEDESK_*_API_KEY_*.
+      # Absent exclusive keys keep Grok and Cursor calls on MOCK.
+      GITHUB_TOKEN: ""
+      GH_TOKEN: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          token: ${{ github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          # engines.node is >=20. Pin the current maintenance LTS.
+          node-version: 22
+          cache: npm
+          token: ${{ github.token }}
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build workspace packages
+        run: npm run build:core && npm run build:lead && npm run build:specialists
+
+      - name: Typecheck
+        run: |
+          npm run typecheck -w @releasedesk/core
+          npm run typecheck -w @releasedesk/lead
+          npm run typecheck -w @releasedesk/specialists
+          npm run typecheck -w @releasedesk/ui
+
+      - name: Test
+        run: npm test

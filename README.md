@@ -50,6 +50,20 @@ Open [http://localhost:3001](http://localhost:3001).
 | `npm run check:release -- --repo owner/name` | On-demand Lead + specialists release check (CLI) |
 | `npm run check:release:stubs -- --repo owner/name` | Same flow with M3 MOCK stub runners |
 
+## CI
+
+[GitHub Actions](.github/workflows/ci.yml) runs on every pull request (any base branch, including stacked `cursor/*` bases) and on pushes to `main` and `cursor/**`.
+
+The job uses Node.js 22 (satisfies `engines.node` `>=20`) with the npm cache. No repository secrets are required. It runs:
+
+1. `npm ci`
+2. `npm run lint`
+3. `npm run build:core`, `npm run build:lead`, and `npm run build:specialists` so workspace typechecks and tests can resolve `dist/`
+4. `npm run typecheck` for `@releasedesk/core`, `@releasedesk/lead`, `@releasedesk/specialists`, and `@releasedesk/ui`
+5. `npm test` (KYC, core, lead, specialists, and Desk)
+
+Exclusive Grok and Cursor keys are not set, and `RELEASEDESK_CLOUD_CLIENT` is not set, so those paths stay labeled **MOCK**. The job clears `GITHUB_TOKEN` and `GH_TOKEN` so the PR client stays on that same MOCK path.
+
 ## What you can do
 
 1. Open the landing page and start **Customer KYC**.
