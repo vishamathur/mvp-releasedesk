@@ -1,6 +1,11 @@
 # mvp-releasedesk
 
-**Release Desk** will orchestrate release checks for the **Northwind Bank KYC** application. This repository currently delivers **Milestone 1**: a working KYC demo app only.
+**Release Desk** will orchestrate release checks for the **Northwind Bank KYC** application.
+
+This repository currently includes:
+
+- **Milestone 1** — working KYC demo app (`apps/kyc`)
+- **Milestone 2** — shared execution context + agent contracts (`packages/releasedesk-core`)
 
 License: [GPL-3.0](./LICENSE).
 
@@ -20,8 +25,10 @@ Open [http://localhost:3000](http://localhost:3000).
 | --- | --- |
 | `npm run dev` | Start the KYC app (Next.js) on port 3000 |
 | `npm run seed` | Load sample applications into the local JSON store |
-| `npm test` | Run KYC domain unit tests |
-| `npm run build` / `npm start` | Production build and serve |
+| `npm test` | Run KYC + `@releasedesk/core` unit tests |
+| `npm run test:kyc` / `npm run test:core` | Workspace-scoped tests |
+| `npm run build` / `npm start` | Production build and serve KYC |
+| `npm run build:core` | Compile `@releasedesk/core` to `dist/` |
 
 ## What you can do
 
@@ -45,14 +52,31 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```
 apps/
-  kyc/                 # Northwind Bank KYC (Milestone 1)
-packages/              # Reserved for shared libs in later milestones
+  kyc/                      # Northwind Bank KYC (Milestone 1)
+packages/
+  releasedesk-core/         # Shared run context + agent contracts (Milestone 2)
 # later (not in this PR):
-#   agents/            # Lead + specialist agents
-#   releasedesk/       # Orchestration / UI
+#   agents/                 # Lead + specialist agent runtimes
+#   releasedesk/            # Orchestration / UI
 ```
 
 Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/runtime packages out of `apps/kyc` so release-check tooling can land beside the demo app without a rewrite.
+
+## Milestone 2 — shared context & contracts
+
+Package: [`packages/releasedesk-core`](./packages/releasedesk-core/) (`@releasedesk/core`).
+
+- Unique `run_` IDs and a parallel-safe task model (status, dependencies, evidence, retry/failure)
+- Zod schemas for Lead, Change Analyst, Standards, Security, and Builder agent I/O
+- Audit trail hooks on every store mutation
+- In-memory and file-backed run-context stores
+- Clear `MOCK:` / `mocked: true` labeling for stubbed integrations
+
+```bash
+npm run test:core
+```
+
+See the [package README](./packages/releasedesk-core/README.md) for how agents will plug in later. No Lead/specialist runners, Cursor Cloud wiring, or Release Desk UI in this milestone.
 
 ## KYC domain snapshot
 
@@ -60,11 +84,13 @@ Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/run
 - Required docs to submit: one government ID (`passport` \| `national_id` \| `drivers_license`) + `proof_of_address`
 - Persistence: `apps/kyc/data/store.json` (gitignored; recreated by seed)
 
-## Milestone 2 follow-ups (out of scope here)
+## Later milestones (out of scope here)
 
-- Shared run context and agent I/O contracts
-- Lead + specialist agent packages under `agents/` / `packages/`
-- Release Desk UI — do not conflate with this KYC app
+- Lead Agent orchestrator (M3)
+- Specialist agent runtimes (M4)
+- Cursor Cloud Agents under Builder (M5)
+- Verification loops / PR workflow (M6)
+- Release Desk UI and demo scenarios (M7)
 
 ## GPL-3.0
 
