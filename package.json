@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @northwind/kyc",
-    "desk": "npm run dev -w @releasedesk/ui",
+    "desk": "bash apps/releasedesk/scripts/desk-once.sh",
     "build": "npm run build -w @northwind/kyc",
     "build:desk": "npm run build -w @releasedesk/ui",
     "build:core": "npm run build -w @releasedesk/core",
