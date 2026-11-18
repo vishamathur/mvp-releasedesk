@@ -10,7 +10,12 @@ type BotPack = {
   apiKeyEnv: string;
   keyPresent: boolean;
   liveBotId: string | null;
+  grokBotAppAgentId?: string | null;
+  grokBotAppName?: string | null;
+  host?: string;
   provisionStatus: string;
+  provisionLabel?: string;
+  created?: boolean;
   definitionPath: string;
   persona: string;
   skills: Array<{ name: string; body: string }>;
@@ -47,6 +52,9 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
   }, []);
 
   const current = useMemo(() => bots.find((b) => b.id === openId), [bots, openId]);
+  const allCreatedInApp =
+    bots.length > 0 &&
+    bots.every((b) => b.created && b.host === "grok-bot-app" && b.grokBotAppAgentId);
 
   return (
     <section>
@@ -55,9 +63,18 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
           <h2 className="font-display text-2xl text-rd-ink">Grok Bots</h2>
           <p className="mt-2 max-w-2xl text-sm text-rd-forest/70">
             Lead · CA · Standards · Security · Builder — open persona, skills, routines, connectors.
+            {allCreatedInApp
+              ? " Created in the Grok Bot app. Those agent ids are not sent to the xAI API."
+              : ""}
           </p>
         </div>
-        <MockLabel>defs · no fake live IDs</MockLabel>
+        {allCreatedInApp ? (
+          <span className="text-xs font-bold uppercase tracking-[0.16em] text-rd-brass">
+            Created in Grok Bot app
+          </span>
+        ) : (
+          <MockLabel>defs · no fake live IDs</MockLabel>
+        )}
       </div>
 
       {error ? <p className="mt-4 text-sm text-rd-alert">{error}</p> : null}
@@ -84,9 +101,18 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
       ) : (
         <div className="mt-6 border-y border-rd-forest/10 py-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-rd-brass">
-            {current.displayName} · {current.provisionStatus}
-            {current.liveBotId ? ` · ${current.liveBotId}` : " · scripted"}
+            {current.displayName} · {current.provisionLabel ?? current.provisionStatus}
           </p>
+          {current.grokBotAppAgentId ? (
+            <p className="mt-1 font-mono text-xs normal-case text-rd-forest/55">
+              Grok Bot app {current.grokBotAppAgentId}
+              {current.grokBotAppName ? ` · ${current.grokBotAppName}` : ""}. Not an xAI API id.
+            </p>
+          ) : current.liveBotId ? (
+            <p className="mt-1 font-mono text-xs normal-case text-rd-forest/55">
+              xAI {current.liveBotId}
+            </p>
+          ) : null}
           <p className="mt-1 text-xs text-rd-forest/55">
             {current.definitionPath} · {current.apiKeyEnv}
             {current.keyPresent ? " · key present" : " · key missing"}

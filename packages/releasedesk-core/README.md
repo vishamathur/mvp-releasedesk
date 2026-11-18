@@ -62,7 +62,9 @@ assertExclusiveApiKeys(); // throws if any two agents share an env var
 const securityKey = resolveAgentGrokApiKey("security"); // only RELEASEDESK_GROK_API_KEY_SECURITY
 ```
 
-See the repo-root `.env.example` for the full exclusive key list.
+See the repo-root `.env.example` for the full exclusive key list. Desk reads `apps/releasedesk/.env.local`.
+
+Grok Bot app teammates are recorded in `grok-bots/registry.json` (`grokBotAppAgentId`, `host: "grok-bot-app"`). Those ids are not xAI Agents API ids and are not `liveBotId`. App bots do not consume these API keys.
 
 ## SDLC agents
 

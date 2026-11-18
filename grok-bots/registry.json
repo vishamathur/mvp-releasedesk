@@ -1,41 +1,57 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-18T02:37:31.399Z",
+  "updatedAt": "2026-11-18T07:12:00.000Z",
+  "note": "Created in the Grok Bot app on 2026-11-18 as teammates. grokBotAppAgentId is a Grok Bot app agent id, not an xAI Agents API id. liveBotId stays null. App bots do not take API keys. Prior xAI POST /v1/agents errors (403/401/fetch failed) are cleared; they are not the current provision state.",
   "entries": [
     {
       "definitionId": "lead",
+      "host": "grok-bot-app",
+      "grokBotAppAgentId": "46e50097-0409-4972-9be0-6ade37563135",
+      "grokBotAppName": "Release Desk Lead",
       "liveBotId": null,
-      "createdAt": null,
-      "lastError": "Grok Bot create HTTP 403: agents endpoint is not enabled for this team (The caller does not have permission to execute the specified operation) (xAI Agents API not enabled for this team/key)",
-      "status": "error"
+      "createdAt": "2026-11-18T00:00:00.000Z",
+      "lastError": null,
+      "status": "created_in_grok_bot_app"
     },
     {
       "definitionId": "change-analyst",
+      "host": "grok-bot-app",
+      "grokBotAppAgentId": "d68fd46b-cffd-4f58-883e-1a75657ccb99",
+      "grokBotAppName": "Change Analyst",
       "liveBotId": null,
-      "createdAt": null,
-      "lastError": "Grok Bot create HTTP 403: agents endpoint is not enabled for this team (The caller does not have permission to execute the specified operation) (xAI Agents API not enabled for this team/key)",
-      "status": "error"
+      "createdAt": "2026-11-18T00:00:00.000Z",
+      "lastError": null,
+      "status": "created_in_grok_bot_app"
     },
     {
       "definitionId": "standards",
+      "host": "grok-bot-app",
+      "grokBotAppAgentId": "a82edff2-7d5d-47f2-b8bf-fb4f503177f1",
+      "grokBotAppName": "Standards",
       "liveBotId": null,
-      "createdAt": null,
-      "lastError": "Grok Bot create HTTP 401: The request is not authenticated: code: 'Client specified an invalid argument', message: \"Incorrect API key provided. You can obtain an API key from https://console.x.ai.\" (The request does not have valid authentication credentials)",
-      "status": "error"
+      "createdAt": "2026-11-18T00:00:00.000Z",
+      "lastError": null,
+      "status": "created_in_grok_bot_app"
     },
     {
       "definitionId": "security",
+      "host": "grok-bot-app",
+      "grokBotAppAgentId": "c325bdd3-28df-419e-9824-4ede1338afc9",
+      "grokBotAppName": "Security",
       "liveBotId": null,
-      "createdAt": null,
-      "lastError": "Grok Bot create failed: fetch failed",
-      "status": "error"
+      "createdAt": "2026-11-18T00:00:00.000Z",
+      "lastError": null,
+      "status": "created_in_grok_bot_app"
     },
     {
       "definitionId": "builder",
+      "host": "grok-bot-app",
+      "grokBotAppAgentId": "c932bf04-d05e-4809-a5cc-64afa9fb0894",
+      "grokBotAppName": "Builder",
       "liveBotId": null,
-      "createdAt": null,
-      "lastError": "Grok Bot create HTTP 403: agents endpoint is not enabled for this team (The caller does not have permission to execute the specified operation) (xAI Agents API not enabled for this team/key)",
-      "status": "error"
+      "createdAt": "2026-11-18T00:00:00.000Z",
+      "lastError": null,
+      "status": "created_in_grok_bot_app"
     }
   ]
 }

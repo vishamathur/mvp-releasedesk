@@ -2,9 +2,12 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   GROK_API_KEY_ENV,
+  grokBotProvisionView,
   listGrokBotDefinitions,
   loadGrokBotRegistry,
+  resolveAgentGrokApiKey,
   type GrokBotDefinition,
+  type GrokBotProvisionView,
   type GrokBotRegistryEntry,
 } from "@releasedesk/core";
 
@@ -14,8 +17,16 @@ export type GrokBotPack = {
   label: string;
   apiKeyEnv: string;
   keyPresent: boolean;
+  /** xAI Agents API id only. Null for Grok Bot app teammates. */
   liveBotId: string | null;
+  /** Grok Bot app teammate id. Not sent to api.x.ai. */
+  grokBotAppAgentId: string | null;
+  grokBotAppName: string | null;
+  host: GrokBotProvisionView["host"];
   provisionStatus: GrokBotRegistryEntry["status"];
+  /** Short Desk label: created | not created | key missing | error. */
+  provisionLabel: GrokBotProvisionView["provisionLabel"];
+  created: boolean;
   definitionPath: string;
   persona: string;
   skills: Array<{ name: string; body: string }>;
@@ -67,6 +78,19 @@ function skillBody(s: GrokBotDefinition["skills"][number]): string {
   ].join("\n");
 }
 
+function provisionFields(entry: GrokBotRegistryEntry | undefined) {
+  const view = grokBotProvisionView(entry);
+  return {
+    liveBotId: view.liveBotId,
+    grokBotAppAgentId: view.grokBotAppAgentId,
+    grokBotAppName: view.grokBotAppName,
+    host: view.host,
+    provisionStatus: view.status,
+    provisionLabel: view.provisionLabel,
+    created: view.created,
+  };
+}
+
 function routineBody(r: GrokBotDefinition["routines"][number]): string {
   return [
     `# Routine: ${r.name}`,
@@ -94,15 +118,14 @@ export async function listGrokBotPacks(): Promise<GrokBotPack[]> {
 
   return defs.map((def) => {
     const entry = byId.get(def.id);
-    const keyPresent = Boolean(process.env[def.apiKeyEnv]?.trim());
+    const keyPresent = Boolean(resolveAgentGrokApiKey(def.role));
     return {
       id: def.id,
       displayName: def.displayName,
       label: def.label,
       apiKeyEnv: def.apiKeyEnv,
       keyPresent,
-      liveBotId: entry?.liveBotId ?? null,
-      provisionStatus: entry?.status ?? "not_created",
+      ...provisionFields(entry),
       definitionPath: `grok-bots/definitions/${def.id}.json`,
       persona: personaText(def),
       skills: def.skills.map((s) => ({ name: s.name, body: skillBody(s) })),
@@ -126,6 +149,19 @@ async function listMarkdownFallback(root: string): Promise<GrokBotPack[]> {
   }
   ids.sort((a, b) => order.indexOf(a) - order.indexOf(b));
 
+  const registry = await loadGrokBotRegistry(root);
+  const byId = new Map(registry.entries.map((e) => [e.definitionId, e]));
+  const roleFor = (id: string) =>
+    id === "change-analyst"
+      ? ("change_analyst" as const)
+      : id === "lead"
+        ? ("lead" as const)
+        : id === "standards"
+          ? ("standards" as const)
+          : id === "security"
+            ? ("security" as const)
+            : ("builder" as const);
+
   const packs: GrokBotPack[] = [];
   for (const id of ids) {
     const personaPath = path.join(botsRoot, id, "PERSONA.md");
@@ -135,24 +171,15 @@ async function listMarkdownFallback(root: string): Promise<GrokBotPack[]> {
     } catch {
       continue;
     }
-    const roleKey =
-      id === "change-analyst"
-        ? GROK_API_KEY_ENV.change_analyst
-        : id === "lead"
-          ? GROK_API_KEY_ENV.lead
-          : id === "standards"
-            ? GROK_API_KEY_ENV.standards
-            : id === "security"
-              ? GROK_API_KEY_ENV.security
-              : GROK_API_KEY_ENV.builder;
+    const role = roleFor(id);
+    const roleKey = GROK_API_KEY_ENV[role];
     packs.push({
       id,
       displayName: id,
       label: id,
       apiKeyEnv: roleKey,
-      keyPresent: Boolean(process.env[roleKey]?.trim()),
-      liveBotId: null,
-      provisionStatus: "not_created",
+      keyPresent: Boolean(resolveAgentGrokApiKey(role)),
+      ...provisionFields(byId.get(id)),
       definitionPath: `grok-bots/bots/${id}/PERSONA.md`,
       persona,
       skills: await readDirMarkdown(path.join(botsRoot, id, "skills")),

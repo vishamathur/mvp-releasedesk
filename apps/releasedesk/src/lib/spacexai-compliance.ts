@@ -84,7 +84,7 @@ export function buildSpaceXaiComplianceSnapshot(
     "Exclusive RELEASEDESK_* only — shared XAI/GROK/CURSOR keys never used as fallbacks.",
     grokLive
       ? "Grok API chip LIVE via exclusive Lead (or Builder) key."
-      : "Grok API chip MOCK — set RELEASEDESK_GROK_API_KEY_LEAD (and BUILDER for specialist ship).",
+      : "Grok API chip MOCK — set each bot's own RELEASEDESK_GROK_API_KEY_* (Desk intel reads LEAD). Shared XAI_API_KEY / GROK_API_KEY are ignored.",
     cursorLive
       ? "Cursor Cloud chip LIVE — Coding key present + RELEASEDESK_CLOUD_CLIENT=real."
       : "Cursor Cloud chip MOCK — need RELEASEDESK_CURSOR_API_KEY_CODING|TESTING|REVIEW + RELEASEDESK_CLOUD_CLIENT=real.",

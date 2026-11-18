@@ -74,9 +74,38 @@ describe("GrokBotApiClient", () => {
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://example.test/v1/agents");
     const body = JSON.parse(String(init.body)) as { name: string; instructions: string };
+    expect(Object.keys(body).sort()).toEqual(["instructions", "name"]);
     expect(body.name).toBe("Security");
     expect(body.instructions).toContain("Mandatory review");
     expect(body).not.toHaveProperty("description");
+    expect(JSON.stringify(body)).not.toContain("c325bdd3-28df-419e-9824-4ede1338afc9");
+  });
+
+  it("does not post a Grok Bot app agent id even when that id is in the environment", async () => {
+    const appAgentId = "c325bdd3-28df-419e-9824-4ede1338afc9";
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "agt_from_xai" }), { status: 200 }),
+    );
+    const client = createGrokBotApiClient({
+      env: {
+        RELEASEDESK_GROK_API_KEY_SECURITY: "sec-key",
+        GROK_BOT_APP_AGENT_ID: appAgentId,
+        XAI_API_KEY: appAgentId,
+      },
+      dryRun: false,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      baseUrl: "https://example.test/v1",
+    });
+    const result = await client.createBot(sample);
+    expect(result.liveBotId).toBe("agt_from_xai");
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("grokBotAppAgentId");
+    expect(body).not.toHaveProperty("id");
+    expect(body).not.toHaveProperty("agent_id");
+    expect(JSON.stringify(body)).not.toContain(appAgentId);
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer sec-key");
   });
 
   it("refuses to invent liveBotId when response has none", async () => {

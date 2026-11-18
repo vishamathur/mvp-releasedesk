@@ -17,7 +17,12 @@ type BotPack = {
   apiKeyEnv: string;
   keyPresent: boolean;
   liveBotId: string | null;
+  grokBotAppAgentId?: string | null;
+  grokBotAppName?: string | null;
+  host?: string;
   provisionStatus: string;
+  provisionLabel?: string;
+  created?: boolean;
 };
 
 type AgentDef = {
@@ -94,7 +99,8 @@ export default function AgentsPage() {
                   <span className="font-medium text-rd-ink">{bot.displayName}</span>
                   <span className="ml-2 text-xs text-rd-forest/45">
                     {bot.keyPresent ? "key" : "no key"}
-                    {bot.liveBotId ? " · live" : ` · ${bot.provisionStatus}`}
+                    {" · "}
+                    {bot.provisionLabel ?? bot.provisionStatus}
                   </span>
                 </button>
                 <p className="mt-2 text-sm text-rd-forest/70">
@@ -108,6 +114,15 @@ export default function AgentsPage() {
                     <p>Channels: {bot.channels.join(", ") || "—"}</p>
                     <p className="font-mono text-xs">{bot.definitionPath}</p>
                     <p className="font-mono text-xs">{bot.apiKeyEnv}</p>
+                    {bot.grokBotAppAgentId ? (
+                      <p className="font-mono text-xs">
+                        Grok Bot app {bot.grokBotAppAgentId}
+                        {bot.grokBotAppName ? ` · ${bot.grokBotAppName}` : ""} · not an xAI API id
+                      </p>
+                    ) : null}
+                    {bot.liveBotId ? (
+                      <p className="font-mono text-xs">xAI agent {bot.liveBotId}</p>
+                    ) : null}
                     <pre className="max-h-56 overflow-auto whitespace-pre-wrap text-xs text-rd-forest/60">
                       {bot.persona}
                     </pre>
