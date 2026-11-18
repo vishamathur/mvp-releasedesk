@@ -9,5 +9,6 @@ coverage
 .env.*.local
 apps/kyc/data/store.json
 packages/releasedesk-core/data/
+.releasedesk/
 .turbo
 *.tsbuildinfo
