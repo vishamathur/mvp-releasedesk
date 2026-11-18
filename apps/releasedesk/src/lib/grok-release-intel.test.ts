@@ -93,7 +93,7 @@ describe("runGrokReleaseIntel", () => {
     const absent = describeGrokIntelKeyStatus({
       XAI_API_KEY: "shared",
       GROK_API_KEY: "shared",
-    });
+    } as NodeJS.ProcessEnv);
     expect(absent.keyPresent).toBe(false);
     expect(absent.liveReady).toBe(false);
     expect(absent.mockUnlessLive).toMatch(/MOCK/);
@@ -101,7 +101,7 @@ describe("runGrokReleaseIntel", () => {
     const present = describeGrokIntelKeyStatus({
       RELEASEDESK_GROK_API_KEY_LEAD: "lead-key",
       XAI_API_KEY: "shared-ignored",
-    });
+    } as NodeJS.ProcessEnv);
     expect(present.keyPresent).toBe(true);
     expect(present.liveReady).toBe(true);
     expect(present.mockUnlessLive).toMatch(/LIVE/);
