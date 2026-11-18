@@ -1,41 +1,41 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-16T21:29:56.046Z",
+  "updatedAt": "2026-11-18T02:37:31.399Z",
   "entries": [
     {
       "definitionId": "lead",
       "liveBotId": null,
       "createdAt": null,
-      "lastError": null,
-      "status": "skipped_missing_key"
+      "lastError": "Grok Bot create HTTP 403: agents endpoint is not enabled for this team (The caller does not have permission to execute the specified operation) (xAI Agents API not enabled for this team/key)",
+      "status": "error"
     },
     {
       "definitionId": "change-analyst",
       "liveBotId": null,
       "createdAt": null,
-      "lastError": null,
-      "status": "skipped_missing_key"
+      "lastError": "Grok Bot create HTTP 403: agents endpoint is not enabled for this team (The caller does not have permission to execute the specified operation) (xAI Agents API not enabled for this team/key)",
+      "status": "error"
     },
     {
       "definitionId": "standards",
       "liveBotId": null,
       "createdAt": null,
-      "lastError": null,
-      "status": "skipped_missing_key"
+      "lastError": "Grok Bot create HTTP 401: The request is not authenticated: code: 'Client specified an invalid argument', message: \"Incorrect API key provided. You can obtain an API key from https://console.x.ai.\" (The request does not have valid authentication credentials)",
+      "status": "error"
     },
     {
       "definitionId": "security",
       "liveBotId": null,
       "createdAt": null,
-      "lastError": null,
-      "status": "skipped_missing_key"
+      "lastError": "Grok Bot create failed: fetch failed",
+      "status": "error"
     },
     {
       "definitionId": "builder",
       "liveBotId": null,
       "createdAt": null,
-      "lastError": null,
-      "status": "skipped_missing_key"
+      "lastError": "Grok Bot create HTTP 403: agents endpoint is not enabled for this team (The caller does not have permission to execute the specified operation) (xAI Agents API not enabled for this team/key)",
+      "status": "error"
     }
   ]
 }

@@ -9,10 +9,14 @@ import type { GrokBotDefinition } from "./types.js";
  *
  * Auth: exclusive RELEASEDESK_GROK_API_KEY_* only — never XAI_API_KEY / GROK_API_KEY.
  * Live bot IDs recorded only from successful API responses (never invented).
+ *
+ * Host note: product “Grok Bots” are created in the Grok Bot app (no public /bots
+ * REST route — POST /v1/bots → 404). The closest xAI management endpoint is
+ * POST /v1/agents (name + instructions). Teams without Agents enabled get HTTP 403.
  */
 
 export const DEFAULT_GROK_BOT_API_BASE = "https://api.x.ai/v1";
-export const DEFAULT_GROK_BOT_CREATE_PATH = "/bots";
+export const DEFAULT_GROK_BOT_CREATE_PATH = "/agents";
 
 export type GrokBotCreateStatus =
   | "created"
@@ -45,27 +49,87 @@ function joinUrl(base: string, path: string): string {
   return `${b}${p}`;
 }
 
+/** Map Desk bot packs onto the xAI Agents create schema (OpenAPI: name, instructions, …). */
 function buildCreatePayload(def: GrokBotDefinition) {
+  const skillLines = def.skills.map(
+    (s) =>
+      `- ${s.name}: ${s.whenToUse}; steps: ${s.steps.join(" → ")}; output: ${s.output}`,
+  );
+  const routineLines = def.routines.map(
+    (r) => `- ${r.name} (trigger: ${r.trigger}): ${r.steps.join(" → ")}`,
+  );
+  const connectorLines = def.connectors.map(
+    (c) => `- ${c.name} (${c.access}): ${c.purpose}`,
+  );
+  const channelLines = def.channels.map((c) => `- ${c.name}: ${c.purpose}`);
+
+  const instructions = [
+    `# ${def.displayName} — ${def.label}`,
+    "",
+    `Role id: ${def.role}`,
+    `Definition: ${def.id}`,
+    `Pack: ${def.markdownPackDir}`,
+    "",
+    "## Job",
+    def.persona.job,
+    "",
+    "## Personality",
+    def.persona.personality,
+    "",
+    "## Memory",
+    ...def.persona.memory.map((m) => `- ${m}`),
+    "",
+    "## Boundaries",
+    ...def.persona.boundaries.map((b) => `- ${b}`),
+    "",
+    "## Skills",
+    ...(skillLines.length ? skillLines : ["- (none)"]),
+    "",
+    "## Routines",
+    ...(routineLines.length ? routineLines : ["- (none)"]),
+    "",
+    "## Connectors",
+    ...(connectorLines.length ? connectorLines : ["- (none)"]),
+    "",
+    "## Teammates",
+    def.teammates.length ? def.teammates.map((t) => `- ${t}`).join("\n") : "- (none)",
+    "",
+    "## Channels",
+    ...(channelLines.length ? channelLines : ["- (none)"]),
+    "",
+    "## Hands off to",
+    def.handsOffTo.length ? def.handsOffTo.map((t) => `- ${t}`).join("\n") : "- (none)",
+    "",
+    `Mandatory on every change: ${def.mandatoryOnEveryChange ? "yes" : "no"}`,
+    "Preserve iteration gate: red_team|security — never auto-merge.",
+    "Source: mvp-releasedesk",
+  ].join("\n");
+
   return {
     name: def.displayName,
-    title: def.label,
-    description: def.persona.job,
-    role: def.role,
-    persona: def.persona,
-    skills: def.skills,
-    routines: def.routines,
-    connectors: def.connectors,
-    teammates: def.teammates,
-    channels: def.channels,
-    handsOffTo: def.handsOffTo,
-    mandatoryOnEveryChange: def.mandatoryOnEveryChange ?? false,
-    metadata: {
-      source: "mvp-releasedesk",
-      definitionId: def.id,
-      markdownPackDir: def.markdownPackDir,
-      preserveIterationGate: "red_team|security",
-    },
+    instructions,
   };
+}
+
+function formatHttpErrorBody(json: unknown, text: string, statusText: string): string {
+  if (typeof json === "object" && json) {
+    const o = json as Record<string, unknown>;
+    const nested =
+      o.error && typeof o.error === "object"
+        ? (o.error as Record<string, unknown>)
+        : null;
+    const msg =
+      (typeof o.error === "string" && o.error) ||
+      (nested && typeof nested.message === "string" && nested.message) ||
+      (typeof o.message === "string" && o.message) ||
+      (typeof o.code === "string" && o.code) ||
+      null;
+    if (msg) {
+      const code = typeof o.code === "string" && o.code !== msg ? ` (${o.code})` : "";
+      return `${msg}${code}`;
+    }
+  }
+  return text.slice(0, 240) || statusText;
 }
 
 function extractLiveBotId(body: unknown): string | null {
@@ -154,10 +218,13 @@ export class GrokBotApiClient {
       }
 
       if (!res.ok) {
-        const errMsg =
-          typeof json === "object" && json && "error" in json
-            ? String((json as { error?: unknown }).error)
-            : text.slice(0, 240) || res.statusText;
+        const errMsg = formatHttpErrorBody(json, text, res.statusText);
+        const hint =
+          res.status === 404
+            ? " (no public /bots route — default host is POST /v1/agents)"
+            : res.status === 403
+              ? " (xAI Agents API not enabled for this team/key)"
+              : "";
         return {
           definitionId: def.id,
           role: def.role,
@@ -165,7 +232,7 @@ export class GrokBotApiClient {
           status: "error",
           liveBotId: null,
           httpStatus: res.status,
-          message: `Grok Bot create HTTP ${res.status}: ${errMsg}`,
+          message: `Grok Bot create HTTP ${res.status}: ${errMsg}${hint}`,
           dryRun: false,
         };
       }
