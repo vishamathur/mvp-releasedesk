@@ -313,7 +313,7 @@ export async function buildControlPlaneSnapshot(
     demoPath: [
       "npm run build:core && npm run build:lead && npm run build:specialists",
       "npm run desk",
-      "open http://localhost:3001/control",
+      "open http://localhost:3002/control",
       "optional live: export RELEASEDESK_GROK_API_KEY_BUILDER=... RELEASEDESK_GROK_API_KEY_LEAD=...",
       "npm run demo:control-plane",
     ],

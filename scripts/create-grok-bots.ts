@@ -11,7 +11,7 @@
  *
  * Optional:
  *   RELEASEDESK_GROK_BOT_API_BASE   (default https://api.x.ai/v1)
- *   RELEASEDESK_GROK_BOT_CREATE_PATH (default /bots)
+ *   RELEASEDESK_GROK_BOT_CREATE_PATH (default /agents — /bots is not a public xAI route)
  *   RELEASEDESK_GROK_BOT_DRY_RUN=1
  *
  * Usage:

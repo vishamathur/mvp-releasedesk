@@ -33,7 +33,9 @@ export RELEASEDESK_GROK_API_KEY_BUILDER=...
 npm run create:grok-bots
 ```
 
-Optional: `RELEASEDESK_GROK_BOT_API_BASE` (default `https://api.x.ai/v1`), `RELEASEDESK_GROK_BOT_CREATE_PATH` (default `/bots`).
+Optional: `RELEASEDESK_GROK_BOT_API_BASE` (default `https://api.x.ai/v1`), `RELEASEDESK_GROK_BOT_CREATE_PATH` (default `/agents`).
+
+Note: there is **no** public `POST /v1/bots` on `api.x.ai` (404). Product Grok Bots are created in the Grok Bot app; this script targets the closest management API `POST /v1/agents` with `name` + `instructions`. If the team/key lacks Agents entitlement you get HTTP 403 and `liveBotId` stays `null` — Desk still runs on local packs + exclusive keys.
 
 ## Desk
 

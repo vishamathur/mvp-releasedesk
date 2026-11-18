@@ -12,12 +12,12 @@ From the monorepo root (Node 20+):
 npm install
 npm run build:core && npm run build:lead
 npm run generate:demos -w @releasedesk/ui   # recorded run-context fixtures
-npm run desk                                # http://localhost:3001
+npm run desk                                # http://localhost:3002
 ```
 
 | Command | Description |
 | --- | --- |
-| `npm run desk` | Start Release Desk UI on port **3001** |
+| `npm run desk` | Start Release Desk UI on port **3002** |
 | `npm run build:desk` / `npm run start:desk` | Production build + serve UI |
 | `npm run test:desk` | UI + scenario unit tests |
 | `npm run generate:demos -w @releasedesk/ui` | Re-record demo fixtures via live orchestrator |
@@ -40,7 +40,7 @@ npm run sdlc:mvp   # CLI portfolio check
 
 ## Demo script
 
-1. Open [http://localhost:3001](http://localhost:3001) — hero brands **Release Desk**.
+1. Open [http://localhost:3002](http://localhost:3002) — hero brands **Release Desk**.
 2. Click **Open control plane** (`/mvp`) or **Challenge desk**.
 3. **Happy path**
    - Under Demo scenarios → **Happy path** → **Run live**.

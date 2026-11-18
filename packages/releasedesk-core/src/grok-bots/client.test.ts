@@ -57,7 +57,7 @@ describe("GrokBotApiClient", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("records liveBotId only from API response", async () => {
+  it("POSTs /agents with name+instructions and records liveBotId from response", async () => {
     const fetchImpl = vi.fn(async () =>
       new Response(JSON.stringify({ id: "bot_live_123" }), { status: 200 }),
     );
@@ -70,6 +70,13 @@ describe("GrokBotApiClient", () => {
     const result = await client.createBot(sample);
     expect(result.status).toBe("created");
     expect(result.liveBotId).toBe("bot_live_123");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://example.test/v1/agents");
+    const body = JSON.parse(String(init.body)) as { name: string; instructions: string };
+    expect(body.name).toBe("Security");
+    expect(body.instructions).toContain("Mandatory review");
+    expect(body).not.toHaveProperty("description");
   });
 
   it("refuses to invent liveBotId when response has none", async () => {

@@ -63,7 +63,7 @@ export async function grokComplete(
   }
 
   const endpoint = opts.endpoint ?? "https://api.x.ai/v1/chat/completions";
-  const model = opts.model ?? "grok-2-latest";
+  const model = opts.model ?? (process.env.GROK_MODEL?.trim() || "grok-3");
   const fetchImpl = opts.fetchImpl ?? fetch;
 
   try {

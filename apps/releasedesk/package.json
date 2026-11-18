@@ -6,9 +6,9 @@
   "type": "module",
   "description": "Release Desk delivery-manager UI for Northwind Bank release readiness",
   "scripts": {
-    "dev": "next dev --port 3001",
+    "dev": "next dev --port ${PORT:-3002}",
     "build": "next build",
-    "start": "next start --port 3001",
+    "start": "next start --port ${PORT:-3002}",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
