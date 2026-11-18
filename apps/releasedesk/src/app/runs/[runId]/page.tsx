@@ -7,6 +7,7 @@ import { CloudHandoffs } from "@/components/CloudHandoffs";
 import { DeskHeader } from "@/components/DeskHeader";
 import { DmPanel } from "@/components/DmPanel";
 import { FeatureSignOffPanel } from "@/components/FeatureSignOffPanel";
+import { IterationApprovalGate } from "@/components/IterationApprovalGate";
 import { MockLabel } from "@/components/MockLabel";
 import { PrPanel } from "@/components/PrPanel";
 import { ReadinessBanner } from "@/components/ReadinessBanner";
@@ -22,7 +23,7 @@ export default async function RunPage({ params }: Props) {
   const data = await getRun(runId);
   if (!data) notFound();
 
-  const { desk, view } = data;
+  const { desk, view, iterationGate } = data;
   const tasks = view.run.tasks.map((t) => ({
     id: t.id,
     name: t.name,
@@ -65,6 +66,9 @@ export default async function RunPage({ params }: Props) {
             />
           </div>
           <div className="space-y-16">
+            {iterationGate ? (
+              <IterationApprovalGate runId={view.runId} iterationGate={iterationGate} />
+            ) : null}
             <FeatureSignOffPanel
               runId={view.runId}
               checklists={(view.featureSignOffs?.checklists ?? []).map((c) => ({
