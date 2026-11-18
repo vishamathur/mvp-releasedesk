@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { startOnDemandCheck, applyIterationGateDecision } from "@/lib/desk";
-import { runGrokReleaseIntel } from "@/lib/grok-release-intel";
+import {
+  describeGrokIntelKeyStatus,
+  runGrokReleaseIntel,
+} from "@/lib/grok-release-intel";
 import { buildSpaceXaiComplianceSnapshot } from "@/lib/spacexai-compliance";
 
 export const runtime = "nodejs";
@@ -41,10 +44,9 @@ export async function POST(request: Request) {
     goal: started.view.run.goal,
     findings,
   });
+  const keyStatus = describeGrokIntelKeyStatus();
 
-  let iterationGate = started.desk.iterationGate
-    ? started.iterationGate
-    : null;
+  let iterationGate = started.iterationGate ?? null;
 
   if (body.autoOpenIterationGate !== false && started.desk.iterationGate) {
     const opened = await applyIterationGateDecision({
@@ -77,6 +79,16 @@ export async function POST(request: Request) {
     compliancePct: compliance.compliancePct,
     nhiMissing: compliance.nhiSlots.missing,
     trustCheck: intel.trustCheck,
+    keyStatus,
+    showcase: {
+      label: intel.label,
+      mocked: intel.mocked,
+      exclusiveKey: intel.trustCheck.keyEnvVar,
+      talkTrack:
+        intel.label === "LIVE"
+          ? `Say: LIVE via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`
+          : `Say: MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE; shared XAI/GROK keys are ignored.`,
+    },
     list: started.list,
   });
 }
