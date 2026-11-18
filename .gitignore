@@ -7,6 +7,9 @@ coverage
 .env
 .env.local
 .env.*.local
+# Local secrets (never commit filled values). Keep committed *.example templates.
+.secrets/*
+!.secrets/*.example
 apps/kyc/data/store.json
 packages/releasedesk-core/data/
 .releasedesk/

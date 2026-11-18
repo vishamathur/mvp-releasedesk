@@ -9,6 +9,7 @@ import {
   isNonBlockingRemediation,
   parseAiRedTeamProviderName,
   resolveAiRedTeamingProvider,
+  resolveZscalerLocalConfig,
   runCollapsedAiRedTeamGate,
   ZSCALER_NOT_WIRED_CODE,
   ZscalerAiRedTeamNotWiredError,
@@ -148,6 +149,45 @@ describe("zscaler provider with credentials (not wired)", () => {
     await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
       ZscalerAiRedTeamNotWiredError,
     );
+  });
+
+  it("reads the local template without echoing secrets or calling out", async () => {
+    const secret = "local-placeholder-not-a-real-key";
+    const endpoint = "https://example.zscaler.com/api/v1/ai-red-team";
+    const env = {
+      NODE_ENV: "test",
+      ZSCALER_AI_RED_TEAM_API_KEY: secret,
+      ZSCALER_AI_RED_TEAM_ENDPOINT: endpoint,
+      ZSCALER_AI_RED_TEAM_SCAN_SCOPE: "prompts, models",
+      ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING: "report-only",
+    } as NodeJS.ProcessEnv;
+
+    expect(resolveZscalerLocalConfig(env)).toEqual({
+      credentialEnvKey: "ZSCALER_AI_RED_TEAM_API_KEY",
+      endpointConfigured: true,
+      scanScope: ["prompts", "models"],
+      findingsRouting: "report-only",
+    });
+
+    const provider = createZscalerAiRedTeamingProvider({ env });
+    const health = await provider.healthCheck();
+    expect(health.mode).toBe("not_wired");
+    expect(health.message).toContain("findingsRouting=report-only");
+    expect(health.message).toContain("endpointConfigured=true");
+    expect(health.message).not.toContain(secret);
+    expect(health.message).not.toContain(endpoint);
+    await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
+      ZscalerAiRedTeamNotWiredError,
+    );
+  });
+
+  it("ignores an unknown findings routing value", () => {
+    const config = resolveZscalerLocalConfig({
+      NODE_ENV: "test",
+      ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING: "auto-merge",
+    } as NodeJS.ProcessEnv);
+    expect(config.findingsRouting).toBeUndefined();
+    expect(config.credentialEnvKey).toBeUndefined();
   });
 });
 
