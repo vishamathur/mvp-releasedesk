@@ -40,7 +40,8 @@ export type GrokReleaseIntelResult = {
   rawPreview?: string;
 };
 
-const MODEL = process.env.GROK_MODEL?.trim() || "grok-2-latest";
+/** Default model: grok-2-latest is retired/404 for many teams — prefer grok-3. */
+const MODEL = process.env.GROK_MODEL?.trim() || "grok-3";
 const INTEL_ROLE = "lead" as const;
 const INTEL_KEY_ENV = GROK_API_KEY_ENV[INTEL_ROLE];
 
@@ -86,10 +87,17 @@ export function trustCheckGrokIntelPayload(payload: {
   return { ok: true, confidence };
 }
 
-function mockIntel(input: GrokReleaseIntelInput): GrokReleaseIntelResult {
+function mockIntel(
+  input: GrokReleaseIntelInput,
+  reason: "missing_key" | "upstream" = "missing_key",
+): GrokReleaseIntelResult {
   const severe = input.findings.filter((f) =>
     ["high", "critical"].includes((f.severity ?? "").toLowerCase()),
   );
+  const reasonNote =
+    reason === "missing_key"
+      ? `MOCK: no ${INTEL_KEY_ENV} — deterministic fallback`
+      : `MOCK: ${INTEL_KEY_ENV} present but live Grok call failed — deterministic fallback`;
   return {
     mode: "mock",
     model: MODEL,
@@ -106,7 +114,7 @@ function mockIntel(input: GrokReleaseIntelInput): GrokReleaseIntelResult {
     },
     summarize: `MOCK: ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); ${severe.length} high/critical. Human gates still required.`,
     trustCheck: trustNotes([
-      `MOCK: no ${INTEL_KEY_ENV} — deterministic fallback`,
+      reasonNote,
       "Shared XAI_API_KEY / GROK_API_KEY never used",
       "Grok never auto-approves merge/release",
     ]),
@@ -165,7 +173,7 @@ export async function runGrokReleaseIntel(
     });
 
     if (!res.ok) {
-      const fallback = mockIntel(input);
+      const fallback = mockIntel(input, "upstream");
       fallback.trustCheck.notes.unshift(`MOCK fallback: Grok HTTP ${res.status}`);
       return fallback;
     }
@@ -180,7 +188,7 @@ export async function runGrokReleaseIntel(
       : { ok: false as const, reason: "unparseable JSON" };
 
     if (!trusted.ok || !parsed) {
-      const fallback = mockIntel(input);
+      const fallback = mockIntel(input, "upstream");
       fallback.trustCheck.notes.unshift(
         `MOCK fallback: trust check failed (${"reason" in trusted ? trusted.reason : "parse"})`,
       );
@@ -217,7 +225,7 @@ export async function runGrokReleaseIntel(
       rawPreview: text.slice(0, 400),
     };
   } catch (err) {
-    const fallback = mockIntel(input);
+    const fallback = mockIntel(input, "upstream");
     fallback.trustCheck.notes.unshift(
       `MOCK fallback: ${err instanceof Error ? err.message : String(err)}`,
     );
