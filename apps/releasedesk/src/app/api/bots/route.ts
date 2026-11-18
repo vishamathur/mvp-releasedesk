@@ -3,14 +3,21 @@ import { listGrokBotPacks } from "@/lib/grok-bots-host";
 
 export const runtime = "nodejs";
 
-/** Openable live catalog of Grok Bot packs (personas/skills/routines/connectors). */
+/** Openable catalog of SpaceXAI Grok Bot definitions (Lead + CA + Standards + Security + Builder). */
 export async function GET() {
   const bots = await listGrokBotPacks();
   return NextResponse.json({
     ok: true,
-    host: "grok-bots",
+    host: "grok-bots/definitions",
     count: bots.length,
     bots,
-    importGuide: "Paste PERSONA.md + skills/routines into https://x.ai/bot — see grok-bots/README.md",
+    createScript: "npm run create:grok-bots",
+    envVars: [
+      "RELEASEDESK_GROK_API_KEY_LEAD",
+      "RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST",
+      "RELEASEDESK_GROK_API_KEY_STANDARDS",
+      "RELEASEDESK_GROK_API_KEY_SECURITY",
+      "RELEASEDESK_GROK_API_KEY_BUILDER",
+    ],
   });
 }

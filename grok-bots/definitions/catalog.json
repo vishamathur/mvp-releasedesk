@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "title": "SpaceXAI Release Desk Grok Bots",
+  "stack": "Grok Bot (Lead + CA + Standards + Security + Builder) → Cursor cloud agent → Grok API",
+  "preserveIterationGate": "red_team|security",
+  "bots": ["lead", "change-analyst", "standards", "security", "builder"]
+}
