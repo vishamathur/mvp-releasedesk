@@ -23,9 +23,13 @@ export { createCustomAiRedTeamingProvider } from "./custom.js";
 
 export {
   ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS,
+  ZSCALER_FINDINGS_ROUTING_VALUES,
   resolveZscalerAiRedTeamCredentials,
+  resolveZscalerLocalConfig,
   createZscalerMockFindings,
   createZscalerAiRedTeamingProvider,
+  type ZscalerFindingsRouting,
+  type ZscalerLocalConfig,
   type ZscalerAiRedTeamingProviderOptions,
 } from "./zscaler.js";
 

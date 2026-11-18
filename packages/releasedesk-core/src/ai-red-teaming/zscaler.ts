@@ -20,6 +20,18 @@ export const ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS = [
   "AIGUARD_API_KEY",
 ] as const;
 
+/** Local template settings. Recognized, but not sent to Zscaler — the live client is not wired. */
+export const ZSCALER_FINDINGS_ROUTING_VALUES = ["block", "warn", "report-only"] as const;
+export type ZscalerFindingsRouting = (typeof ZSCALER_FINDINGS_ROUTING_VALUES)[number];
+
+export type ZscalerLocalConfig = {
+  /** Which credential env var was non-empty. The secret value is never returned. */
+  credentialEnvKey?: (typeof ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS)[number];
+  endpointConfigured: boolean;
+  scanScope: string[];
+  findingsRouting?: ZscalerFindingsRouting;
+};
+
 export function resolveZscalerAiRedTeamCredentials(
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
@@ -30,6 +42,52 @@ export function resolveZscalerAiRedTeamCredentials(
     }
   }
   return undefined;
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Read the local secrets-template shape.
+ * Does not return secret values and does not open a network connection.
+ * `findingsRouting` is recorded only — it does not change probe results yet.
+ */
+export function resolveZscalerLocalConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): ZscalerLocalConfig {
+  let credentialEnvKey: ZscalerLocalConfig["credentialEnvKey"];
+  for (const key of ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS) {
+    if (nonEmpty(env[key])) {
+      credentialEnvKey = key;
+      break;
+    }
+  }
+  const routingRaw = nonEmpty(env.ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING)?.toLowerCase();
+  const findingsRouting = ZSCALER_FINDINGS_ROUTING_VALUES.find((value) => value === routingRaw);
+  const scanScope = (nonEmpty(env.ZSCALER_AI_RED_TEAM_SCAN_SCOPE) ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  return {
+    ...(credentialEnvKey !== undefined ? { credentialEnvKey } : {}),
+    endpointConfigured: nonEmpty(env.ZSCALER_AI_RED_TEAM_ENDPOINT) !== undefined,
+    scanScope,
+    ...(findingsRouting !== undefined ? { findingsRouting } : {}),
+  };
+}
+
+function notWiredMessage(config: ZscalerLocalConfig): string {
+  const routing = config.findingsRouting ?? "unset";
+  const scope = config.scanScope.length > 0 ? config.scanScope.join(",") : "unset";
+  return (
+    `Zscaler credentials present (${config.credentialEnvKey ?? "injected"}) but live AI Red Teaming API is not wired ` +
+    `(stub; no outbound calls). endpointConfigured=${config.endpointConfigured}; ` +
+    `scanScope=${scope}; findingsRouting=${routing} (routing is not applied yet)`
+  );
 }
 
 function filterByFrameworks(
@@ -113,10 +171,11 @@ export function createZscalerAiRedTeamingProvider(
   options: ZscalerAiRedTeamingProviderOptions = {},
 ): AiRedTeamingProvider {
   const env = options.env ?? process.env;
+  const config = resolveZscalerLocalConfig(env);
   const hasCreds =
     options.apiKey !== undefined
       ? Boolean(options.apiKey && String(options.apiKey).trim())
-      : Boolean(resolveZscalerAiRedTeamCredentials(env));
+      : config.credentialEnvKey !== undefined;
 
   return {
     name: "zscaler",
@@ -127,8 +186,7 @@ export function createZscalerAiRedTeamingProvider(
           provider: "zscaler",
           ok: false,
           mode: "not_wired",
-          message:
-            "Zscaler credentials present but live AI Red Teaming API is not wired (stub; no outbound calls)",
+          message: notWiredMessage(config),
         };
       }
       return {

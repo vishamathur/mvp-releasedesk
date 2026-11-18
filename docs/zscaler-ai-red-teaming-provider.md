@@ -1,6 +1,6 @@
 # Zscaler AI Red Teaming provider (optional stub)
 
-Last updated: 2026-11-17 (Asia/Calcutta)
+Last updated: 2026-11-18 (Asia/Calcutta)
 
 Optional pluggable backend behind the shared **AI Red Teaming** contract in `@releasedesk/core`. Lead can call `custom` and `zscaler` interchangeably via `resolveAiRedTeamingProvider()`.
 
@@ -13,6 +13,31 @@ Research context (Project store): `docs/zscaler-ai-red-teaming-research.md`.
 | `RELEASEDESK_AI_RED_TEAM_PROVIDER` | `custom` \| `zscaler` | `custom` (off / unset) |
 
 Zscaler is selected **only** when the env is explicitly `zscaler`.
+
+## Local secrets template (gitignored)
+
+This area is incomplete. The live Zscaler client is **not** implemented. Prefer Cursor Apps / Cloud Agent named Runtime Secrets for any future hosted run. For local MOCK/dev wiring only:
+
+| Path | Role |
+| --- | --- |
+| [`.secrets/zscaler-ai-red-teaming.env.example`](../.secrets/zscaler-ai-red-teaming.env.example) | Committed placeholders |
+| `.secrets/zscaler-ai-red-teaming.env` | Local filled copy — **gitignored**; never commit |
+
+| Name | Status |
+| --- | --- |
+| `ZSCALER_AI_RED_TEAM_API_KEY` | Recognized as a credential. A non-empty value selects `not_wired` and still makes **no** outbound call |
+| `ZSCALER_AI_RED_TEAM_ENDPOINT` | Recorded as configured or not. The URL is not logged and is not requested |
+| `ZSCALER_AI_RED_TEAM_SCAN_SCOPE` | Parsed (comma-separated). Not applied to probe selection yet |
+| `ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING` | `block` \| `warn` \| `report-only`. Parsed by the stub only. It is not copied into the collapsed gate's `findingsRouting` context and does not change stub findings |
+
+Also still recognized as credentials, unchanged: `ZSCALER_AIRT_API_KEY`, `AIGUARD_API_KEY`.
+
+## Still not done
+
+- No HTTP client, no Zscaler login, no probe upload
+- `docs/zscaler-ai-red-teaming-research.md` is referenced below and is not in this repo
+- The env routing value is not wired into the collapsed gate. That gate still uses its own `findingsRouting` context, and the iteration gate still requires `red_team` or `security`
+- Credentials present → `healthCheck` mode `not_wired`; `runProbes` throws `ZscalerAiRedTeamNotWiredError`
 
 ## Contract
 
