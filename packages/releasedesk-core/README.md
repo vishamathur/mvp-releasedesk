@@ -28,6 +28,7 @@ npm run typecheck -w @releasedesk/core
 | Agent contracts | `agents/*` | Lead, Change Analyst, Standards, Security, Builder I/O |
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 | Mandatory gates | `gates` | Security always required on every change (`MANDATORY_ANALYSIS_ROLES`, `evaluateSecurityParticipation`) |
+| AI Security frameworks | `ai-security-frameworks` | MITRE ATLAS + OWASP LLM Top 10 hard fails; open-for-review PR merge block (drafts exempt); human waivers |
 | AI Red Teaming providers | `ai-red-teaming` | `AiRedTeamingProvider` (`runProbes` / `healthCheck`); `custom` \| `zscaler`; collapsed gate + non-blocking remediation side-queue; per-iteration **red_team \| security** hard approval |
 
 ## Run context lifecycle

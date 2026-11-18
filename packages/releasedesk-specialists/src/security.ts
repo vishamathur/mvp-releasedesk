@@ -5,6 +5,7 @@ import {
   SecurityAgentOutputSchema,
   type CreateEvidenceInput,
   type MockMeta,
+  type SecurityFinding,
 } from "@releasedesk/core";
 import type { AgentRunner, AgentRunInvocation, AgentRunResult } from "@releasedesk/lead";
 import {
@@ -13,6 +14,10 @@ import {
   riskLevelFromFindings,
   type ComponentRef,
 } from "./advisories.js";
+import {
+  enforceFrameworkHardFail,
+  reviewAiSurfaceAgainstFrameworks,
+} from "./ai-framework-review.js";
 import { discoverNpmComponents } from "./components.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
@@ -24,6 +29,10 @@ function asString(value: unknown): string | undefined {
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function parseComponents(value: unknown): ComponentRef[] {
@@ -44,6 +53,28 @@ function parseComponents(value: unknown): ComponentRef[] {
   return out;
 }
 
+function detectAiWrittenFromRun(inv: AgentRunInvocation): boolean {
+  const builders = inv.run.tasks.filter((t) => t.agentRole === "builder");
+  for (const b of builders) {
+    const out = b.output ?? {};
+    if (Array.isArray(out.featuresIntroduced) && out.featuresIntroduced.length > 0) return true;
+    const workItems = Array.isArray(out.workItems) ? out.workItems : [];
+    if (
+      workItems.some(
+        (w) =>
+          w &&
+          typeof w === "object" &&
+          (w as { kind?: string }).kind === "coding" &&
+          ((w as { status?: string }).status === "completed" ||
+            (w as { status?: string }).status === "dispatched"),
+      )
+    ) {
+      return true;
+    }
+  }
+  return asBoolean(inv.task.input?.aiWrittenCodeDetected) === true;
+}
+
 export function createSecurityRunner(options: SpecialistRunnerOptions = {}): AgentRunner {
   return async (inv: AgentRunInvocation): Promise<AgentRunResult> => {
     const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot();
@@ -51,6 +82,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
     const repository =
       asString(input.repository) ?? inv.run.target.repository ?? "unknown/repo";
     const advisoryHints = asStringArray(input.advisoryHints);
+    const aiComponentHints = asStringArray(input.aiComponentHints);
 
     const mocksUsed: MockMeta[] = [];
     const evidence: CreateEvidenceInput[] = [];
@@ -90,47 +122,88 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
 
     const matched = correlateAdvisories(corpus.advisories, components, advisoryHints);
 
-    const findings = matched.map((m) => ({
-      id: m.id,
-      severity: m.severity,
-      title: m.title,
-      summary: `${m.summary} Correlated to component ${m.matchedComponent.name}${
-        m.matchedComponent.version ? `@${m.matchedComponent.version}` : ""
-      }.`,
-      component: m.matchedComponent.name,
-      advisoryId: m.advisoryId,
-      releaseBlocking: m.releaseBlocking,
-    }));
+    const advisoryFindings: SecurityFinding[] = matched.map((m) =>
+      enforceFrameworkHardFail({
+        id: m.id,
+        severity: m.severity,
+        title: m.title,
+        summary: `${m.summary} Correlated to component ${m.matchedComponent.name}${
+          m.matchedComponent.version ? `@${m.matchedComponent.version}` : ""
+        }.`,
+        component: m.matchedComponent.name,
+        advisoryId: m.advisoryId,
+        releaseBlocking: m.releaseBlocking,
+        hardFail: m.releaseBlocking,
+        frameworkMappings: [],
+      }),
+    );
+
+    // MITRE ATLAS + OWASP LLM Top 10 hard guardrails for AI surfaces.
+    const aiFindings = reviewAiSurfaceAgainstFrameworks({
+      components,
+      aiComponentHints,
+      focusPaths: asStringArray(input.focusPaths),
+      aiWrittenCodeDetected: detectAiWrittenFromRun(inv) || aiComponentHints.length > 0,
+    }).map(enforceFrameworkHardFail);
+
+    const frameworkMock = createMockMeta(
+      "ai-security-frameworks",
+      "MITRE ATLAS + OWASP LLM Top 10 applied as hard Security guardrails",
+    );
+    mocksUsed.push(frameworkMock);
+
+    evidence.push({
+      kind: "policy_ref",
+      title: "MITRE ATLAS + OWASP LLM Top 10 review",
+      summary: formatMockNote(
+        aiFindings.length === 0
+          ? "No AI surface detected for ATLAS/OWASP hard-fail findings"
+          : `${aiFindings.length} ATLAS/OWASP hard-fail finding(s) — Security check fails until resolved or human-waived`,
+      ),
+      source: "security",
+      mock: frameworkMock,
+      data: {
+        frameworks: ["mitre_atlas", "owasp_llm_top_10"],
+        hardFailCount: aiFindings.length,
+        findingIds: aiFindings.map((f) => f.id),
+      },
+    });
+
+    const findings = [...advisoryFindings, ...aiFindings].map(enforceFrameworkHardFail);
 
     for (const f of findings) {
       evidence.push({
-        kind: "advisory",
+        kind: f.frameworkMappings.length ? "finding" : "advisory",
         title: f.title,
         summary: formatMockNote(f.summary),
         source: "security",
-        mock: advisoryMock,
+        mock: f.frameworkMappings.length ? frameworkMock : advisoryMock,
         data: {
           id: f.id,
           advisoryId: f.advisoryId,
           component: f.component,
           severity: f.severity,
           releaseBlocking: f.releaseBlocking,
+          hardFail: f.hardFail,
+          frameworkMappings: f.frameworkMappings,
         },
       });
     }
 
     const releaseBlockingCount = findings.filter((f) => f.releaseBlocking).length;
+    const frameworkHardFailCount = findings.filter((f) => f.frameworkMappings.length > 0).length;
+    const securityCheckFailed = frameworkHardFailCount > 0 || releaseBlockingCount > 0;
     const riskLevel = riskLevelFromFindings(findings);
 
     if (!options.skipGrok) {
       const grok = await grokComplete(
-        `Security risk narrative for ${repository}. Findings: ${JSON.stringify(findings)}`,
+        `Security risk narrative for ${repository} using MITRE ATLAS and OWASP LLM Top 10. Findings: ${JSON.stringify(findings)}`,
         {
           ...options.grok,
           fallback:
             findings.length === 0
-              ? "No correlated advisories in fixture scan."
-              : `${releaseBlockingCount} release-blocking finding(s); risk ${riskLevel}.`,
+              ? "No correlated advisories or ATLAS/OWASP findings."
+              : `${releaseBlockingCount} release-blocking; ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s); risk ${riskLevel}.`,
         },
       );
       if (grok.mocked && grok.mock) mocksUsed.push(grok.mock);
@@ -148,7 +221,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       findings.length === 0
         ? formatMockNote("Security check complete — no correlated advisories (fixture corpus)")
         : formatMockNote(
-            `Security check complete — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, risk ${riskLevel}`,
+            `Security check ${securityCheckFailed ? "FAILED" : "complete"} — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s), risk ${riskLevel}`,
           );
 
     const payload = SecurityAgentOutputSchema.parse({
@@ -163,6 +236,9 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       findings,
       releaseBlockingCount,
       riskLevel,
+      frameworksApplied: ["mitre_atlas", "owasp_llm_top_10"],
+      frameworkHardFailCount,
+      securityCheckFailed,
     });
 
     return {
@@ -173,6 +249,9 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
         findings: payload.findings,
         releaseBlockingCount: payload.releaseBlockingCount,
         riskLevel: payload.riskLevel,
+        frameworksApplied: payload.frameworksApplied,
+        frameworkHardFailCount: payload.frameworkHardFailCount,
+        securityCheckFailed: payload.securityCheckFailed,
         evidence: payload.evidence,
         mocksUsed: payload.mocksUsed,
       },

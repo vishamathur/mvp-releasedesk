@@ -41,6 +41,7 @@ export {
   SecurityFindingSchema,
   type SecurityAgentInput,
   type SecurityAgentOutput,
+  type SecurityFinding,
 } from "./security.js";
 
 export {
