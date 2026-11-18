@@ -62,7 +62,7 @@ Leave buffer for a live bot persona edit + Q&A.
 | Capability | Live when | Otherwise |
 | --- | --- | --- |
 | Desk Grok API intel (`grok-release-intel.ts`) | `RELEASEDESK_GROK_API_KEY_LEAD` set | **MOCK** labeled; shared `XAI_API_KEY`/`GROK_API_KEY` ignored |
-| Grok Bot create (`npm run create:grok-bots`) | Exclusive `RELEASEDESK_GROK_API_KEY_{LEAD,CHANGE_ANALYST,STANDARDS,SECURITY,BUILDER}` | Dry-run / skip; `registry.json` keeps `liveBotId: null` |
+| Grok Bot teammates | Already created in the Grok Bot app (`grokBotAppAgentId` in `registry.json`, host `grok-bot-app`). App ids are not xAI API ids | `npm run create:grok-bots` does not call xAI for those rows. `liveBotId` stays null |
 | Cursor Coding / Testing / Review | Exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` **and** `RELEASEDESK_CLOUD_CLIENT=real` | **MOCK** cloud clients; shared `CURSOR_API_KEY` ignored |
 | Specialist runners (Desk UI path) | Wired real runners | **MOCK** stubs (labeled) |
 | GitHub PR client (Desk UI) | `GH_TOKEN` / `GITHUB_TOKEN` | **MOCK** GitHub |

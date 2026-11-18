@@ -19,7 +19,12 @@ type BotPack = {
   apiKeyEnv: string;
   keyPresent: boolean;
   liveBotId: string | null;
+  grokBotAppAgentId?: string | null;
+  grokBotAppName?: string | null;
+  host?: string;
   provisionStatus: string;
+  provisionLabel?: string;
+  created?: boolean;
 };
 
 type GateView = {
@@ -331,8 +336,11 @@ export default function MvpPage() {
         <section className="mt-16">
           <h2 className="font-display text-2xl text-rd-ink">Grok Bots — open &amp; navigate</h2>
           <p className="mt-2 max-w-2xl text-rd-forest/70">
-            Full roster with persona, skills, routines, connectors. Live bot IDs only appear after{" "}
-            <code className="text-rd-ink">npm run create:grok-bots</code> with exclusive keys.
+            Full roster with persona, skills, routines, connectors. These bots are created in the
+            Grok Bot app. The agent ids shown here are app teammate ids, not xAI API ids. Application
+            calls use each bot&apos;s exclusive{" "}
+            <code className="text-rd-ink">RELEASEDESK_GROK_API_KEY_*</code> from{" "}
+            <code className="text-rd-ink">apps/releasedesk/.env.local</code>.
           </p>
           <ul className="mt-8 space-y-6">
             {bots.map((bot) => (
@@ -355,7 +363,8 @@ export default function MvpPage() {
                     }`}
                   >
                     {bot.keyPresent ? "key present" : "key missing"}
-                    {bot.liveBotId ? " · live id" : ` · ${bot.provisionStatus}`}
+                    {" · "}
+                    {bot.provisionLabel ?? bot.provisionStatus}
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-rd-forest/55">
@@ -366,6 +375,12 @@ export default function MvpPage() {
                   connectors: {bot.connectors.join(", ") || "—"} · teammates:{" "}
                   {bot.teammates.join(", ") || "—"}
                 </p>
+                {bot.grokBotAppAgentId ? (
+                  <p className="mt-1 font-mono text-xs text-rd-forest/55">
+                    Grok Bot app {bot.grokBotAppAgentId}
+                    {bot.grokBotAppName ? ` · ${bot.grokBotAppName}` : ""} · not an xAI API id
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className="btn-secondary mt-3"

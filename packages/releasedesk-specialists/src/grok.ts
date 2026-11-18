@@ -1,6 +1,7 @@
 import {
   createMockMeta,
   formatMockNote,
+  GROK_API_KEY_ENV,
   resolveAgentGrokApiKey,
   type GrokKeyedAgentRole,
   type MockMeta,
@@ -49,11 +50,11 @@ export async function grokComplete(
 
   if (!apiKey) {
     const envHint = opts.agentRole
-      ? `exclusive RELEASEDESK_GROK_API_KEY for ${opts.agentRole}`
-      : "agentRole / exclusive RELEASEDESK_GROK_API_KEY_*";
+      ? `${GROK_API_KEY_ENV[opts.agentRole]} missing for ${opts.agentRole}`
+      : "agentRole required — exclusive RELEASEDESK_GROK_API_KEY_* only";
     const mock = createMockMeta(
       "grok-api",
-      `${envHint} unavailable; local heuristic (shared XAI/GROK keys never used)`,
+      `${envHint}; local heuristic (shared XAI_API_KEY / GROK_API_KEY never used)`,
     );
     return {
       text: formatMockNote(opts.fallback || "Grok enrichment skipped (no per-agent API key)"),
@@ -63,7 +64,7 @@ export async function grokComplete(
   }
 
   const endpoint = opts.endpoint ?? "https://api.x.ai/v1/chat/completions";
-  const model = opts.model ?? (process.env.GROK_MODEL?.trim() || "grok-3");
+  const model = opts.model ?? (env.GROK_MODEL?.trim() || "grok-3");
   const fetchImpl = opts.fetchImpl ?? fetch;
 
   try {

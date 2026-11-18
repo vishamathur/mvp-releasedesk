@@ -10,9 +10,12 @@ import type { GrokBotDefinition } from "./types.js";
  * Auth: exclusive RELEASEDESK_GROK_API_KEY_* only — never XAI_API_KEY / GROK_API_KEY.
  * Live bot IDs recorded only from successful API responses (never invented).
  *
- * Host note: product “Grok Bots” are created in the Grok Bot app (no public /bots
- * REST route — POST /v1/bots → 404). The closest xAI management endpoint is
- * POST /v1/agents (name + instructions). Teams without Agents enabled get HTTP 403.
+ * Host note: product Grok Bots are created in the Grok Bot app. Those teammates
+ * have app agent ids in registry.json (`grokBotAppAgentId`, host `grok-bot-app`).
+ * App ids are not xAI Agents API ids, app bots do not take API keys, and this
+ * client never sends them. There is no public POST /v1/bots (404). The xAI
+ * management endpoint is POST /v1/agents with only `name` + `instructions`.
+ * Teams without Agents enabled get HTTP 403; that does not clear app teammates.
  */
 
 export const DEFAULT_GROK_BOT_API_BASE = "https://api.x.ai/v1";
@@ -111,6 +114,18 @@ function buildCreatePayload(def: GrokBotDefinition) {
   };
 }
 
+/**
+ * Body for POST /v1/agents. Only name and instructions — never an id.
+ * Grok Bot app agent ids must not be copied onto this request.
+ */
+export function xaiAgentsCreateBody(def: GrokBotDefinition): {
+  name: string;
+  instructions: string;
+} {
+  const payload = buildCreatePayload(def);
+  return { name: payload.name, instructions: payload.instructions };
+}
+
 function formatHttpErrorBody(json: unknown, text: string, statusText: string): string {
   if (typeof json === "object" && json) {
     const o = json as Record<string, unknown>;
@@ -182,7 +197,7 @@ export class GrokBotApiClient {
       };
     }
 
-    const payload = buildCreatePayload(def);
+    const payload = xaiAgentsCreateBody(def);
     if (this.dryRun) {
       return {
         definitionId: def.id,
@@ -204,7 +219,10 @@ export class GrokBotApiClient {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name: payload.name,
+          instructions: payload.instructions,
+        }),
       });
 
       const text = await res.text();
