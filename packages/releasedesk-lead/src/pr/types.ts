@@ -83,6 +83,11 @@ export type TrackedPullRequest = {
   source: "builder" | "lead" | "external";
   autoMerge: false;
   humanMergeGateRequired: true;
+  /**
+   * When true, ATLAS/OWASP hard findings do **not** block repository merge
+   * (drafts are exempt). Open-for-review PRs are blocked until resolved/waived.
+   */
+  draft: boolean;
 };
 
 export type PullRequestRecord = {

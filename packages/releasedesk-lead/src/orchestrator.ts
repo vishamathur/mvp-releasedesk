@@ -1,5 +1,6 @@
 import {
   assertMandatoryAnalysisRoles,
+  createAiFrameworkWaiver,
   evaluateSecurityParticipation,
   formatMockNote,
   LeadAgentOutputSchema,
@@ -7,7 +8,9 @@ import {
   MANDATORY_ANALYSIS_ROLES,
   MANDATORY_SECURITY_ROLE,
   nowIso,
+  parseAiFrameworkWaiverRecord,
   SECURITY_TASK_KIND,
+  type AiFrameworkWaiverRecord,
   type LeadAgentOutput,
   type RunContext,
   type RunContextStore,
@@ -58,7 +61,9 @@ import {
   type CheckpointStage,
 } from "./verification.js";
 import {
+  assertPrMergeAllowedForAiFrameworks,
   describePrClientMode,
+  evaluatePrAiFrameworkMergeGate,
   openAndTrackPullRequest,
   parsePullRequestRecord,
   pollTrackedPullRequest,
@@ -105,6 +110,8 @@ export type ReleaseCheckReport = {
   approvals: ApprovalRecord;
   /** Per-feature developer checklist sign-offs for AI-produced code. */
   featureSignOffs: FeatureSignOffRecord;
+  /** Explicit human waivers for MITRE ATLAS / OWASP LLM Top 10 findings. */
+  aiFrameworkWaivers: AiFrameworkWaiverRecord;
   checkpoints: CheckpointRecord;
   pullRequests: PullRequestRecord;
   dmSession: DmSession;
@@ -243,6 +250,7 @@ export class LeadOrchestrator {
         leadAgent: "lead",
         approvals: { gates: [] } satisfies ApprovalRecord,
         featureSignOffs: { checklists: [] } satisfies FeatureSignOffRecord,
+        aiFrameworkWaivers: { waivers: [] } satisfies AiFrameworkWaiverRecord,
         checkpoints: { checkpoints: [] } satisfies CheckpointRecord,
         pullRequests: { pullRequests: [] } satisfies PullRequestRecord,
         prClientMode: this.prClient.mode,
@@ -321,12 +329,7 @@ export class LeadOrchestrator {
     let cycle = 0;
     while (cycle < this.maxRemediationCycles && this.enableRemediation) {
       const current = await this.requireRun(run.runId);
-      const assessment = assessReadiness({
-        tasks: current.tasks,
-        approvals: parseApprovalRecord(current.metadata.approvals),
-        featureSignOffs: parseFeatureSignOffRecord(current.metadata.featureSignOffs),
-        considerRemediation: true,
-      });
+      const assessment = this.assessRunReadiness(current, { considerRemediation: true });
 
       const checkpoints = parseCheckpointRecord(current.metadata.checkpoints).checkpoints;
       const latestCheckpoint = checkpoints[checkpoints.length - 1] ?? analysisCheckpoint;
@@ -432,28 +435,52 @@ export class LeadOrchestrator {
     // Security must have a recorded result before human approval gates.
     await this.recordSecurityGate(run.runId);
 
+    // ATLAS/OWASP hard merge gate — before human merge/release can be considered.
+    await this.recordAiFrameworkMergeGate(run.runId);
+
     // Feature checklist sign-offs for AI-produced code — before merge/release gates.
     await this.requestFeatureSignOffsForNewFeatures(run.runId);
 
     // Human merge/release gates — modeled, never auto-approved / never auto-merged.
-    await this.requestApproval(run.runId, "release", "Release decision requires human approval");
+    // Merge gate reason notes ATLAS/OWASP prerequisite for open-for-review PRs.
+    const preApproval = await this.requireRun(run.runId);
+    const preMergeGate = evaluatePrAiFrameworkMergeGate({
+      tasks: preApproval.tasks,
+      waivers: preApproval.metadata.aiFrameworkWaivers,
+      ...this.latestPrDraftState(preApproval),
+    });
+    await this.requestApproval(
+      run.runId,
+      "release",
+      preMergeGate.hasUnresolvedFindings
+        ? "Release decision requires human approval (ATLAS/OWASP findings must be resolved or waived first)"
+        : "Release decision requires human approval",
+    );
     await this.requestApproval(
       run.runId,
       "merge",
-      "Merge decision requires human approval (never auto-merge)",
+      preMergeGate.blocksPrMerge
+        ? "Merge blocked until ATLAS/OWASP findings are resolved or human-waived (open-for-review PR); then human merge approval (never auto-merge)"
+        : "Merge decision requires human approval (never auto-merge)",
     );
 
     const finalRun = await this.requireRun(run.runId);
     const approvals = parseApprovalRecord(finalRun.metadata.approvals);
     const featureSignOffs = parseFeatureSignOffRecord(finalRun.metadata.featureSignOffs);
+    const aiFrameworkWaivers = parseAiFrameworkWaiverRecord(
+      finalRun.metadata.aiFrameworkWaivers,
+    );
     const checkpoints = parseCheckpointRecord(finalRun.metadata.checkpoints);
     const pullRequests = parsePullRequestRecord(finalRun.metadata.pullRequests);
+    const prMeta = this.latestPrDraftState(finalRun);
     const assessment = assessReadiness({
       tasks: finalRun.tasks,
       approvals,
       featureSignOffs,
+      aiFrameworkWaivers,
       considerRemediation: this.enableRemediation,
       checkpoints,
+      ...prMeta,
     });
 
     const leadTaskId =
@@ -508,6 +535,7 @@ export class LeadOrchestrator {
       delegations,
       approvals,
       featureSignOffs,
+      aiFrameworkWaivers,
       checkpoints,
       pullRequests,
       dmSession: this.dmSession,
@@ -626,24 +654,86 @@ export class LeadOrchestrator {
 
     // Explicit merge-blocked audit when merge is approved still does not merge.
     if (updated.kind === "merge" && decision === "approved") {
+      const nextForGate = await this.requireRun(runId);
+      const mergeGate = evaluatePrAiFrameworkMergeGate({
+        tasks: nextForGate.tasks,
+        waivers: nextForGate.metadata.aiFrameworkWaivers,
+        ...this.latestPrDraftState(nextForGate),
+      });
+      if (mergeGate.blocksPrMerge) {
+        await this.store.appendAudit({
+          runId,
+          action: "security.framework_merge_blocked",
+          message:
+            mergeGate.blockingIssue ??
+            "ATLAS/OWASP findings block repository PR merge on open-for-review PR",
+          actor: { kind: "system" },
+          details: { ...mergeGate, gateId, autoMerge: false },
+        });
+      }
       await this.store.appendAudit({
         runId,
         action: "pr.merge_blocked",
-        message:
-          "Merge approved by human gate — actual git merge is out of band (Release Desk never auto-merges)",
+        message: mergeGate.blocksPrMerge
+          ? "Merge gate approved but ATLAS/OWASP hard findings still block repository PR merge (open for review)"
+          : "Merge approved by human gate — actual git merge is out of band (Release Desk never auto-merges)",
         actor: { kind: "system" },
-        details: { gateId, autoMerge: false },
+        details: { gateId, autoMerge: false, aiFrameworkBlocksMerge: mergeGate.blocksPrMerge },
       });
     }
 
     const next = await this.requireRun(runId);
-    const assessment = assessReadiness({
-      tasks: next.tasks,
-      approvals: record,
-      featureSignOffs: parseFeatureSignOffRecord(next.metadata.featureSignOffs),
-      checkpoints: parseCheckpointRecord(next.metadata.checkpoints),
-    });
+    const assessment = this.assessRunReadiness(next, { approvals: record });
     return { run: next, gate: updated, assessment };
+  }
+
+  /**
+   * Explicit human waiver for a MITRE ATLAS / OWASP LLM Top 10 finding.
+   * Never auto-waived. Clears merge block only for waived finding ids.
+   */
+  async recordAiFrameworkWaiver(
+    runId: string,
+    input: {
+      findingId: string;
+      waivedBy: string;
+      reason: string;
+      frameworks?: Array<"mitre_atlas" | "owasp_llm_top_10">;
+    },
+  ): Promise<{
+    run: RunContext;
+    waivers: AiFrameworkWaiverRecord;
+    assessment: ReadinessAssessment;
+  }> {
+    const run = await this.requireRun(runId);
+    if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") {
+      throw new Error(
+        `Run ${runId} is ${run.status}; record ATLAS/OWASP waivers before the Lead completes the run, or use applyAiFrameworkWaiversToReport`,
+      );
+    }
+    const record = parseAiFrameworkWaiverRecord(run.metadata.aiFrameworkWaivers);
+    const waiver = createAiFrameworkWaiver({
+      findingId: input.findingId,
+      waivedBy: input.waivedBy,
+      reason: input.reason,
+      frameworks: input.frameworks ?? ["mitre_atlas", "owasp_llm_top_10"],
+    });
+    record.waivers.push(waiver);
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, aiFrameworkWaivers: record },
+    });
+    await this.store.appendAudit({
+      runId,
+      action: "security.framework_waiver_recorded",
+      message: `Human waived ATLAS/OWASP finding ${input.findingId}`,
+      actor: { kind: "human", name: input.waivedBy },
+      details: { ...waiver },
+    });
+    const next = await this.requireRun(runId);
+    return {
+      run: next,
+      waivers: record,
+      assessment: this.assessRunReadiness(next, { aiFrameworkWaivers: record }),
+    };
   }
 
   /**
@@ -707,12 +797,7 @@ export class LeadOrchestrator {
     }
 
     const next = await this.requireRun(runId);
-    const assessment = assessReadiness({
-      tasks: next.tasks,
-      approvals: parseApprovalRecord(next.metadata.approvals),
-      featureSignOffs: record,
-      checkpoints: parseCheckpointRecord(next.metadata.checkpoints),
-    });
+    const assessment = this.assessRunReadiness(next, { featureSignOffs: record });
     return { run: next, checklist: updated, assessment };
   }
 
@@ -738,11 +823,14 @@ export class LeadOrchestrator {
         ...(d.notes !== undefined ? { notes: d.notes } : {}),
       });
     }
+    const prMeta = this.latestPrDraftStateFromRecord(report.pullRequests);
     const assessment = assessReadiness({
       tasks: report.run.tasks,
       approvals,
       featureSignOffs: report.featureSignOffs,
+      aiFrameworkWaivers: report.aiFrameworkWaivers,
       checkpoints: report.checkpoints,
+      ...prMeta,
     });
     const leadOutput = LeadAgentOutputSchema.parse({
       ...report.leadOutput,
@@ -753,6 +841,49 @@ export class LeadOrchestrator {
       completedAt: nowIso(),
     });
     return { ...report, approvals, assessment, leadOutput };
+  }
+
+  /** In-memory ATLAS/OWASP waivers on a finished report. */
+  applyAiFrameworkWaiversToReport(
+    report: ReleaseCheckReport,
+    waivers: Array<{
+      findingId: string;
+      waivedBy: string;
+      reason: string;
+      frameworks?: Array<"mitre_atlas" | "owasp_llm_top_10">;
+    }>,
+  ): ReleaseCheckReport {
+    const aiFrameworkWaivers: AiFrameworkWaiverRecord = {
+      waivers: [
+        ...report.aiFrameworkWaivers.waivers,
+        ...waivers.map((w) =>
+          createAiFrameworkWaiver({
+            findingId: w.findingId,
+            waivedBy: w.waivedBy,
+            reason: w.reason,
+            frameworks: w.frameworks ?? ["mitre_atlas", "owasp_llm_top_10"],
+          }),
+        ),
+      ],
+    };
+    const prMeta = this.latestPrDraftStateFromRecord(report.pullRequests);
+    const assessment = assessReadiness({
+      tasks: report.run.tasks,
+      approvals: report.approvals,
+      featureSignOffs: report.featureSignOffs,
+      aiFrameworkWaivers,
+      checkpoints: report.checkpoints,
+      ...prMeta,
+    });
+    const leadOutput = LeadAgentOutputSchema.parse({
+      ...report.leadOutput,
+      readiness: assessment.readiness,
+      blockingIssues: assessment.blockingIssues,
+      remediationRecommended: assessment.remediationRecommended,
+      summary: assessment.summary,
+      completedAt: nowIso(),
+    });
+    return { ...report, aiFrameworkWaivers, assessment, leadOutput };
   }
 
   /**
@@ -795,11 +926,14 @@ export class LeadOrchestrator {
       }
     }
 
+    const prMeta = this.latestPrDraftStateFromRecord(report.pullRequests);
     const assessment = assessReadiness({
       tasks: report.run.tasks,
       approvals: report.approvals,
       featureSignOffs,
+      aiFrameworkWaivers: report.aiFrameworkWaivers,
       checkpoints: report.checkpoints,
+      ...prMeta,
     });
     const leadOutput = LeadAgentOutputSchema.parse({
       ...report.leadOutput,
@@ -861,6 +995,125 @@ export class LeadOrchestrator {
       details: { ...gate, skipAllowed: false },
       ...(gate.taskId !== undefined ? { taskId: gate.taskId } : {}),
     });
+  }
+
+  private latestPrDraftState(run: RunContext): {
+    prDraft: boolean | null;
+    prState: "open" | "closed" | "merged" | null;
+  } {
+    return this.latestPrDraftStateFromRecord(
+      parsePullRequestRecord(run.metadata.pullRequests),
+    );
+  }
+
+  private latestPrDraftStateFromRecord(record: PullRequestRecord): {
+    prDraft: boolean | null;
+    prState: "open" | "closed" | "merged" | null;
+  } {
+    const prs = record.pullRequests;
+    if (prs.length === 0) return { prDraft: null, prState: null };
+    const latest = prs[prs.length - 1]!;
+    return {
+      prDraft: latest.draft,
+      prState: (latest.lastStatus?.state as "open" | "closed" | "merged" | undefined) ?? "open",
+    };
+  }
+
+  private assessRunReadiness(
+    run: RunContext,
+    overrides?: {
+      approvals?: ApprovalRecord;
+      featureSignOffs?: FeatureSignOffRecord;
+      aiFrameworkWaivers?: AiFrameworkWaiverRecord;
+      considerRemediation?: boolean;
+    },
+  ): ReadinessAssessment {
+    const prMeta = this.latestPrDraftState(run);
+    return assessReadiness({
+      tasks: run.tasks,
+      approvals: overrides?.approvals ?? parseApprovalRecord(run.metadata.approvals),
+      featureSignOffs:
+        overrides?.featureSignOffs ??
+        parseFeatureSignOffRecord(run.metadata.featureSignOffs),
+      aiFrameworkWaivers:
+        overrides?.aiFrameworkWaivers ??
+        parseAiFrameworkWaiverRecord(run.metadata.aiFrameworkWaivers),
+      checkpoints: parseCheckpointRecord(run.metadata.checkpoints),
+      considerRemediation: overrides?.considerRemediation,
+      ...prMeta,
+    });
+  }
+
+  /** Persist ATLAS/OWASP merge gate; blocks open-for-review PR merge when unresolved. */
+  private async recordAiFrameworkMergeGate(runId: string): Promise<void> {
+    const run = await this.requireRun(runId);
+    const gate = evaluatePrAiFrameworkMergeGate({
+      tasks: run.tasks,
+      waivers: run.metadata.aiFrameworkWaivers,
+      ...this.latestPrDraftState(run),
+    });
+    await this.store.update(runId, {
+      metadata: { ...run.metadata, aiFrameworkMergeGate: gate },
+    });
+
+    if (gate.hasUnresolvedFindings) {
+      await this.store.appendAudit({
+        runId,
+        action: "security.framework_findings",
+        message: `MITRE ATLAS / OWASP LLM Top 10: ${gate.unresolvedFindingIds.length} unresolved hard-fail finding(s)`,
+        actor: { kind: "agent", agentRole: "lead" },
+        details: { ...gate },
+      });
+    }
+
+    if (gate.blocksPrMerge) {
+      await this.store.appendAudit({
+        runId,
+        action: "security.framework_merge_blocked",
+        message:
+          gate.blockingIssue ??
+          "ATLAS/OWASP findings block repository PR merge (open for review)",
+        actor: { kind: "agent", agentRole: "lead" },
+        details: { ...gate, draftExempt: false },
+      });
+      // Refuse merge attempt for every tracked open-for-review PR.
+      const prs = parsePullRequestRecord(run.metadata.pullRequests).pullRequests;
+      for (const tracked of prs) {
+        if (tracked.draft) continue;
+        try {
+          assertPrMergeAllowedForAiFrameworks({
+            tasks: run.tasks,
+            waivers: run.metadata.aiFrameworkWaivers,
+            prDraft: tracked.draft,
+            prState: tracked.lastStatus?.state ?? "open",
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          await this.store.appendAudit({
+            runId,
+            action: "pr.merge_blocked",
+            message: `Repository PR #${tracked.prNumber} merge blocked by ATLAS/OWASP: ${message}`,
+            actor: { kind: "system" },
+            details: {
+              prNumber: tracked.prNumber,
+              url: tracked.url,
+              draft: tracked.draft,
+              autoMerge: false,
+              aiFrameworkBlocksMerge: true,
+            },
+          });
+        }
+      }
+    } else if (gate.draftExempt && gate.hasUnresolvedFindings) {
+      await this.store.appendAudit({
+        runId,
+        action: "security.framework_findings",
+        message:
+          "ATLAS/OWASP findings present but draft PR is exempt from merge block (Security still failed)",
+        actor: { kind: "agent", agentRole: "lead" },
+        details: { ...gate },
+      });
+    }
   }
 
   private async runCheckpoint(
@@ -1013,20 +1266,33 @@ export class LeadOrchestrator {
       return;
     }
 
-    // Refuse any attempt to auto-merge via client.
+    // Refuse any attempt to auto-merge via client; also enforce ATLAS/OWASP on open PRs.
+    const runForMerge = await this.requireRun(runId);
     try {
+      assertPrMergeAllowedForAiFrameworks({
+        tasks: runForMerge.tasks,
+        waivers: runForMerge.metadata.aiFrameworkWaivers,
+        prDraft: tracked.draft,
+        prState: "open",
+      });
       await this.prClient.mergePullRequest(tracked.repository, tracked.prNumber);
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const aiBlocked = /ATLAS|OWASP|framework/i.test(message);
       await this.store.appendAudit({
         runId,
-        action: "pr.merge_blocked",
-        message: `Auto-merge refused for PR #${tracked.prNumber}`,
+        action: aiBlocked ? "security.framework_merge_blocked" : "pr.merge_blocked",
+        message: aiBlocked
+          ? `Repository PR #${tracked.prNumber} merge blocked by ATLAS/OWASP: ${message}`
+          : `Auto-merge refused for PR #${tracked.prNumber}`,
         actor: { kind: "system" },
         details: {
           prNumber: tracked.prNumber,
           url: tracked.url,
+          draft: tracked.draft,
           autoMerge: false,
           humanMergeGateRequired: true,
+          aiFrameworkBlocksMerge: aiBlocked,
         },
       });
     }

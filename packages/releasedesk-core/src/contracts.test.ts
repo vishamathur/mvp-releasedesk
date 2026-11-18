@@ -166,8 +166,47 @@ describe("agent contract schemas", () => {
       findings: [],
       releaseBlockingCount: 0,
       riskLevel: "none",
+      frameworksApplied: ["mitre_atlas", "owasp_llm_top_10"],
+      frameworkHardFailCount: 0,
+      securityCheckFailed: false,
     });
     expect(output.riskLevel).toBe("none");
+    expect(output.frameworksApplied).toContain("mitre_atlas");
+
+    const hardFail = SecurityAgentOutputSchema.parse({
+      runId,
+      taskId,
+      agentRole: "security",
+      status: "completed",
+      completedAt,
+      summary: "ATLAS/OWASP hard fail",
+      evidence: [],
+      mocksUsed: [],
+      findings: [
+        {
+          id: "AI-FW-PROMPT-INJECTION",
+          severity: "high",
+          title: "Prompt injection",
+          summary: "Hard guardrail",
+          releaseBlocking: true,
+          hardFail: true,
+          frameworkMappings: [
+            {
+              framework: "owasp_llm_top_10",
+              categoryId: "LLM01",
+              categoryName: "Prompt Injection",
+              hardFail: true,
+            },
+          ],
+        },
+      ],
+      releaseBlockingCount: 1,
+      riskLevel: "high",
+      frameworkHardFailCount: 1,
+      securityCheckFailed: true,
+    });
+    expect(hardFail.securityCheckFailed).toBe(true);
+    expect(hardFail.findings[0]!.frameworkMappings[0]!.hardFail).toBe(true);
   });
 
   it("parses Builder input/output", () => {
