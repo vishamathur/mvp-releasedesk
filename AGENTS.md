@@ -1,7 +1,7 @@
 # Release Desk — Cursor agent instructions (SpaceXAI)
 
 ## Product
-Northwind Bank KYC release readiness. Desk on `:3001`, KYC on `:3000`.
+Northwind Bank KYC release readiness. Desk on `:3002`, KYC on `:3000`.
 
 ## Required stack (do not skip)
 1. **Grok Bot host** packs in `grok-bots/bots/*` (Lead + Change Analyst + Standards + Security + Builder).
