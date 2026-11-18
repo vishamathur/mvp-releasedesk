@@ -29,7 +29,9 @@
     "lint": "npm run lint -w @northwind/kyc",
     "seed": "npm run seed -w @northwind/kyc",
     "generate:demos": "npm run generate:demos -w @releasedesk/ui",
-    "create:grok-bots": "npm exec -w @releasedesk/ui -- tsx ../../scripts/create-grok-bots.ts"
+    "create:grok-bots": "npm exec -w @releasedesk/ui -- tsx ../../scripts/create-grok-bots.ts",
+    "demo:control-plane": "tsx scripts/demo-control-plane.ts",
+    "demo:grok-intel": "tsx scripts/demo-control-plane.ts"
   },
   "engines": {
     "node": ">=20"
