@@ -1,0 +1,156 @@
+import { assessRisk } from "./risk";
+import { canSubmitApplication, validateIdentity } from "./validation";
+import { transitionStatus } from "./status";
+import type {
+  AddDocumentInput,
+  CreateApplicationInput,
+  DocumentType,
+  Identity,
+  KycApplication,
+  KycDocument,
+} from "./types";
+
+function isoNow(now?: Date): string {
+  return (now ?? new Date()).toISOString();
+}
+
+function newId(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+}
+
+function referenceFromId(id: string): string {
+  return `NW-${id.slice(-8).toUpperCase()}`;
+}
+
+function mockOcrSummary(type: DocumentType, fileName: string): string {
+  return `MOCK OCR: Detected ${type.replaceAll("_", " ")} from “${fileName}” — fields not extracted (placeholder).`;
+}
+
+export function createDraftApplication(
+  input: CreateApplicationInput,
+  now?: Date,
+): KycApplication {
+  const issues = validateIdentity(input.identity);
+  if (issues.length > 0) {
+    throw new Error(issues.map((i) => `${i.field}: ${i.message}`).join("; "));
+  }
+
+  const createdAt = isoNow(now);
+  const id = newId("app");
+
+  return {
+    id,
+    reference: referenceFromId(id),
+    status: "draft",
+    identity: { ...input.identity },
+    documents: [],
+    risk: null,
+    createdAt,
+    updatedAt: createdAt,
+    submittedAt: null,
+    notes: ["Application created"],
+  };
+}
+
+export function updateIdentity(
+  app: KycApplication,
+  identity: Identity,
+  now?: Date,
+): KycApplication {
+  if (app.status !== "draft" && app.status !== "needs_info") {
+    throw new Error("Identity can only be edited in draft or needs_info.");
+  }
+  const issues = validateIdentity(identity);
+  if (issues.length > 0) {
+    throw new Error(issues.map((i) => `${i.field}: ${i.message}`).join("; "));
+  }
+  return {
+    ...app,
+    identity: { ...identity },
+    updatedAt: isoNow(now),
+    notes: [...app.notes, "Identity updated"],
+  };
+}
+
+export function addDocument(
+  app: KycApplication,
+  input: AddDocumentInput,
+  now?: Date,
+): KycApplication {
+  if (app.status !== "draft" && app.status !== "needs_info") {
+    throw new Error("Documents can only be added in draft or needs_info.");
+  }
+  if (!input.fileName.trim()) {
+    throw new Error("fileName is required.");
+  }
+
+  const uploadedAt = isoNow(now);
+  const doc: KycDocument = {
+    id: newId("doc"),
+    type: input.type,
+    fileName: input.fileName.trim(),
+    mockStorageKey: `mock://docs/${app.id}/${input.type}/${encodeURIComponent(input.fileName.trim())}`,
+    status: "uploaded",
+    uploadedAt,
+    mockOcrSummary: mockOcrSummary(input.type, input.fileName.trim()),
+  };
+
+  return {
+    ...app,
+    documents: [...app.documents, doc],
+    updatedAt: uploadedAt,
+    notes: [...app.notes, `Document placeholder added: ${input.type}`],
+  };
+}
+
+export function submitApplication(app: KycApplication, now?: Date): KycApplication {
+  const issues = canSubmitApplication({
+    identity: app.identity,
+    documentTypes: app.documents.map((d) => d.type),
+  });
+  if (issues.length > 0) {
+    throw new Error(issues.map((i) => i.message).join("; "));
+  }
+  if (!app.identity) {
+    throw new Error("Identity is required.");
+  }
+
+  const submittedAt = isoNow(now);
+  const risk = assessRisk({
+    identity: app.identity,
+    documentCount: app.documents.length,
+    hasSelfie: app.documents.some((d) => d.type === "selfie"),
+    now: now ?? new Date(submittedAt),
+  });
+
+  const nextStatus = transitionStatus(app.status === "needs_info" ? "needs_info" : "draft", "submitted");
+
+  return {
+    ...app,
+    status: nextStatus,
+    risk,
+    submittedAt,
+    updatedAt: submittedAt,
+    notes: [
+      ...app.notes,
+      `Submitted with ${risk.level} risk (score ${risk.score})`,
+      risk.mockScreeningNote,
+    ],
+  };
+}
+
+export function advanceReview(
+  app: KycApplication,
+  decision: "in_review" | "approved" | "rejected" | "needs_info",
+  note?: string,
+  now?: Date,
+): KycApplication {
+  const next = transitionStatus(app.status, decision);
+  const updatedAt = isoNow(now);
+  return {
+    ...app,
+    status: next,
+    updatedAt,
+    notes: [...app.notes, note?.trim() || `Status → ${decision}`],
+  };
+}
