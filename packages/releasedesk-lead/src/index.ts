@@ -85,6 +85,15 @@ export {
 } from "./orchestrator.js";
 
 export {
+  CustomerIntake,
+  createCustomerIntake,
+  createInMemoryIntakeStore,
+  createFileBackedIntakeStore,
+  type IntakeStore,
+  type CustomerIntakeOptions,
+} from "./intake.js";
+
+export {
   createMockPrClient,
   createRealPrClient,
   resolvePrClient,

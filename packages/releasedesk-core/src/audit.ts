@@ -52,6 +52,8 @@ export const AuditActionSchema = z.enum([
   "security.framework_findings",
   "security.framework_merge_blocked",
   "security.framework_waiver_recorded",
+  /** Customer intake — Lead started from dual-approved backlog item */
+  "intake.lead_started_from_queue",
 ]);
 
 export type AuditAction = z.infer<typeof AuditActionSchema>;

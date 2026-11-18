@@ -168,7 +168,7 @@ function toListItem(desk: DeskReport): RunListItem {
   };
 }
 
-async function writeDeskReport(desk: DeskReport): Promise<void> {
+export async function writeDeskReport(desk: DeskReport): Promise<void> {
   const p = await ensureDirs();
   await writeFile(
     path.join(p.reports, `${desk.runId}.json`),
@@ -176,6 +176,8 @@ async function writeDeskReport(desk: DeskReport): Promise<void> {
     "utf8",
   );
 }
+
+export { wrapReport as wrapDeskReport };
 
 async function readDeskReport(runId: string): Promise<DeskReport | undefined> {
   const p = await ensureDirs();
