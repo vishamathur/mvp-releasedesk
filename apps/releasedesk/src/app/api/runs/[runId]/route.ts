@@ -15,6 +15,7 @@ export async function GET(_request: Request, { params }: Props) {
     runId: data.view.runId,
     list: data.list,
     readiness: data.view.leadOutput.readiness,
+    featureSignOffs: data.view.featureSignOffs,
     summary: data.view.leadOutput.summary,
     blockingIssues: data.view.leadOutput.blockingIssues,
     approvals: data.view.approvals,

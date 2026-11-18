@@ -162,6 +162,19 @@ async function main(): Promise<void> {
   });
 
   if (args.approve) {
+    // Explicit CLI demo action: complete feature checklists then merge/release gates.
+    // Orchestrator never auto-signs these during the run.
+    if (report.featureSignOffs.checklists.length > 0) {
+      report = lead.applyFeatureSignOffsToReport(
+        report,
+        report.featureSignOffs.checklists.map((c) => ({
+          checklistId: c.id,
+          signOffAll: true,
+          signedOffBy: args.decidedBy,
+          notes: "CLI --approve feature checklist (in-memory only)",
+        })),
+      );
+    }
     const decisions = report.approvals.gates
       .filter((g) => g.status === "pending")
       .map((g) => ({
@@ -197,6 +210,7 @@ async function main(): Promise<void> {
           remediationRecommended: report.leadOutput.remediationRecommended,
           delegations: report.delegations,
           approvals: report.approvals,
+          featureSignOffs: report.featureSignOffs,
           checkpoints: report.checkpoints,
           pullRequests: report.pullRequests,
           prClientMode: prClient.mode,
@@ -244,13 +258,23 @@ async function main(): Promise<void> {
   for (const b of report.leadOutput.blockingIssues) {
     console.log(`  - ${b}`);
   }
+  console.log(`Feature sign-offs:`);
+  if (report.featureSignOffs.checklists.length === 0) {
+    console.log(`  (none — no AI-produced features detected)`);
+  }
+  for (const c of report.featureSignOffs.checklists) {
+    const signed = c.items.filter((i) => i.signedOff).length;
+    console.log(
+      `  - ${c.kind} ${c.status}: ${c.feature.title} (${signed}/${c.items.length} items) [${c.id}]`,
+    );
+  }
   console.log(`Approvals:`);
   for (const g of report.approvals.gates) {
     console.log(`  - ${g.kind}: ${g.status} (${g.id})`);
   }
   console.log(`Audit events: ${report.run.auditTrail.length}`);
   console.log(
-    "\nNote: never auto-merges. Use --approve/--reject for in-memory gate demos only.",
+    "\nNote: never auto-merges / never auto-signs feature checklists. Use --approve/--reject for in-memory demos only.",
   );
   console.log(
     "Full check with specialists: npm run check:release -- --repo owner/name --json",

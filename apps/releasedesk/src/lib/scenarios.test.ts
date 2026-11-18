@@ -46,6 +46,7 @@ describe("demo scenarios", () => {
     expect(report.run.tasks.some((t) => t.agentRole === "builder")).toBe(true);
     expect(report.run.tasks.some((t) => t.name.includes("Reverify"))).toBe(true);
     expect(report.checkpoints.checkpoints.length).toBeGreaterThan(1);
+    expect(report.featureSignOffs.checklists.length).toBeGreaterThanOrEqual(1);
     expect(report.leadOutput.readiness).toBe("needs_human");
   });
 
@@ -103,5 +104,40 @@ describe("demo scenarios", () => {
     const view = viewReport(desk);
     expect(view.leadOutput.readiness).toBe("ready");
     expect(desk.report.approvals.gates.every((g) => g.status === "pending")).toBe(true);
+  });
+
+  it("remediation-loop: partial feature sign-off blocks; full sign-off then gates can ready", async () => {
+    const cfg = runnersForScenario("remediation-loop");
+    const lead = new LeadOrchestrator({
+      store: createInMemoryStore(),
+      runners: cfg.runners,
+      enableRemediation: cfg.enableRemediation,
+      maxRemediationCycles: cfg.maxRemediationCycles,
+      prClient: { client: createMockPrClient() },
+    });
+    const report = await lead.startOnDemandCheck({
+      goal: cfg.goal,
+      target: { repository: "vishamathur/mvp-releasedesk" },
+    });
+    const checklist = report.featureSignOffs.checklists[0]!;
+    expect(checklist).toBeTruthy();
+
+    const release = report.approvals.gates.find((g) => g.kind === "release")!;
+    const merge = report.approvals.gates.find((g) => g.kind === "merge")!;
+    const gatesApproved = lead.applyApprovalsToReport(report, [
+      { gateId: release.id, decision: "approved", decidedBy: "dm" },
+      { gateId: merge.id, decision: "approved", decidedBy: "dm" },
+    ]);
+    expect(gatesApproved.leadOutput.readiness).toBe("needs_human");
+
+    const partial = lead.applyFeatureSignOffsToReport(gatesApproved, [
+      { checklistId: checklist.id, itemId: "intent_match", signedOffBy: "dev" },
+    ]);
+    expect(partial.leadOutput.readiness).toBe("needs_human");
+
+    const full = lead.applyFeatureSignOffsToReport(gatesApproved, [
+      { checklistId: checklist.id, signOffAll: true, signedOffBy: "dev" },
+    ]);
+    expect(full.leadOutput.readiness).toBe("ready");
   });
 });

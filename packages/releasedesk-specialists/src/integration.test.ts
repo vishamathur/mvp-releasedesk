@@ -118,7 +118,9 @@ describe("Lead + specialist runners integration", () => {
     });
     expect(Array.isArray(builderTasks[0]!.output?.cloudAgentAudit)).toBe(true);
 
-    // Human merge/release gates still pending
+    // Feature checklist pending for AI coding work; merge/release gates still pending
+    expect(report.featureSignOffs.checklists.length).toBeGreaterThanOrEqual(1);
+    expect(report.featureSignOffs.checklists.every((c) => c.status === "pending")).toBe(true);
     expect(getPendingGates(report.approvals).length).toBe(2);
 
     // Reverify wave scheduled after builder

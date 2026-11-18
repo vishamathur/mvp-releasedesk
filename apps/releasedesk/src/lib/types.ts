@@ -1,6 +1,7 @@
 import type {
   ApprovalRecord,
   DmSession,
+  FeatureSignOffRecord,
   ReleaseCheckReport,
 } from "@releasedesk/lead";
 import type { RunContext } from "@releasedesk/core";
@@ -18,6 +19,8 @@ export type DeskReport = {
   dmSession: DmSession;
   /** Approvals applied after the run completed (terminal store runs are immutable). */
   approvalOverlay?: ApprovalRecord;
+  /** Feature checklist sign-offs applied after the run completed. */
+  featureSignOffOverlay?: FeatureSignOffRecord;
 };
 
 export type RunListItem = {

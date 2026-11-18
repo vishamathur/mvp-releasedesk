@@ -47,6 +47,8 @@ export {
   BuilderAgentInputSchema,
   BuilderAgentOutputSchema,
   BuilderWorkItemSchema,
+  BuilderFeatureIntroducedSchema,
   type BuilderAgentInput,
   type BuilderAgentOutput,
+  type BuilderFeatureIntroduced,
 } from "./builder.js";

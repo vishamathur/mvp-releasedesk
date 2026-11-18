@@ -11,12 +11,15 @@ import {
   createDefaultStubRunners,
   createMockPrClient,
   createDmSession,
+  getIncompleteChecklists,
   getPendingGates,
   receiveDmText,
   replyAsLead,
   type AgentRunnerMap,
   type ApprovalDecision,
   type DmSession,
+  type FeatureSignOffItemId,
+  type FeatureSignOffRecord,
   type ReleaseCheckReport,
 } from "@releasedesk/lead";
 import { DEMO_SCENARIOS, isDemoScenarioId, runnersForScenario } from "./scenarios";
@@ -49,15 +52,75 @@ async function ensureDirs() {
   return p;
 }
 
-export function viewReport(desk: DeskReport): ReleaseCheckReport {
-  if (!desk.approvalOverlay) return desk.report;
+function normalizeReport(report: ReleaseCheckReport): ReleaseCheckReport {
+  return {
+    ...report,
+    featureSignOffs: report.featureSignOffs ?? { checklists: [] },
+  };
+}
 
+export function viewReport(desk: DeskReport): ReleaseCheckReport {
   const lead = new LeadOrchestrator({
     store: createInMemoryStore(),
     enableRemediation: false,
   });
 
-  const baseGates = desk.report.approvals.gates.map((g) => ({
+  let view = normalizeReport(desk.report);
+
+  if (desk.featureSignOffOverlay) {
+    const baseChecklists = (desk.report.featureSignOffs?.checklists ?? []).map((c) => ({
+      ...c,
+      status: "pending" as const,
+      completedAt: undefined,
+      completedBy: undefined,
+      items: c.items.map((i) => ({
+        ...i,
+        signedOff: false,
+        signedOffAt: undefined,
+        signedOffBy: undefined,
+        notes: undefined,
+      })),
+      feature: { ...c.feature },
+    }));
+    const base: ReleaseCheckReport = {
+      ...view,
+      featureSignOffs: { checklists: baseChecklists },
+    };
+    type SignOffDecision = {
+      checklistId: string;
+      itemId?: FeatureSignOffItemId;
+      signOffAll?: boolean;
+      signedOffBy?: string;
+      notes?: string;
+    };
+    const decisions: SignOffDecision[] = [];
+    for (const c of desk.featureSignOffOverlay.checklists) {
+      const signedItems = c.items.filter((i) => i.signedOff);
+      if (c.status === "completed" || signedItems.length === c.items.length) {
+        decisions.push({
+          checklistId: c.id,
+          signOffAll: true,
+          ...(c.completedBy !== undefined ? { signedOffBy: c.completedBy } : {}),
+        });
+        continue;
+      }
+      for (const i of signedItems) {
+        decisions.push({
+          checklistId: c.id,
+          itemId: i.id as FeatureSignOffItemId,
+          ...(i.signedOffBy !== undefined ? { signedOffBy: i.signedOffBy } : {}),
+          ...(i.notes !== undefined ? { notes: i.notes } : {}),
+        });
+      }
+    }
+    if (decisions.length > 0) {
+      view = lead.applyFeatureSignOffsToReport(base, decisions);
+    }
+  }
+
+  if (!desk.approvalOverlay) return view;
+
+  const baseGates = view.approvals.gates.map((g) => ({
     ...g,
     status: "pending" as const,
     decidedAt: undefined,
@@ -65,7 +128,7 @@ export function viewReport(desk: DeskReport): ReleaseCheckReport {
     notes: undefined,
   }));
   const base: ReleaseCheckReport = {
-    ...desk.report,
+    ...view,
     approvals: { gates: baseGates },
   };
 
@@ -78,7 +141,7 @@ export function viewReport(desk: DeskReport): ReleaseCheckReport {
       ...(g.notes !== undefined ? { notes: g.notes } : {}),
     }));
 
-  if (decisions.length === 0) return desk.report;
+  if (decisions.length === 0) return view;
   return lead.applyApprovalsToReport(base, decisions);
 }
 
@@ -95,7 +158,9 @@ function toListItem(desk: DeskReport): RunListItem {
     createdAt: desk.createdAt,
     updatedAt: desk.updatedAt,
     blockingCount: report.leadOutput.blockingIssues.length,
-    pendingApprovals: getPendingGates(report.approvals).length,
+    pendingApprovals:
+      getPendingGates(report.approvals).length +
+      getIncompleteChecklists(report.featureSignOffs).length,
     checkpointCount: report.checkpoints.checkpoints.length,
     prCount: report.pullRequests.pullRequests.length,
     mockIntegrations: desk.prClientMode === "mock",
@@ -296,17 +361,83 @@ export async function applyGateDecision(input: {
     ...desk,
     updatedAt: nowIso(),
     approvalOverlay: nextView.approvals,
+    featureSignOffOverlay: nextView.featureSignOffs,
     dmSession: nextView.dmSession,
     report: {
       ...desk.report,
       leadOutput: nextView.leadOutput,
       assessment: nextView.assessment,
+      featureSignOffs: desk.report.featureSignOffs ?? { checklists: [] },
     },
   };
 
   await writeDeskReport(updated);
   const view = viewReport(updated);
   return { desk: updated, view, list: toListItem({ ...updated, report: view }) };
+}
+
+export async function applyFeatureSignOffDecision(input: {
+  runId: string;
+  checklistId: string;
+  itemId?: FeatureSignOffItemId;
+  signOffAll?: boolean;
+  signedOffBy?: string;
+  notes?: string;
+}) {
+  const desk = await readDeskReport(input.runId);
+  if (!desk) throw new Error(`Run ${input.runId} not found`);
+
+  const current = viewReport(desk);
+  const checklist = current.featureSignOffs.checklists.find((c) => c.id === input.checklistId);
+  if (!checklist) throw new Error(`Feature checklist ${input.checklistId} not found`);
+  if (checklist.status === "completed") {
+    throw new Error(`Feature checklist ${input.checklistId} is already completed`);
+  }
+  if (!input.signOffAll && !input.itemId) {
+    throw new Error("itemId or signOffAll is required");
+  }
+  if (input.itemId) {
+    const item = checklist.items.find((i) => i.id === input.itemId);
+    if (!item) throw new Error(`Checklist item ${input.itemId} not found`);
+    if (item.signedOff) throw new Error(`Checklist item ${input.itemId} is already signed off`);
+  }
+
+  const lead = new LeadOrchestrator({
+    store: createInMemoryStore(),
+    enableRemediation: false,
+  });
+  const nextView = lead.applyFeatureSignOffsToReport(current, [
+    {
+      checklistId: input.checklistId,
+      ...(input.itemId !== undefined ? { itemId: input.itemId } : {}),
+      ...(input.signOffAll ? { signOffAll: true } : {}),
+      signedOffBy: input.signedOffBy ?? "developer",
+      notes: input.notes ?? "Signed off in Release Desk UI",
+    },
+  ]);
+
+  const updated: DeskReport = {
+    ...desk,
+    updatedAt: nowIso(),
+    featureSignOffOverlay: nextView.featureSignOffs,
+    approvalOverlay: desk.approvalOverlay ?? nextView.approvals,
+    dmSession: nextView.dmSession,
+    report: {
+      ...desk.report,
+      leadOutput: nextView.leadOutput,
+      assessment: nextView.assessment,
+      featureSignOffs: desk.report.featureSignOffs ?? { checklists: [] },
+    },
+  };
+
+  await writeDeskReport(updated);
+  const view = viewReport(updated);
+  return { desk: updated, view, list: toListItem({ ...updated, report: view }) };
+}
+
+/** @internal helper for tests / fixtures missing featureSignOffs */
+export function emptyFeatureSignOffs(): FeatureSignOffRecord {
+  return { checklists: [] };
 }
 
 export async function postDmMessage(input: {

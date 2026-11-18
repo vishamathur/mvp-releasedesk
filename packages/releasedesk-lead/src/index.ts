@@ -30,6 +30,23 @@ export {
 } from "./approval.js";
 
 export {
+  detectNewFeaturesFromTasks,
+  createChecklistsForFeatures,
+  mergeFeatureSignOffRecords,
+  parseFeatureSignOffRecord,
+  signOffChecklistItem,
+  signOffEntireChecklist,
+  allFeatureSignOffsComplete,
+  getIncompleteChecklists,
+  isChecklistComplete,
+  type FeatureArtifact,
+  type FeatureSignOffChecklist,
+  type FeatureSignOffItem,
+  type FeatureSignOffItemId,
+  type FeatureSignOffRecord,
+} from "./feature-signoff.js";
+
+export {
   assessReadiness,
   latestTasksByRole,
   type SpecialistSnapshot,

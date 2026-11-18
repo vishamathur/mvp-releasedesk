@@ -1,8 +1,11 @@
 import { nowIso } from "@releasedesk/core";
 
 /**
- * Human approval gates for merge / release decisions.
+ * Human approval gates for merge / release decisions (run-level, M6 / PR #7).
  * Modeled explicitly — never auto-approved by the Lead.
+ *
+ * Per-feature AI code review uses checklist sign-off (`feature_review`) in
+ * `@releasedesk/core` / `feature-signoff.ts` — distinct from these gates.
  */
 
 export type ApprovalKind = "merge" | "release";

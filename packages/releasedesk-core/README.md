@@ -26,6 +26,7 @@ npm run typecheck -w @releasedesk/core
 | Run context | `run-context` | Goal, target repo refs, tasks, audit trail, status |
 | Store | `store` | `InMemoryRunContextStore` and `FileBackedRunContextStore` |
 | Agent contracts | `agents/*` | Lead, Change Analyst, Standards, Security, Builder I/O |
+| Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 
 ## Run context lifecycle
 
