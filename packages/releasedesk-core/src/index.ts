@@ -70,6 +70,50 @@ export {
 } from "./run-context.js";
 
 export {
+  MANDATORY_ANALYSIS_ROLES,
+  MANDATORY_SECURITY_ROLE,
+  SECURITY_TASK_KIND,
+  SecurityParticipationStatusSchema,
+  SecurityParticipationGateSchema,
+  evaluateSecurityParticipation,
+  hasRecordedSecurityResult,
+  securityParticipationSatisfied,
+  assertMandatoryAnalysisRoles,
+  type MandatoryAnalysisRole,
+  type SecurityParticipationStatus,
+  type SecurityParticipationGate,
+} from "./gates.js";
+
+export {
+  OWASP_LLM_TOP_10,
+  ATLAS_TECHNIQUES,
+  OwaspLlmTop10IdSchema,
+  AtlasTechniqueIdSchema,
+  SecurityFrameworkIdSchema,
+  SecurityFrameworkMappingSchema,
+  AiFrameworkWaiverSchema,
+  AiFrameworkWaiverRecordSchema,
+  parseAiFrameworkWaiverRecord,
+  createAiFrameworkWaiver,
+  isFrameworkMappedFinding,
+  listUnresolvedFrameworkFindings,
+  evaluateAiFrameworkMergeGate,
+  assertAiFrameworkPrMergeAllowed,
+  owaspCategory,
+  atlasTechnique,
+  mappingForOwasp,
+  mappingForAtlas,
+  type OwaspLlmTop10Id,
+  type AtlasTechniqueId,
+  type SecurityFrameworkId,
+  type SecurityFrameworkMapping,
+  type AiFrameworkWaiver,
+  type AiFrameworkWaiverRecord,
+  type FrameworkMappedFindingLike,
+  type AiFrameworkMergeGate,
+} from "./ai-security-frameworks.js";
+
+export {
   RunContextError,
   InMemoryRunContextStore,
   FileBackedRunContextStore,

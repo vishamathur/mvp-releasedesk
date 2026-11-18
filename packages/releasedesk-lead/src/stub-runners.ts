@@ -120,6 +120,9 @@ export const stubSecurityRunner: AgentRunner = async (
       findings: [],
       releaseBlockingCount: 0,
       riskLevel: "none",
+      frameworksApplied: ["mitre_atlas", "owasp_llm_top_10"],
+      frameworkHardFailCount: 0,
+      securityCheckFailed: false,
       evidence: evidence.map((e) => createEvidenceItem(e)),
       mocksUsed: [mock],
     },
@@ -205,13 +208,18 @@ export const stubBuilderRunner: AgentRunner = async (
   };
 };
 
+/** Default stub specialist set — Security is always included (mandatory). */
 export function createDefaultStubRunners(): Record<SpecialistRole, AgentRunner> {
-  return {
+  const runners: Record<SpecialistRole, AgentRunner> = {
     change_analyst: stubChangeAnalystRunner,
     standards: stubStandardsRunner,
     security: stubSecurityRunner,
     builder: stubBuilderRunner,
   };
+  if (!runners.security) {
+    throw new Error("Security stub runner missing — mandatory on every change");
+  }
+  return runners;
 }
 
 /** Optional failing runner for retry/failure tests. */

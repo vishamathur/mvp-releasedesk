@@ -75,7 +75,11 @@ export function touchRun(run: RunContext, patch: Partial<RunContext>): RunContex
   });
 }
 
-/** Roles that may be scheduled as independent specialist tasks under a Lead. */
+/**
+ * Roles that may be scheduled as independent specialist tasks under a Lead.
+ * Analysis-wave subset (`change_analyst`, `standards`, `security`) is mandatory
+ * on every change — see `MANDATORY_ANALYSIS_ROLES` in `gates.ts`.
+ */
 export const SPECIALIST_ROLES = [
   AgentRoleSchema.enum.change_analyst,
   AgentRoleSchema.enum.standards,

@@ -1,12 +1,23 @@
 export { createChangeAnalystRunner } from "./change-analyst.js";
 export { createStandardsRunner } from "./standards.js";
 export { createSecurityRunner } from "./security.js";
+export {
+  reviewAiSurfaceAgainstFrameworks,
+  enforceFrameworkHardFail,
+  detectAiSurface,
+  isAiRelatedComponent,
+  isAiRelatedPath,
+} from "./ai-framework-review.js";
 export { createBuilderRunner, type CloudAgentHandoff } from "./builder.js";
 export type {
   CloudAgentHandoffStatus,
   CloudAgentApiMode,
 } from "./builder-types.js";
-export { createSpecialistRunners, createSpecialistRunnerMap } from "./runners.js";
+export {
+  createSpecialistRunners,
+  createSpecialistRunnerMap,
+  DEFAULT_SPECIALIST_ROLES,
+} from "./runners.js";
 export type { SpecialistRunnerOptions } from "./options.js";
 
 export {

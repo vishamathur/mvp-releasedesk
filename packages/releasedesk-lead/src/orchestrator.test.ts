@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createInMemoryStore,
+  createTaskRecord,
   formatMockNote,
   nowIso,
   type CreateEvidenceInput,
@@ -295,9 +296,65 @@ describe("LeadOrchestrator", () => {
 });
 
 describe("assessReadiness", () => {
-  it("returns unknown with no specialist tasks", () => {
+  it("blocks readiness when Security did not run (mandatory)", () => {
     const result = assessReadiness({ tasks: [] });
-    expect(result.readiness).toBe("unknown");
+    expect(result.readiness).toBe("not_ready");
+    expect(result.securityGate.satisfied).toBe(false);
+    expect(result.securityGate.status).toBe("missing");
+    expect(result.blockingIssues.some((b) => b.includes("mandatory Security"))).toBe(true);
+  });
+
+  it("blocks readiness when Security completed without a recorded result", () => {
+    const task = createTaskRecord({
+      runId: "run_test",
+      name: "Security review",
+      agentRole: "security",
+      status: "completed",
+    });
+    const bare = {
+      ...task,
+      status: "completed" as const,
+      completedAt: new Date().toISOString(),
+      output: undefined,
+      evidence: [],
+    };
+    const result = assessReadiness({ tasks: [bare] });
+    expect(result.readiness).toBe("not_ready");
+    expect(result.securityGate.status).toBe("no_recorded_result");
+    expect(result.blockingIssues.some((b) => /recorded result/i.test(b))).toBe(true);
+  });
+});
+
+describe("mandatory Security on every change", () => {
+  it("always routes Security in the analysis wave and records a security gate", async () => {
+    const store = createInMemoryStore();
+    const lead = new LeadOrchestrator({ store, enableRemediation: false });
+    const report = await lead.startOnDemandCheck({
+      goal: "Mandatory Security routing",
+      target: { repository: "vishamathur/mvp-releasedesk", baseRef: "main" },
+    });
+
+    const securityTasks = report.run.tasks.filter((t) => t.agentRole === "security");
+    expect(securityTasks.length).toBeGreaterThanOrEqual(1);
+    expect(securityTasks.every((t) => t.status === "completed")).toBe(true);
+    expect(securityTasks.some((t) => t.input?.mandatory === true)).toBe(true);
+    expect(securityTasks.some((t) => t.input?.taskKind === "security_review")).toBe(true);
+
+    expect(report.assessment.securityGate.satisfied).toBe(true);
+    expect(report.assessment.securityGate.mandatory).toBe(true);
+    expect(report.run.metadata.securityGate).toMatchObject({
+      mandatory: true,
+      satisfied: true,
+      status: "satisfied",
+    });
+
+    const actions = report.run.auditTrail.map((e) => e.action);
+    expect(actions).toContain("security.gate_evaluated");
+    expect(
+      report.delegations.some(
+        (d) => d.agentRole === "security" && /Mandatory Security/i.test(d.rationale),
+      ),
+    ).toBe(true);
   });
 });
 
