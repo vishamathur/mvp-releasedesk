@@ -8,6 +8,7 @@ This repository currently includes:
 - **Milestone 2** — shared execution context + agent contracts (`packages/releasedesk-core`)
 - **Milestone 3** — Lead Agent orchestrator (`packages/releasedesk-lead`)
 - **Milestone 4** — specialist agents (`packages/releasedesk-specialists`)
+- **Milestone 5** — Builder → Cursor Cloud Agents (Coding / Testing / Review; MOCK by default)
 
 License: [GPL-3.0](./LICENSE).
 
@@ -60,9 +61,9 @@ apps/
 packages/
   releasedesk-core/           # Shared run context + agent contracts (Milestone 2)
   releasedesk-lead/           # Lead Agent orchestrator (Milestone 3)
-  releasedesk-specialists/    # Change Analyst / Standards / Security / Builder (Milestone 4)
+  releasedesk-specialists/    # Specialists + Builder Cloud Agents (M4–M5)
 # later (not in this PR):
-#   Cursor Cloud wiring     # Builder → Cloud Agents (M5)
+#   Verification / PR workflow (M6)
 #   releasedesk/            # Orchestration / UI (M7)
 ```
 
@@ -106,12 +107,23 @@ Package: [`packages/releasedesk-specialists`](./packages/releasedesk-specialists
 - Real `AgentRunner` implementations for Change Analyst, Standards, Security, and Builder
 - Injected into Lead via `createSpecialistRunners()` — results written independently onto shared run context
 - Local git / Northwind policy fixtures / sample CVE JSON when live APIs unavailable (`MOCK:` labels)
-- Builder prepares Cursor Cloud Agent handoff shapes (`planned`); full Cloud API wiring is M5
+- Builder prepares Cursor Cloud Agent handoffs and (M5) dispatches Coding → Testing ∥ Review
 
 ```bash
 npm run test:specialists
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
+
+## Milestone 5 — Cursor Cloud Agents under Builder
+
+Builder dispatches **Coding**, then **Testing** and **Review** in parallel, recording branch names, test results, and PR URLs on the shared run context. Default client is clearly labeled **MOCK:** so CI does not need Cursor credentials. Enable the real client with:
+
+```bash
+export CURSOR_API_KEY=...                 # or CURSOR_SERVICE_ACCOUNT_KEY
+export RELEASEDESK_CLOUD_CLIENT=real
+```
+
+Cloud Agents never auto-merge — Lead human merge/release gates stay pending. See [`packages/releasedesk-specialists/README.md`](./packages/releasedesk-specialists/README.md).
 
 ## KYC domain snapshot
 
@@ -121,7 +133,6 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 
 ## Later milestones (out of scope here)
 
-- Cursor Cloud Agents under Builder (M5)
 - Verification loops / PR workflow (M6)
 - Release Desk UI and demo scenarios (M7)
 

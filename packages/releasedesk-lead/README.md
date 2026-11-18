@@ -4,7 +4,7 @@ Milestone 3 — **Lead Agent orchestrator** for Release Desk.
 
 Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default), records independent task results/evidence/failures, orchestrates remediation + reverification, models human approval gates, and consolidates release readiness.
 
-Default runners remain MOCK stubs. Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for Milestone 4+. Cursor Cloud wiring (M5), PR automation (M6), and Release Desk UI (M7) remain out of scope here.
+Default runners remain MOCK stubs. Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for Milestone 4+ (Builder Cloud Agents in M5). PR automation (M6) and Release Desk UI (M7) remain out of scope here.
 
 ## Install / test
 

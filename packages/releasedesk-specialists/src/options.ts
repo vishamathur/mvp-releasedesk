@@ -1,5 +1,7 @@
 import type { GrokClientOptions } from "./grok.js";
 import type { ComponentRef } from "./advisories.js";
+import type { CloudAgentClient } from "./cloud/types.js";
+import type { ResolveCloudAgentClientOptions } from "./cloud/resolve.js";
 
 /** Shared options for specialist runners (injectable for tests). */
 export type SpecialistRunnerOptions = {
@@ -22,4 +24,18 @@ export type SpecialistRunnerOptions = {
    * (Lead always requests them — default true for Release Desk runs).
    */
   assumeLeadHumanGates?: boolean;
+  /**
+   * Injected Cursor Cloud Agent client (wins over env resolution).
+   * Prefer for unit tests; production uses resolveCloudAgentClient().
+   */
+  cloudClient?: CloudAgentClient;
+  /** Extra resolve options when cloudClient is not injected. */
+  cloud?: ResolveCloudAgentClientOptions;
+  /** Per-handoff Cloud Agent dispatch attempts (default 2). */
+  cloudMaxAttempts?: number;
+  /**
+   * When true, Builder only plans handoffs (M4 behavior) and does not dispatch.
+   * Default false — M5 dispatches via MOCK or real client.
+   */
+  skipCloudDispatch?: boolean;
 };

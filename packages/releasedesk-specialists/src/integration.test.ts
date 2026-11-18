@@ -103,6 +103,24 @@ describe("Lead + specialist runners integration", () => {
     expect(Array.isArray(builderTasks[0]!.output?.cloudAgentHandoffs)).toBe(true);
     expect(builderTasks[0]!.evidence.length).toBeGreaterThan(0);
 
+    // M5: MOCK Cloud Agents dispatched; branch / tests / PR tracked; no auto-merge
+    const handoffs = builderTasks[0]!.output?.cloudAgentHandoffs as Array<{
+      status: string;
+      metadata: { cloudAgentApi: string };
+    }>;
+    expect(handoffs.every((h) => h.status === "completed")).toBe(true);
+    expect(handoffs.every((h) => h.metadata.cloudAgentApi === "mock")).toBe(true);
+    expect(builderTasks[0]!.output?.proposedPrUrl).toMatch(/^https:\/\//);
+    expect(builderTasks[0]!.output?.testsPassed).toBe(true);
+    expect(builderTasks[0]!.output?.branchMetadata).toMatchObject({
+      autoMerge: false,
+      humanMergeGateRequired: true,
+    });
+    expect(Array.isArray(builderTasks[0]!.output?.cloudAgentAudit)).toBe(true);
+
+    // Human merge/release gates still pending
+    expect(getPendingGates(report.approvals).length).toBe(2);
+
     // Reverify wave scheduled after builder
     const reverify = report.delegations.filter((d) =>
       d.rationale.toLowerCase().includes("reverification"),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryStore } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createBuilderRunner, type CloudAgentHandoff } from "./builder.js";
+import { createMockCloudAgentClient } from "./cloud/mock-client.js";
 
 async function invocation(
   input: Record<string, unknown>,
@@ -27,9 +28,12 @@ async function invocation(
   };
 }
 
-describe("BuilderRunner", () => {
-  it("produces implementation instructions and planned Cloud Agent handoffs", async () => {
-    const runner = createBuilderRunner({ skipGrok: true });
+describe("BuilderRunner + Cloud Agents", () => {
+  it("dispatches Coding→Testing/Review via MOCK client and fills tracking fields", async () => {
+    const runner = createBuilderRunner({
+      skipGrok: true,
+      cloudClient: createMockCloudAgentClient(),
+    });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",
       remediationGoals: ["Remove evil-lib advisory exposure", "Add regression test"],
@@ -54,22 +58,72 @@ describe("BuilderRunner", () => {
     const handoffs = result.payload.cloudAgentHandoffs as CloudAgentHandoff[];
     expect(handoffs).toHaveLength(3);
     expect(handoffs.map((h) => h.agentKind).sort()).toEqual(["coding", "review", "testing"]);
-    expect(handoffs.every((h) => h.status === "planned")).toBe(true);
-    expect(handoffs.every((h) => h.metadata.cloudAgentApi === "not_wired")).toBe(true);
+    expect(handoffs.every((h) => h.status === "completed")).toBe(true);
+    expect(handoffs.every((h) => h.metadata.cloudAgentApi === "mock")).toBe(true);
 
-    const workItems = result.payload.workItems as Array<{ status: string; kind: string }>;
-    expect(workItems.every((w) => w.status === "planned")).toBe(true);
+    const workItems = result.payload.workItems as Array<{
+      status: string;
+      kind: string;
+      prUrl?: string;
+    }>;
+    expect(workItems.every((w) => w.status === "completed")).toBe(true);
+    expect(workItems.find((w) => w.kind === "coding")?.prUrl).toMatch(/^https:\/\//);
+
+    expect(result.payload.proposedPrUrl).toMatch(/^https:\/\/github\.com\//);
+    expect(result.payload.testsPassed).toBe(true);
 
     const meta = result.payload.branchMetadata as {
       proposedBranch: string;
       testsPassed?: boolean;
       prUrl?: string;
+      autoMerge?: boolean;
+      humanMergeGateRequired?: boolean;
     };
     expect(meta.proposedBranch).toBe(result.payload.proposedBranch);
-    expect(meta.testsPassed).toBeUndefined();
-    expect(meta.prUrl).toBeUndefined();
+    expect(meta.testsPassed).toBe(true);
+    expect(meta.prUrl).toBe(result.payload.proposedPrUrl);
+    expect(meta.autoMerge).toBe(false);
+    expect(meta.humanMergeGateRequired).toBe(true);
 
     expect(result.mocksUsed?.some((m) => m.mockLabel === "cursor-cloud-agents")).toBe(true);
     expect(result.summary.startsWith("MOCK:")).toBe(true);
+
+    const audit = result.payload.cloudAgentAudit as Array<{ action: string }>;
+    expect(audit.some((e) => e.action === "cloud_agent.pipeline_start")).toBe(true);
+    expect(audit.some((e) => e.action === "cloud_agent.completed")).toBe(true);
+
+    expect(result.evidence?.some((e) => e.kind === "pr_ref")).toBe(true);
+    expect(result.evidence?.some((e) => e.title.includes("audit trail"))).toBe(true);
+  });
+
+  it("records retry evidence when MOCK client fails then recovers", async () => {
+    const runner = createBuilderRunner({
+      skipGrok: true,
+      cloudMaxAttempts: 2,
+      cloudClient: createMockCloudAgentClient({ failUntilAttempt: { coding: 1 } }),
+    });
+    const inv = await invocation({
+      remediationGoals: ["Fix labeling"],
+    });
+    const result = await runner(inv);
+    expect(result.payload.testsPassed).toBe(true);
+    const attempts = result.payload.cloudAgentAttempts as Array<{
+      agentKind: string;
+      outcome: string;
+    }>;
+    expect(attempts.filter((a) => a.agentKind === "coding").map((a) => a.outcome)).toEqual([
+      "retrying",
+      "completed",
+    ]);
+  });
+
+  it("can still plan-only when skipCloudDispatch is set", async () => {
+    const runner = createBuilderRunner({ skipGrok: true, skipCloudDispatch: true });
+    const inv = await invocation({ remediationGoals: ["Plan only"] });
+    const result = await runner(inv);
+    const handoffs = result.payload.cloudAgentHandoffs as CloudAgentHandoff[];
+    expect(handoffs.every((h) => h.status === "planned")).toBe(true);
+    expect(result.payload.testsPassed).toBeUndefined();
+    expect(result.payload.proposedPrUrl).toBeUndefined();
   });
 });
