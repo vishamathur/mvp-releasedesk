@@ -1,6 +1,21 @@
 # Skill: check-compliance
 
-1. Load Northwind KYC policy refs (baseline, auth, retention).
-2. Map Change Analyst findings to policy clauses.
-3. Emit deviations with severity + evidence URI/path.
-4. Return to Lead — never waive.
+## When to use
+
+Security or Lead asks for the compliance half of a change.
+
+## Steps
+
+1. Read the Northwind KYC policy notes already in the repo. Do not invent a clause.
+2. Map the change to those clauses. Record a deviation only when the change conflicts.
+3. Store `pid.compliance.{requestId}` with policy ref, severity, and an evidence pointer.
+4. Reply to the asking bot.
+
+## Must not
+
+- Waive a deviation to clear a sprint.
+- Sign the human security/compliance gate.
+
+## Output
+
+Deviations for the human sign-off packet.

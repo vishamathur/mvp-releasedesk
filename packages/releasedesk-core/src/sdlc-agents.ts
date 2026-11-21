@@ -1,16 +1,13 @@
 import { AGENT_ROLE_LABELS, type AgentRole } from "./agents/roles.js";
-import {
-  CURSOR_API_KEY_ENV,
-  GROK_API_KEY_ENV,
-  type CursorKeyedAgentId,
-} from "./agent-credentials.js";
+import { type CursorKeyedAgentId } from "./agent-credentials.js";
 
 /**
  * Working agent definitions for the SDLC optimization MVP
  * (agility · security · token efficiency).
  *
- * Each definition declares its exclusive API key env var(s) —
- * no shared key across agents.
+ * Bots do not hold API keys. The shipped Grok call reads `XAI_API_KEY`
+ * in application code. Cursor cloud agents are launched by the Builder
+ * Grok Bot, not by a per-agent Cursor key.
  */
 
 export type SdlcRequirement = "agility" | "security" | "token_efficiency";
@@ -24,7 +21,7 @@ export type SdlcAgentDefinition = {
   runtime: SdlcAgentRuntime;
   mission: string;
   requirements: SdlcRequirement[];
-  /** Exclusive env var(s) for this agent only. */
+  /** Always empty. Per-bot keys are retired. */
   apiKeyEnv: string[];
   delegatesTo?: string[];
   usesContextSlice: boolean;
@@ -37,9 +34,9 @@ export const SDLC_LEAD_AGENT: SdlcAgentDefinition = {
   label: AGENT_ROLE_LABELS.lead,
   runtime: "hybrid",
   mission:
-    "Orchestrate on-demand multi-customer release checks; consolidate readiness; request human merge/release gates; never auto-merge.",
+    "Own PID state in the Grok Bot app. Hand stages to teammates. Request human gates. Never auto-approve or merge.",
   requirements: ["agility", "security", "token_efficiency"],
-  apiKeyEnv: [GROK_API_KEY_ENV.lead, CURSOR_API_KEY_ENV.lead],
+  apiKeyEnv: [],
   delegatesTo: ["change_analyst", "standards", "security", "builder"],
   usesContextSlice: true,
 };
@@ -50,9 +47,9 @@ export const SDLC_CHANGE_ANALYST_AGENT: SdlcAgentDefinition = {
   label: AGENT_ROLE_LABELS.change_analyst,
   runtime: "grok_bot",
   mission:
-    "Assess GitHub changes, draft release notes, and evidence-backed impact for portfolio apps.",
+    "Estimate changes, and for new customers run discovery and scope. Evidence-backed only.",
   requirements: ["agility", "token_efficiency"],
-  apiKeyEnv: [GROK_API_KEY_ENV.change_analyst],
+  apiKeyEnv: [],
   usesContextSlice: true,
 };
 
@@ -64,7 +61,7 @@ export const SDLC_STANDARDS_AGENT: SdlcAgentDefinition = {
   mission:
     "Check Northwind / client policy corpus; record deviations with evidence before release.",
   requirements: ["agility", "security", "token_efficiency"],
-  apiKeyEnv: [GROK_API_KEY_ENV.standards],
+  apiKeyEnv: [],
   usesContextSlice: true,
 };
 
@@ -74,9 +71,9 @@ export const SDLC_SECURITY_AGENT: SdlcAgentDefinition = {
   label: AGENT_ROLE_LABELS.security,
   runtime: "grok_bot",
   mission:
-    "Mandatory on every change: correlate advisories to components; surface release-blocking risks early so they do not blow delivery windows.",
+    "Mandatory on every change: correlate advisories to components; prepare the red_team|security packet. Never sign the human gate.",
   requirements: ["security", "agility", "token_efficiency"],
-  apiKeyEnv: [GROK_API_KEY_ENV.security],
+  apiKeyEnv: [],
   usesContextSlice: true,
   mandatoryOnEveryChange: true,
 };
@@ -87,9 +84,9 @@ export const SDLC_BUILDER_AGENT: SdlcAgentDefinition = {
   label: AGENT_ROLE_LABELS.builder,
   runtime: "hybrid",
   mission:
-    "Turn findings into remediation handoffs; launch Coding / Testing / Review Cloud Agents; track branches and PRs without auto-merge.",
+    "Launch the Cursor cloud agent for the build stage under repo rules and skills. Return the PR and test result to Lead. Never merge.",
   requirements: ["agility", "token_efficiency"],
-  apiKeyEnv: [GROK_API_KEY_ENV.builder, CURSOR_API_KEY_ENV.builder],
+  apiKeyEnv: [],
   delegatesTo: ["coding", "testing", "review"],
   usesContextSlice: true,
 };
@@ -99,9 +96,9 @@ export const SDLC_CODING_AGENT: SdlcAgentDefinition = {
   role: "coding",
   label: "Coding Cloud Agent",
   runtime: "cursor_cloud",
-  mission: "Implement remediation changes in-repo under project rules/skills.",
+  mission: "Implement remediation changes in-repo under project rules/skills. Ships code that calls the Grok API.",
   requirements: ["agility", "token_efficiency"],
-  apiKeyEnv: [CURSOR_API_KEY_ENV.coding],
+  apiKeyEnv: [],
   usesContextSlice: true,
 };
 
@@ -112,7 +109,7 @@ export const SDLC_TESTING_AGENT: SdlcAgentDefinition = {
   runtime: "cursor_cloud",
   mission: "Independently verify Builder/Coding output (distinct from Lead verification checkpoints).",
   requirements: ["agility", "security", "token_efficiency"],
-  apiKeyEnv: [CURSOR_API_KEY_ENV.testing],
+  apiKeyEnv: [],
   usesContextSlice: true,
 };
 
@@ -123,7 +120,7 @@ export const SDLC_REVIEW_AGENT: SdlcAgentDefinition = {
   runtime: "cursor_cloud",
   mission: "Independently review proposed changes; never merge.",
   requirements: ["security", "token_efficiency"],
-  apiKeyEnv: [CURSOR_API_KEY_ENV.review],
+  apiKeyEnv: [],
   usesContextSlice: true,
 };
 
@@ -143,20 +140,17 @@ export function getSdlcAgentDefinition(id: string): SdlcAgentDefinition | undefi
   return SDLC_AGENT_DEFINITIONS.find((a) => a.id === id);
 }
 
-/** Assert no two agents share an API key env var. */
+/**
+ * Bots must not claim API key env vars. Throws if any definition lists one.
+ */
 export function assertExclusiveApiKeys(
   defs: readonly SdlcAgentDefinition[] = SDLC_AGENT_DEFINITIONS,
 ): void {
-  const seen = new Map<string, string>();
   for (const def of defs) {
-    for (const envVar of def.apiKeyEnv) {
-      const prior = seen.get(envVar);
-      if (prior) {
-        throw new Error(
-          `Shared API key env ${envVar} claimed by both ${prior} and ${def.id} — each agent must have its own key`,
-        );
-      }
-      seen.set(envVar, def.id);
+    if (def.apiKeyEnv.length > 0) {
+      throw new Error(
+        `${def.id} lists API key env ${def.apiKeyEnv.join(", ")} — per-bot keys are retired; use the app XAI_API_KEY only in shipped code`,
+      );
     }
   }
 }

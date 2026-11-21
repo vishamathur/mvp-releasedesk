@@ -4,41 +4,28 @@ import {
   runGrokReleaseIntel,
 } from "@/lib/grok-release-intel";
 import { getRun } from "@/lib/desk";
-import { describeAgentCursorCredential } from "@releasedesk/core";
+import { APP_GROK_API_KEY_ENV } from "@releasedesk/core";
 
 export const runtime = "nodejs";
 
 /** Room-facing key inventory (presence only — never secret values). */
 export async function GET() {
   const grok = describeGrokIntelKeyStatus();
-  const cursor = (["coding", "testing", "review"] as const).map((id) => {
-    const status = describeAgentCursorCredential(id);
-    return {
-      agentId: id,
-      envVar: status.envVar,
-      present: status.present,
-      role:
-        id === "coding"
-          ? "ships Grok release-intel code"
-          : id === "testing"
-            ? "verifies — never merges"
-            : "reviews — never merges",
-    };
-  });
-  const cloudClient = String(process.env.RELEASEDESK_CLOUD_CLIENT ?? "mock").toLowerCase();
 
   return NextResponse.json({
     ok: true,
     grokIntel: grok,
-    cursorCloudAgents: cursor,
-    cloudClientMode: cloudClient === "real" ? "real" : "mock",
-    exclusiveKeysOnly: true,
-    forbiddenSharedFallbacks: [
-      "XAI_API_KEY",
-      "GROK_API_KEY",
-      "CURSOR_API_KEY",
-      "CURSOR_SERVICE_ACCOUNT_KEY",
+    cursorCloudAgents: [
+      {
+        agentId: "coding",
+        envVar: "none",
+        present: false,
+        role: "Launched by the Builder Grok Bot. Ships code that calls the Grok API. Does not merge.",
+      },
     ],
+    cloudClientMode: "mock",
+    appKeyEnv: APP_GROK_API_KEY_ENV,
+    perBotKeysRetired: true,
     roomHint: grok.liveReady
       ? "Grok intel will label LIVE"
       : `Grok intel will label MOCK until ${grok.keyEnvVar} is set`,
@@ -88,11 +75,11 @@ export async function POST(request: Request) {
     showcase: {
       label: intel.label,
       mocked: intel.mocked,
-      exclusiveKey: intel.trustCheck.keyEnvVar,
+      appKey: intel.trustCheck.keyEnvVar,
       talkTrack:
         intel.label === "LIVE"
-          ? `Live call via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`
-          : `MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE (shared XAI/GROK keys ignored).`,
+          ? `Live call via ${intel.trustCheck.keyEnvVar} with json_schema. Human gates stay with people.`
+          : `MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE. Per-bot keys are ignored.`,
     },
   });
 }

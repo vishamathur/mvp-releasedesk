@@ -34,22 +34,34 @@ describe("sdlc-mvp portfolio check", () => {
     expect(report.agents.map((a) => a.id)).toEqual(
       SDLC_AGENT_DEFINITIONS.map((a) => a.id),
     );
-    expect(report.credentials.every((c) => c.present === false)).toBe(true);
-    expect(report.credentials.every((c) => c.usedSharedFallback === false)).toBe(true);
+    expect(report.credentials).toEqual([
+      {
+        agentId: "app",
+        envVar: "XAI_API_KEY",
+        present: false,
+        usedSharedFallback: false,
+      },
+    ]);
     expect(report.mockNote).toMatch(/MOCK/);
   });
 
   it("catalog exposes agents and credential statuses without secret values", () => {
     const catalog = getSdlcMvpCatalog({
-      RELEASEDESK_GROK_API_KEY_SECURITY: "secret-should-not-leak",
+      XAI_API_KEY: "secret-should-not-leak",
+      RELEASEDESK_GROK_API_KEY_SECURITY: "also-should-not-leak",
     });
     expect(catalog.agents.length).toBe(SDLC_AGENT_DEFINITIONS.length);
     expect(catalog.portfolio).toEqual([...DEMO_PORTFOLIO]);
-    const securityCred = catalog.credentials.find(
-      (c) => c.envVar === "RELEASEDESK_GROK_API_KEY_SECURITY",
-    );
-    expect(securityCred?.present).toBe(true);
+    expect(catalog.credentials).toEqual([
+      {
+        agentId: "app",
+        envVar: "XAI_API_KEY",
+        present: true,
+        usedSharedFallback: false,
+      },
+    ]);
     expect(JSON.stringify(catalog)).not.toContain("secret-should-not-leak");
+    expect(JSON.stringify(catalog)).not.toContain("also-should-not-leak");
     expect(() => assertExclusiveApiKeys(catalog.agents)).not.toThrow();
   });
 });

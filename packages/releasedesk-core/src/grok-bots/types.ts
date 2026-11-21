@@ -8,14 +8,20 @@ export const GrokBotSkillDefSchema = z.object({
   steps: z.array(z.string().min(1)).min(1),
   requiresApproval: z.array(z.string()).default([]),
   output: z.string().min(1),
+  /** Playbook path relative to the repo root. */
+  playbook: z.string().min(1),
 });
 
 export const GrokBotRoutineDefSchema = z.object({
   name: z.string().min(1),
+  /** Event description. Use with `schedule` when the routine is also on a clock. */
   trigger: z.string().min(1),
+  /** Human schedule, when this routine is time-based. */
+  schedule: z.string().min(1).optional(),
+  /** Prompt configured on the Grok Bot routine. */
+  prompt: z.string().min(1),
   steps: z.array(z.string().min(1)).min(1),
-  /** Optional webhook trigger once live routine exists (never invent URLs). */
-  webhookEnvHint: z.string().optional(),
+  playbook: z.string().min(1),
 });
 
 export const GrokBotConnectorDefSchema = z.object({
@@ -27,36 +33,55 @@ export const GrokBotConnectorDefSchema = z.object({
 export const GrokBotChannelDefSchema = z.object({
   name: z.string().min(1),
   purpose: z.string().min(1),
+  posts: z.boolean(),
+  listens: z.boolean(),
 });
 
-export const GrokBotDefinitionSchema = z.object({
-  id: z.string().min(1),
-  role: AgentRoleSchema,
-  displayName: z.string().min(1),
-  label: z.string().min(1),
-  /** Exclusive RELEASEDESK_GROK_API_KEY_* — never a shared XAI/GROK key. */
-  apiKeyEnv: z.string().regex(/^RELEASEDESK_GROK_API_KEY_[A-Z_]+$/),
-  persona: z.object({
-    job: z.string().min(1),
-    personality: z.string().min(1),
-    memory: z.array(z.string().min(1)).min(1),
-    boundaries: z.array(z.string().min(1)).min(1),
-  }),
-  skills: z.array(GrokBotSkillDefSchema).min(1),
-  routines: z.array(GrokBotRoutineDefSchema).min(1),
-  connectors: z.array(GrokBotConnectorDefSchema).min(1),
-  teammates: z.array(z.string().min(1)).default([]),
-  channels: z.array(GrokBotChannelDefSchema).default([]),
-  handsOffTo: z.array(z.string()).default([]),
-  mandatoryOnEveryChange: z.boolean().optional(),
-  markdownPackDir: z.string().min(1),
+export const GrokBotMemoryKeySchema = z.object({
+  key: z.string().min(1),
+  stores: z.string().min(1),
 });
+
+export const GrokBotHandoffSchema = z.object({
+  to: z.string().min(1),
+  when: z.string().min(1),
+  messageKind: z.enum(["stage-handoff", "consult", "stage-return", "build-result"]),
+});
+
+export const GrokBotDefinitionSchema = z
+  .object({
+    id: z.string().min(1),
+    role: AgentRoleSchema,
+    displayName: z.string().min(1),
+    label: z.string().min(1),
+    /** Bots never close finance, security/compliance, release, or customer-proposal gates. */
+    mayAutoApproveHumanGate: z.literal(false),
+    persona: z.object({
+      job: z.string().min(1),
+      personality: z.string().min(1),
+      memory: z.array(z.string().min(1)).min(1),
+      boundaries: z.array(z.string().min(1)).min(1),
+    }),
+    memoryKeys: z.array(GrokBotMemoryKeySchema).min(1),
+    skills: z.array(GrokBotSkillDefSchema).min(1),
+    routines: z.array(GrokBotRoutineDefSchema).min(1),
+    connectors: z.array(GrokBotConnectorDefSchema).min(1),
+    teammates: z.array(z.string().min(1)).default([]),
+    channels: z.array(GrokBotChannelDefSchema).min(1),
+    handsOffTo: z.array(z.string()).default([]),
+    handoffs: z.array(GrokBotHandoffSchema).min(1),
+    mandatoryOnEveryChange: z.boolean().optional(),
+    markdownPackDir: z.string().min(1),
+  })
+  .strict();
 
 export const GrokBotCatalogSchema = z.object({
   version: z.literal(1),
   title: z.string(),
   stack: z.string(),
   preserveIterationGate: z.literal("red_team|security"),
+  orchestration: z.literal("grok-bot-native"),
+  processes: z.array(z.string().min(1)).min(1),
   bots: z.array(z.string().min(1)).min(1),
 });
 
@@ -153,6 +178,8 @@ export type GrokBotSkillDef = z.infer<typeof GrokBotSkillDefSchema>;
 export type GrokBotRoutineDef = z.infer<typeof GrokBotRoutineDefSchema>;
 export type GrokBotConnectorDef = z.infer<typeof GrokBotConnectorDefSchema>;
 export type GrokBotChannelDef = z.infer<typeof GrokBotChannelDefSchema>;
+export type GrokBotMemoryKey = z.infer<typeof GrokBotMemoryKeySchema>;
+export type GrokBotHandoff = z.infer<typeof GrokBotHandoffSchema>;
 export type GrokBotDefinition = z.infer<typeof GrokBotDefinitionSchema>;
 export type GrokBotCatalog = z.infer<typeof GrokBotCatalogSchema>;
 export type GrokBotProvisionHost = z.infer<typeof GrokBotProvisionHostSchema>;

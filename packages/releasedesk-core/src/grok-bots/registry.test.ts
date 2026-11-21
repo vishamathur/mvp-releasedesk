@@ -1,7 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { GROK_API_KEY_ENV } from "../agent-credentials.js";
 import { xaiAgentsCreateBody } from "./client.js";
 import {
   applyCreateResultsToRegistry,
@@ -124,20 +123,13 @@ describe("grok-bots registry", () => {
     });
   });
 
-  it("wires each definition to its own RELEASEDESK_GROK_API_KEY_* env var", async () => {
+  it("builds xAI instructions without per-bot keys or app agent ids", async () => {
     const defs = await listGrokBotDefinitions(workspaceRoot);
-    expect(defs.map((d) => d.apiKeyEnv)).toEqual([
-      "RELEASEDESK_GROK_API_KEY_LEAD",
-      "RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST",
-      "RELEASEDESK_GROK_API_KEY_STANDARDS",
-      "RELEASEDESK_GROK_API_KEY_SECURITY",
-      "RELEASEDESK_GROK_API_KEY_BUILDER",
-    ]);
     for (const def of defs) {
-      expect(def.apiKeyEnv).toBe(GROK_API_KEY_ENV[def.role]);
-      expect(def.apiKeyEnv).not.toMatch(/^(XAI_API_KEY|GROK_API_KEY)$/);
+      expect(def.mayAutoApproveHumanGate).toBe(false);
       const body = xaiAgentsCreateBody(def);
       expect(Object.keys(body).sort()).toEqual(["instructions", "name"]);
+      expect(JSON.stringify(body)).not.toContain("RELEASEDESK_GROK_API_KEY_");
       for (const agent of Object.values(APP_AGENTS)) {
         expect(JSON.stringify(body)).not.toContain(agent.id);
       }

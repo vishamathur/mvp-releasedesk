@@ -9,31 +9,19 @@
 npm install
 npm run build:core && npm run build:lead && npm run build:specialists
 npm run demo:control-plane          # headless 7-stage snapshot
-npm run desk                        # http://localhost:3001/control
+npm run desk                        # http://localhost:3002/control
 ```
 
-Optional live Grok:
+Optional live Grok (one app key, never commit it):
 
 ```bash
-export RELEASEDESK_GROK_API_KEY_LEAD=...
-export RELEASEDESK_GROK_API_KEY_BUILDER=...
+# set XAI_API_KEY in apps/releasedesk/.env.local
 npm run demo:control-plane
 ```
 
-Optional live Cursor CAs:
+Cursor cloud agents are launched by the Builder Grok Bot, not by Desk. Do not set `RELEASEDESK_CLOUD_CLIENT=real`.
 
-```bash
-export RELEASEDESK_CURSOR_API_KEY_CODING=...
-export RELEASEDESK_CURSOR_API_KEY_TESTING=...
-export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
-export RELEASEDESK_CLOUD_CLIENT=real
-```
-
-Create Grok Bots:
-
-```bash
-npm run create:grok-bots -- --dry-run
-```
+`npm run create:grok-bots` preserves the five Grok Bot app teammates and does not POST them to api.x.ai. The SDLC specs are in `docs/sdlc/`.
 
 ## Stages (full workflow — do not drop)
 

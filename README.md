@@ -1,6 +1,6 @@
 # mvp-releasedesk
 
-**Release Desk** will orchestrate release checks for the **Northwind Bank KYC** application.
+**Release Desk** supports **Northwind Bank KYC** release readiness. The five Grok Bots run PID-ER and PID-NC inside the Grok Bot app. See [docs/sdlc/overview.md](./docs/sdlc/overview.md). Desk on port 3002 does not hand work between the bots.
 
 This repository currently includes:
 
@@ -34,12 +34,12 @@ npm run generate:demos
 npm run desk
 ```
 
-Open [http://localhost:3001](http://localhost:3001).
+Open [http://localhost:3002](http://localhost:3002).
 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the KYC app (Next.js) on port 3000 |
-| `npm run desk` | Start Release Desk UI on port **3001** |
+| `npm run desk` | Start Release Desk UI on port **3002** |
 | `npm run seed` | Load sample applications into the local JSON store |
 | `npm test` | Run KYC + core + lead + specialists + desk unit tests |
 | `npm run test:kyc` / `npm run test:core` / `npm run test:lead` / `npm run test:specialists` / `npm run test:desk` | Workspace-scoped tests |
@@ -129,14 +129,7 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 
 ## Milestone 5 — Cursor Cloud Agents under Builder
 
-Builder dispatches **Coding**, then **Testing** and **Review** in parallel, recording branch names, test results, and PR URLs on the shared run context. Default client is clearly labeled **MOCK:** so CI does not need Cursor credentials. Enable the real client with:
-
-```bash
-export CURSOR_API_KEY=...                 # or CURSOR_SERVICE_ACCOUNT_KEY
-export RELEASEDESK_CLOUD_CLIENT=real
-```
-
-Cloud Agents never auto-merge — Lead human merge/release gates stay pending. See [`packages/releasedesk-specialists/README.md`](./packages/releasedesk-specialists/README.md).
+The Builder Grok Bot launches the Cursor cloud agent for the build stage. Desk does not. Do not set `RELEASEDESK_CLOUD_CLIENT=real`. The agent does not merge. The pull request and test result return to Lead as a Grok Bot teammate message. See [`grok-bots/bots/builder/skills/launch-cursor-coding-agent.md`](./grok-bots/bots/builder/skills/launch-cursor-coding-agent.md).
 
 ## Milestone 6 — verification loops + PR workflow
 
@@ -145,7 +138,7 @@ Lead runs **checkpoint verification** after specialist analysis and after Builde
 ```bash
 npm run test:lead
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --json
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
 ```
 
 See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.md).

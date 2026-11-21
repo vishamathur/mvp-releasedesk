@@ -124,11 +124,15 @@ export {
 export * from "./agents/index.js";
 
 export {
+  APP_GROK_API_KEY_ENV,
   GROK_API_KEY_ENV,
   CURSOR_API_KEY_ENV,
+  RETIRED_KEY_ENV,
   FORBIDDEN_SHARED_KEY_ENV,
+  resolveAppGrokApiKey,
   resolveAgentGrokApiKey,
   resolveAgentCursorApiKey,
+  describeAppGrokCredential,
   describeAgentGrokCredential,
   describeAgentCursorCredential,
   listRequiredAgentApiKeyEnvVars,

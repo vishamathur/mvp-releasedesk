@@ -29,6 +29,6 @@
 
 ## Still open / honest
 
-- Live x.ai/bot IDs require exclusive Grok keys + `npm run create:grok-bots`
-- Live Cursor dispatch requires exclusive Cursor keys + `RELEASEDESK_CLOUD_CLIENT=real`
-- Without keys, every external call is **MOCK**-labeled
+- The five bots already exist in the Grok Bot app. `npm run create:grok-bots` does not POST them.
+- Cursor launch is the Builder bot. Desk does not set a live cloud client.
+- Without `XAI_API_KEY`, the shipped Grok call is **MOCK**-labeled.

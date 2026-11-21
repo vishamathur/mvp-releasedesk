@@ -1,23 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { MockLabel } from "./MockLabel";
 
-type Chip = "LIVE" | "MOCK";
-
 type TriggerResult = {
-  runUrl?: string;
   error?: string;
-  chips?: { grokApi?: Chip; cursorCloud?: Chip };
-  compliancePct?: number;
+  message?: string;
+  orchestratedByDesk?: boolean;
+  autoApproved?: boolean;
   trustCheck?: {
     humanGateStillRequired?: boolean;
     noAutoApprove?: boolean;
     keyEnvVar?: string;
   };
   intel?: { mocked?: boolean; mode?: string; label?: string };
-  nhiMissing?: string[];
 };
 
 type KeyPreview = {
@@ -26,7 +22,6 @@ type KeyPreview = {
 };
 
 export function ChallengeTrigger() {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TriggerResult | null>(null);
@@ -61,13 +56,9 @@ export function ChallengeTrigger() {
           repository: "vishamathur/mvp-releasedesk",
         }),
       });
-      const json = (await res.json()) as TriggerResult;
-      if (!res.ok || !json.runUrl) throw new Error(json.error ?? "Trigger failed");
+      const json = (await res.json()) as TriggerResult & { message?: string };
+      if (!res.ok) throw new Error(json.error ?? "Trigger failed");
       setResult(json);
-      // Brief pause so chips are visible before navigation.
-      await new Promise((r) => setTimeout(r, 600));
-      router.push(json.runUrl);
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -86,13 +77,12 @@ export function ChallengeTrigger() {
             LIVE Grok key present
           </span>
         ) : (
-          <MockLabel>MOCK Grok until Lead key set</MockLabel>
+          <MockLabel>MOCK Grok until XAI_API_KEY is set</MockLabel>
         )}
       </div>
       <p className="mt-2 text-sm text-rd-forest/70">
-        Lead routine end-to-end: specialists → iteration gate → Builder → Coding (ships Grok
-        intel) → Testing ∥ Review. Prefer LIVE chips when exclusive NHI keys are present; otherwise
-        MOCK (labeled).
+        Desk does not hand work between bots. PID-ER starts in #er-intake and PID-NC starts in
+        #new-customer. This button runs the shipped Grok intel call only. Human gates stay pending.
       </p>
       {keys?.grokIntel?.mockUnlessLive ? (
         <p className="mt-2 text-xs text-rd-forest/55">{keys.grokIntel.mockUnlessLive}</p>
@@ -103,16 +93,11 @@ export function ChallengeTrigger() {
       {error ? <p className="mt-3 text-sm text-rd-alert">{error}</p> : null}
       {result ? (
         <div className="mt-4 space-y-2 text-sm text-rd-forest/75">
+          <p>{result.message}</p>
           <p>
-            Chips:{" "}
-            <span className="font-medium text-rd-ink">
-              Grok API {result.chips?.grokApi ?? (result.intel?.mocked ? "MOCK" : "LIVE")}
-            </span>
-            {" · "}
-            <span className="font-medium text-rd-ink">
-              Cursor Cloud {result.chips?.cursorCloud ?? "MOCK"}
-            </span>
-            {result.compliancePct != null ? ` · compliance ~${result.compliancePct}%` : null}
+            Grok API {result.intel?.label ?? (result.intel?.mocked ? "MOCK" : "LIVE")} · Desk
+            orchestrated={String(result.orchestratedByDesk)} · autoApproved=
+            {String(result.autoApproved)}
           </p>
           <p>
             trustCheck: humanGateStillRequired=
@@ -120,9 +105,9 @@ export function ChallengeTrigger() {
             {String(result.trustCheck?.noAutoApprove)} · keyEnv=
             {result.trustCheck?.keyEnvVar}
           </p>
-          {(result.chips?.grokApi === "MOCK" || result.intel?.mocked) && (
-            <MockLabel>MOCK Grok API — exclusive key missing</MockLabel>
-          )}
+          {result.intel?.mocked ? (
+            <MockLabel>MOCK Grok API — XAI_API_KEY missing</MockLabel>
+          ) : null}
         </div>
       ) : null}
     </section>

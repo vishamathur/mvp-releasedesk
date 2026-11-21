@@ -410,7 +410,7 @@ export default function MvpPage() {
                 <p className="font-medium text-rd-ink">{agent.label}</p>
                 <p className="mt-2 text-sm text-rd-forest/70">{agent.mission}</p>
                 <p className="mt-2 font-mono text-xs text-rd-forest/45">
-                  {agent.apiKeyEnv.join(", ")}
+                  {agent.apiKeyEnv.length ? agent.apiKeyEnv.join(", ") : "no per-bot key"}
                 </p>
               </li>
             ))}
@@ -449,8 +449,8 @@ export default function MvpPage() {
             Shipped module{" "}
             <code className="text-rd-ink">apps/releasedesk/src/lib/grok-release-intel.ts</code> —
             classify / extract / score / summarize via{" "}
-            <code className="text-rd-ink">RELEASEDESK_GROK_API_KEY_LEAD</code>. Trust check keeps
-            human gates authoritative.
+            <code className="text-rd-ink">XAI_API_KEY</code> and json_schema. Trust check keeps
+            human gates with people.
           </p>
           <button type="button" className="btn-primary mt-4" disabled={pending} onClick={runIntel}>
             Run release intel

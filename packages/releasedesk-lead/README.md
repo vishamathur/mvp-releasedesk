@@ -24,7 +24,7 @@ npm run build:lead
 npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
 
 # Demo human gates in-memory (no git merge)
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --json
+npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
 npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --reject --json
 
 # Full specialists path (root alias → @releasedesk/specialists)
@@ -35,7 +35,7 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 
 1. Run `npm run check:release -- --repo vishamathur/mvp-releasedesk --json`
 2. Inspect `checkpoints`, `pullRequests`, and pending `approvals`
-3. Apply human decisions via `applyApprovalsToReport` / CLI `--approve|--reject` (in-memory) — **never auto-merges**
+3. The CLI refuses `--approve` and `--reject`. Human gates are decided in the Grok Bot request thread.
 
 File-backed store:
 

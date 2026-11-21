@@ -1,17 +1,29 @@
 import {
-  resolveAgentGrokApiKey,
+  APP_GROK_API_KEY_ENV,
+  resolveAppGrokApiKey,
   type MockMeta,
 } from "@releasedesk/core";
 import { grokComplete, type GrokClientOptions, type GrokCompleteResult } from "./grok.js";
 
 /**
- * Shipped-code Grok API intel path for release findings.
+ * Specialist-side twin of the shipped Grok intel call.
  *
- * Uses the Builder's exclusive key (`RELEASEDESK_GROK_API_KEY_BUILDER`) via
- * `resolveAgentGrokApiKey('builder')` — never shared `XAI_API_KEY` / `GROK_API_KEY`.
- * Intended to run after Coding ships repo code, to classify / extract / score /
- * summarize findings for Lead consolidation.
+ * Uses the single app key (`XAI_API_KEY`) and json_schema. Per-bot
+ * RELEASEDESK_GROK_API_KEY_* values are ignored. Desk does not orchestrate
+ * this as a bot handoff; the Builder cloud agent ships the Desk module,
+ * and this twin stays on the same key and schema.
  */
+
+const INTEL_JSON_SCHEMA = {
+  name: "release_intel_line",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["text"],
+    properties: { text: { type: "string" } },
+  },
+} as const;
 
 export type ReleaseFindingInput = {
   id?: string;
@@ -23,26 +35,22 @@ export type ReleaseFindingInput = {
 
 export type GrokIntelOptions = GrokClientOptions & {
   env?: NodeJS.ProcessEnv;
-  /** Override role used for exclusive key resolve (default: builder). */
-  role?: "builder" | "security";
 };
 
 export type GrokIntelResult = GrokCompleteResult & {
-  /** Env var role used for the exclusive key lookup. */
-  keyRole: "builder" | "security";
+  /** App key name. Per-bot roles are not used. */
+  keyRole: "app";
+  keyEnv: typeof APP_GROK_API_KEY_ENV;
   mocked: boolean;
   mock?: MockMeta;
 };
 
 function resolveIntelApiKey(opts: GrokIntelOptions = {}): {
   apiKey: string | undefined;
-  keyRole: "builder" | "security";
 } {
-  const keyRole = opts.role ?? "builder";
   const env = opts.env ?? process.env;
-  // Explicit opts.apiKey wins; otherwise exclusive Builder (or Security) key only.
-  const apiKey = opts.apiKey ?? resolveAgentGrokApiKey(keyRole, env);
-  return { apiKey, keyRole };
+  const apiKey = opts.apiKey ?? resolveAppGrokApiKey(env);
+  return { apiKey };
 }
 
 function findingsBlock(findings: ReleaseFindingInput[]): string {
@@ -64,15 +72,14 @@ async function intelComplete(
   fallback: string,
   opts: GrokIntelOptions = {},
 ): Promise<GrokIntelResult> {
-  const { apiKey, keyRole } = resolveIntelApiKey(opts);
-  // Explicit apiKey from resolveAgentGrokApiKey(role) — never shared XAI/GROK keys.
+  const { apiKey } = resolveIntelApiKey(opts);
   const result = await grokComplete(prompt, {
     ...opts,
     apiKey,
-    agentRole: keyRole,
+    jsonSchema: INTEL_JSON_SCHEMA,
     fallback,
   });
-  return { ...result, keyRole };
+  return { ...result, keyRole: "app", keyEnv: APP_GROK_API_KEY_ENV };
 }
 
 /** Classify findings into themes / buckets for Lead routing. */

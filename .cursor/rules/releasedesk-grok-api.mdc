@@ -1,19 +1,19 @@
 ---
-description: SpaceXAI — shipped code must call Grok API for release intel
+description: SpaceXAI — shipped code must call the Grok API for release intel
 globs: apps/releasedesk/**/*
 ---
 
 # Grok API shipping rule
 
-When implementing Builder → Cursor remediation for Release Desk:
+When implementing the Builder → Cursor cloud agent change for Release Desk:
 
-1. Keep or extend `apps/releasedesk/src/lib/grok-release-intel.ts` (Coding ship path).
-2. Expose via `POST /api/grok/release-intel`.
-3. Return structured **classify + summarize** + trustCheck.
-4. `trustCheck.humanGateStillRequired` and `trustCheck.noAutoApprove` must stay `true`.
-5. Live path uses **only** `RELEASEDESK_GROK_API_KEY_LEAD`. Shared `XAI_API_KEY` / `GROK_API_KEY` are never consulted.
-6. Without that exclusive key, return MOCK-labeled fallback — never fake a live mode.
-7. Do not auto-approve merge/release from Grok output.
-8. Preserve iteration gate + ATLAS/OWASP merge block behavior.
-9. Keep **Coding + Testing + Review** Cursor cloud agents: Coding ships; Testing verifies; Review reviews; **none merge**.
-10. Each Cloud Agent uses its exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` — no shared `CURSOR_API_KEY` fallback.
+1. Keep or extend `apps/releasedesk/src/lib/grok-release-intel.ts`.
+2. Expose it via `POST /api/grok/release-intel`.
+3. Return structured **classify + summarize** plus trustCheck.
+4. The live call sends `response_format.type` `json_schema` (`GROK_RELEASE_INTEL_JSON_SCHEMA`).
+5. `trustCheck.humanGateStillRequired` and `trustCheck.noAutoApprove` stay `true`.
+6. The live path reads only `XAI_API_KEY`. Per-bot `RELEASEDESK_GROK_API_KEY_*` values are ignored. Do not print the key.
+7. Without `XAI_API_KEY`, return a MOCK-labeled fallback. Do not claim live mode.
+8. Do not approve finance, security/compliance, or release from Grok output.
+9. Preserve the iteration gate: a human `red_team` or `security` signature. Security stays mandatory on every change.
+10. Do not set `RELEASEDESK_CLOUD_CLIENT=real`. The Builder Grok Bot launches the Cursor cloud agent. Desk does not. The agent does not merge.

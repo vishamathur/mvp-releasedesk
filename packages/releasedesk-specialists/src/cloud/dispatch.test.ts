@@ -85,7 +85,7 @@ describe("Mock Cloud Agent client + dispatch pipeline", () => {
   });
 });
 
-describe("resolveCloudAgentClient — exclusive per-agent keys", () => {
+describe("resolveCloudAgentClient — Desk does not go live", () => {
   it("defaults to MOCK even when shared CURSOR_API_KEY is set", () => {
     const client = resolveCloudAgentClient({
       env: { CURSOR_API_KEY: "shared-must-not-use" },
@@ -93,28 +93,7 @@ describe("resolveCloudAgentClient — exclusive per-agent keys", () => {
     expect(client.mode).toBe("mock");
   });
 
-  it("uses unavailable stub when real requested without exclusive keys", async () => {
-    const client = resolveCloudAgentClient({
-      mode: "real",
-      env: { CURSOR_API_KEY: "shared-must-not-use" },
-    });
-    expect(client.mode).toBe("real");
-    const result = await client.dispatch({
-      handoffId: "h1",
-      agentKind: "coding",
-      prompt: "x",
-      repository: "owner/repo",
-      baseBranch: "main",
-      proposedBranch: "cursor/x",
-      acceptanceCriteria: [],
-      autoMerge: false,
-    });
-    expect(result.status).toBe("failed");
-    expect(result.mocked).toBe(true);
-    expect(result.error).toContain("RELEASEDESK_CURSOR_API_KEY_CODING");
-  });
-
-  it("creates real client when exclusive Coding key + real mode (ignores shared)", () => {
+  it("stays MOCK when real mode and per-bot Cursor keys are set", async () => {
     const client = resolveCloudAgentClient({
       mode: "real",
       env: {
@@ -125,7 +104,19 @@ describe("resolveCloudAgentClient — exclusive per-agent keys", () => {
         RELEASEDESK_CLOUD_CLIENT: "real",
       },
     });
-    expect(client.mode).toBe("real");
+    expect(client.mode).toBe("mock");
+    const result = await client.dispatch({
+      handoffId: "h1",
+      agentKind: "coding",
+      prompt: "x",
+      repository: "owner/repo",
+      baseBranch: "main",
+      proposedBranch: "cursor/x",
+      acceptanceCriteria: [],
+      autoMerge: false,
+    });
+    expect(result.mocked).toBe(true);
+    expect(result.status).not.toBe("failed");
   });
 
   it("fails only the kind whose exclusive key is missing", async () => {

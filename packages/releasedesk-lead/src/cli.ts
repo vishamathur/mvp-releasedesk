@@ -40,14 +40,14 @@ Options:
   --store memory|file   Persistence (default: memory)
   --store-path <path>   File store path (default: .releasedesk/runs.json)
   --json                Print full JSON report
-  --approve             Apply MOCK in-memory approve of merge+release gates (demo only)
-  --reject              Apply MOCK in-memory reject of release gate (demo only)
-  --decided-by <who>    Actor for --approve/--reject (default: cli)
+  --approve             Refused. Human gates are not applied from the CLI.
+  --reject              Refused. Human gates are not applied from the CLI.
+  --decided-by <who>    Unused. Decisions happen in the request channel.
   -h, --help            Show help
 
 Checkpoint verification runs after specialist + cloud-agent stages.
 PR workflow uses MOCK GitHub unless GH_TOKEN/GITHUB_TOKEN is set.
-Human approval gates are requested but never auto-approved / never auto-merged.
+Human approval gates are not applied by this CLI. Approve them in the Grok Bot request thread.
 `);
 }
 
@@ -131,8 +131,10 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  if (args.approve && args.reject) {
-    console.error("Error: --approve and --reject are mutually exclusive");
+  if (args.approve || args.reject) {
+    console.error(
+      "Error: refusing to apply a human gate from the CLI. Finance, security/compliance, and release are approved by a person in the request channel.",
+    );
     process.exitCode = 1;
     return;
   }
@@ -151,54 +153,19 @@ async function main(): Promise<void> {
     store,
     prClient: { client: prClient },
   });
-  let report = await lead.startOnDemandCheck({
+  const report = await lead.startOnDemandCheck({
     goal: args.goal,
     target: {
       repository: args.repo,
       baseRef: args.base,
       headRef: args.head,
     },
-    trigger: { requestedBy: "cli", notes: "On-demand check via releasedesk-check CLI (M6)" },
+    trigger: {
+      requestedBy: "cli",
+      notes:
+        "Deprecated local check. Bot handoffs run in the Grok Bot app (docs/sdlc). This CLI does not approve gates.",
+    },
   });
-
-  if (args.approve) {
-    // Explicit CLI demo action: complete feature checklists then merge/release gates.
-    // Orchestrator never auto-signs these during the run.
-    if (report.featureSignOffs.checklists.length > 0) {
-      report = lead.applyFeatureSignOffsToReport(
-        report,
-        report.featureSignOffs.checklists.map((c) => ({
-          checklistId: c.id,
-          signOffAll: true,
-          signedOffBy: args.decidedBy,
-          notes: "CLI --approve feature checklist (in-memory only)",
-        })),
-      );
-    }
-    const decisions = report.approvals.gates
-      .filter((g) => g.status === "pending")
-      .map((g) => ({
-        gateId: g.id,
-        decision: "approved" as const,
-        decidedBy: args.decidedBy,
-        notes: "CLI --approve (in-memory only; no git merge)",
-      }));
-    report = lead.applyApprovalsToReport(report, decisions);
-  } else if (args.reject) {
-    const release = report.approvals.gates.find(
-      (g) => g.kind === "release" && g.status === "pending",
-    );
-    if (release) {
-      report = lead.applyApprovalsToReport(report, [
-        {
-          gateId: release.id,
-          decision: "rejected",
-          decidedBy: args.decidedBy,
-          notes: "CLI --reject (in-memory only)",
-        },
-      ]);
-    }
-  }
 
   if (args.json) {
     console.log(
@@ -274,7 +241,7 @@ async function main(): Promise<void> {
   }
   console.log(`Audit events: ${report.run.auditTrail.length}`);
   console.log(
-    "\nNote: never auto-merges / never auto-signs feature checklists. Use --approve/--reject for in-memory demos only.",
+    "\nDeprecated: bot handoffs run in the Grok Bot app (docs/sdlc). This CLI does not approve human gates.",
   );
   console.log(
     "Full check with specialists: npm run check:release -- --repo owner/name --json",

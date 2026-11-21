@@ -43,6 +43,18 @@ export {
 } from "./load.js";
 
 export {
+  SHARED_STAGE_IDS,
+  NC_PREFIX_STAGE_IDS,
+  ProcessStageSchema,
+  ProcessDefinitionSchema,
+  resolveProcessesDir,
+  listProcessDefinitions,
+  assertSharedSpine,
+  type ProcessStage,
+  type ProcessDefinition,
+} from "./processes.js";
+
+export {
   DEFAULT_GROK_BOT_API_BASE,
   DEFAULT_GROK_BOT_CREATE_PATH,
   GrokBotApiClient,

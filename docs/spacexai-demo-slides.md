@@ -3,9 +3,9 @@
 Speaker notes for a ≤3-minute open, then live system.  
 Canonical store copy also lives at the Project docs store.
 
-**Live control plane (enterprise path):** `npm run desk` → http://localhost:3001/control · `npm run demo:control-plane`
+**Live control plane (enterprise path):** `npm run desk` → http://localhost:3002/control · `npm run demo:control-plane`
 
-**Live control plane (enterprise path):** `npm run desk` → http://localhost:3001/control · `npm run demo:control-plane`
+**Live control plane (enterprise path):** `npm run desk` → http://localhost:3002/control · `npm run demo:control-plane`
 
 ---
 

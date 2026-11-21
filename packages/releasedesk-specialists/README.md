@@ -33,7 +33,7 @@ const lead = new LeadOrchestrator({
   store,
   runners: createSpecialistRunners({
     workspaceRoot: process.cwd(),
-    skipGrok: !process.env.RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST,
+    skipGrok: true,
     // Cloud Agents: omit to use MOCK client (CI-safe).
     // cloudClient: createMockCloudAgentClient(),
   }),
@@ -60,7 +60,7 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
-Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). Without the agent’s key, local analysis still runs; Grok calls are `MOCK:`-labeled.
+This package no longer drives bot handoffs. See `DEPRECATED.md`. The intel twin uses `XAI_API_KEY` and json_schema. Desk does not launch Cursor agents.
 
 ## Cursor Cloud Agents (Milestone 5)
 
@@ -71,25 +71,12 @@ Builder plans three handoffs with clear boundaries, then runs:
 
 Results land on the Builder task output / evidence / `cloudAgentAudit` trail in the shared run context. Lead human **merge** and **release** gates remain pending — Cloud Agents must not merge.
 
-### MOCK vs real client
+### Desk stays on the mock client
 
-| Mode | How to enable | CI |
-| --- | --- | --- |
-| **MOCK** (default) | unset `RELEASEDESK_CLOUD_CLIENT`, or set `=mock` | Passes without Cursor credentials |
-| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` | Not required for CI |
-
-Shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` are **never** used.
+`resolveCloudAgentClient` returns the mock client. `RELEASEDESK_CLOUD_CLIENT=real` does not launch a live agent from Desk, including in CI. The Builder Grok Bot launches the Cursor cloud agent.
 
 ```bash
-# Default / CI — MOCK client (same interface as real)
 npm run test:specialists
-
-# Opt-in live Cursor Cloud Agents (per-agent exclusive keys)
-export RELEASEDESK_CURSOR_API_KEY_CODING=...
-export RELEASEDESK_CURSOR_API_KEY_TESTING=...
-export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
-export RELEASEDESK_CLOUD_CLIENT=real
-npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 ```
 
 Programmatic injection (tests):

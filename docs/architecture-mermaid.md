@@ -55,7 +55,7 @@ flowchart TB
     Coding["Coding · ships repo change"]
     Testing["Testing · verifies · never merge"]
     Review["Review · reviews · never merge"]
-    NHI["NHI keys<br/>RELEASEDESK_CURSOR_API_KEY_*"]
+    NHI["Launched by Builder<br/>no per-bot Cursor key"]
     Coding --- NHI
     Testing --- NHI
     Review --- NHI
@@ -64,7 +64,7 @@ flowchart TB
   subgraph GrokAPI["5 · Grok API · shipped code"]
     Intel["Classify / extract / score / summarize"]
     Trust["trustCheck<br/>humanGateStillRequired · noAutoApprove"]
-    LeadKey["NHI · RELEASEDESK_GROK_API_KEY_LEAD"]
+    LeadKey["App key · XAI_API_KEY"]
     Intel --> Trust
     Trust --- LeadKey
   end

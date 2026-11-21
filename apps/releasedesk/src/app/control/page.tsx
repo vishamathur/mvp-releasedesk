@@ -41,10 +41,9 @@ export default function ControlPlanePage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            Full SDLC circle: Customer ER → cost/finance dual approval → fairness priority → Lead →
-            CA/Standards/Security/Builder → ATLAS/OWASP → Cursor Coding (ships) ∥ Testing ∥ Review →
-            Grok API classify/extract/score/summarize → iteration + feature sign-off + merge/release →
-            readiness, token slices, and NHI status back to Lead. Nothing dropped.
+            PID-ER and PID-NC run in the Grok Bot app. This page shows the gate, the ATLAS/OWASP
+            map, and the shipped Grok intel call. It does not hand work between bots and it does
+            not approve finance, security, or release.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" className="btn-primary" disabled={pending} onClick={load}>
@@ -59,7 +58,7 @@ export default function ControlPlanePage() {
             <Link href="/desk" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
               Showcase desk
             </Link>
-            <MockLabel>MOCK without exclusive keys</MockLabel>
+            <MockLabel>MOCK until XAI_API_KEY is set</MockLabel>
           </div>
         </div>
 
@@ -160,9 +159,9 @@ export default function ControlPlanePage() {
                 </p>
               </div>
               <div>
-                <h2 className="font-display text-2xl text-rd-ink">NHI keys</h2>
+                <h2 className="font-display text-2xl text-rd-ink">App key</h2>
                 <p className="mt-2 text-sm text-rd-forest/70">
-                  Exclusive RELEASEDESK_* only — values never shown.
+                  One key, XAI_API_KEY. The value is never shown. Bots do not have keys.
                 </p>
                 <ul className="mt-4 max-h-64 space-y-2 overflow-auto text-xs">
                   {snap.nhiCredentials.map((c) => (

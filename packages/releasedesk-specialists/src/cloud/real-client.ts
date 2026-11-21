@@ -7,10 +7,9 @@ import type {
 } from "./types.js";
 
 /**
- * Real Cursor Cloud Agents API client (v1 public beta).
- * Enabled when exclusive RELEASEDESK_CURSOR_API_KEY_* keys are present
- * and RELEASEDESK_CLOUD_CLIENT=real (see resolveCloudAgentClient).
- * Shared CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY are never used.
+ * Deprecated Cursor Cloud Agents API client.
+ * Desk no longer selects it. Builder launches the agent from the Grok Bot app.
+ * Do not set RELEASEDESK_CLOUD_CLIENT=real.
  *
  * Docs: https://cursor.com/docs/cloud-agent/api/endpoints
  */

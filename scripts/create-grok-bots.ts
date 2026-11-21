@@ -7,16 +7,8 @@
  * Those ids are not xAI Agents API ids. This script does not POST them,
  * does not send them as liveBotId, and does not clear a created_in_grok_bot_app row.
  *
- * App bots do not take API keys. Exclusive RELEASEDESK_GROK_API_KEY_* values
- * authenticate Desk / specialist calls to the xAI chat completions API.
- * They are not Grok Bot app credentials.
- *
- * Env (exclusive per agent — no XAI_API_KEY fallback), only if an xAI create is attempted:
- *   RELEASEDESK_GROK_API_KEY_LEAD
- *   RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST
- *   RELEASEDESK_GROK_API_KEY_STANDARDS
- *   RELEASEDESK_GROK_API_KEY_SECURITY
- *   RELEASEDESK_GROK_API_KEY_BUILDER
+ * App bots do not take API keys. This script does not call api.x.ai and does
+ * not read per-bot keys. The five teammates already exist in the Grok Bot app.
  *
  * Optional:
  *   RELEASEDESK_GROK_BOT_API_BASE   (default https://api.x.ai/v1)
@@ -48,7 +40,7 @@ async function main() {
   const defs = await listGrokBotDefinitions(root);
   console.log(`Loaded ${defs.length} bot definition(s) from grok-bots/definitions/`);
   for (const d of defs) {
-    console.log(`  - ${d.id}  key=${d.apiKeyEnv}  pack=${d.markdownPackDir}`);
+    console.log(`  - ${d.id}  pack=${d.markdownPackDir}  (no per-bot API key)`);
   }
 
   const existing = await loadGrokBotRegistry(root);
@@ -112,10 +104,9 @@ async function main() {
     "Definition paths: grok-bots/definitions/{lead,change-analyst,standards,security,builder}.json",
   );
 
-  const missing = created.filter((r) => r.status === "skipped_missing_key");
-  if (missing.length) {
+  if (pending.length === 0) {
     console.log(
-      `\n${missing.length} bot(s) skipped — set exclusive RELEASEDESK_GROK_API_KEY_* then re-run. Shared XAI_API_KEY / GROK_API_KEY are ignored.`,
+      "\nNo xAI create attempted. The five bots are Grok Bot app teammates and this script does not POST them.",
     );
   }
 }

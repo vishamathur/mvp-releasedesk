@@ -1,15 +1,11 @@
 /**
- * Enterprise SDLC control plane snapshot — intake → bots → ATLAS/OWASP →
- * iteration gate → Cursor→Grok ship → human merge/release, with portfolio
- * token efficiency and NHI exclusive keys.
+ * Desk snapshot of the SDLC. Bot handoffs run in the Grok Bot app.
+ * This module does not start the Lead orchestrator and does not approve gates.
  */
 import path from "node:path";
 import {
   DEMO_PORTFOLIO,
   SDLC_AGENT_DEFINITIONS,
-  buildRoleContextSlice,
-  compareFullRunVsSlice,
-  createInMemoryStore,
   createZscalerMockFindings,
   evaluateIterationProceedGate,
   evaluateSecurityParticipation,
@@ -24,11 +20,6 @@ import {
   type SecurityParticipationGate,
   type TokenBudgetComparison,
 } from "@releasedesk/core";
-import {
-  LeadOrchestrator,
-  createDefaultStubRunners,
-  createMockPrClient,
-} from "@releasedesk/lead";
 import {
   classifyReleaseFindings,
   extractReleaseActions,
@@ -154,38 +145,19 @@ export async function buildControlPlaneSnapshot(
 
   const iterationGate = evaluateIterationProceedGate({
     iterationId: "iter_control_plane_demo",
-    approvals: [
-      {
-        iterationId: "iter_control_plane_demo",
-        kind: "security",
-        approvedBy: "control-plane-demo",
-        approvedAt: new Date().toISOString(),
-        note: "Demo security sign-off — live room can use red_team instead",
-      },
-    ],
+    approvals: [],
   });
 
-  const lead = new LeadOrchestrator({
-    store: createInMemoryStore(),
-    runners: createDefaultStubRunners(),
-    enableRemediation: true,
-    maxRemediationCycles: 1,
-    prClient: { client: createMockPrClient() },
-  });
   const sample = DEMO_PORTFOLIO[0]!;
-  const report = await lead.startOnDemandCheck({
-    goal: `Control plane release check — ${sample.customerName}`,
-    target: {
-      repository: sample.repository,
-      ...(sample.baseRef ? { baseRef: sample.baseRef } : {}),
-      ...(sample.headRef ? { headRef: sample.headRef } : {}),
-    },
-    trigger: { requestedBy: "control-plane", notes: "Enterprise SDLC demo" },
-    metadata: { customerId: sample.customerId, controlPlane: true },
-  });
-  const security = evaluateSecurityParticipation(report.run.tasks);
-  const slice = buildRoleContextSlice(report.run, "security");
-  const tokenBudget = compareFullRunVsSlice(report.run, slice);
+  const security = evaluateSecurityParticipation([]);
+  const tokenBudget = {
+    fullRunChars: 0,
+    fullRunTokensEst: 0,
+    sliceChars: 0,
+    sliceTokensEst: 0,
+    savingsTokensEst: 0,
+    savingsPct: 0,
+  };
 
   const intelFindings = findings.map((f) => ({
     id: f.id,
@@ -229,9 +201,9 @@ export async function buildControlPlaneSnapshot(
     {
       id: "grok_bots",
       label: "2 · Grok Bots (Lead + specialists)",
-      summary: "Lead · Change Analyst · Standards · Security · Builder — exclusive keys.",
+      summary: "Lead · Change Analyst · Standards · Security · Builder hand off inside the Grok Bot app.",
       status: "ready",
-      detail: `${bots.length} bot definition(s) · Coding/Testing/Review Cursor CAs nested under Builder`,
+      detail: `${bots.length} bot definition(s) · Builder launches the Cursor cloud agent · no per-bot API keys`,
     },
     {
       id: "atlas_owasp",
@@ -243,10 +215,10 @@ export async function buildControlPlaneSnapshot(
     {
       id: "iteration_gate",
       label: "4 · Iteration gate (red_team | security)",
-      summary: "Hard #14 gate — neither approval → cannot proceed.",
+      summary: "Hard gate — a human red_team or security signature is required. Desk does not sign it.",
       status: iterationGate.canProceed ? "ready" : "blocked",
       detail: iterationGate.canProceed
-        ? "security approval recorded (demo)"
+        ? "human red_team|security signature recorded"
         : iterationGate.blockingIssue,
     },
     {
@@ -255,8 +227,8 @@ export async function buildControlPlaneSnapshot(
       summary: "Coding agent ships; desk + specialists call classify/extract/score/summarize.",
       status: deskIntel.mocked ? "mock" : "live",
       detail: deskIntel.mocked
-        ? `MOCK without exclusive key (${deskIntel.trustCheck.keyEnvVar})`
-        : `Live via ${deskIntel.trustCheck.keyEnvVar}`,
+        ? `MOCK until ${deskIntel.trustCheck.keyEnvVar} is set`
+        : `Live via ${deskIntel.trustCheck.keyEnvVar} json_schema`,
     },
     {
       id: "human_merge_release",
@@ -268,9 +240,9 @@ export async function buildControlPlaneSnapshot(
     {
       id: "portfolio_token_nhi",
       label: "7 · Portfolio · token efficiency · NHI keys",
-      summary: "Multi-customer DEMO_PORTFOLIO, security-slice tokens, exclusive NHI env vars.",
+      summary: "Portfolio customers. One app Grok key. Desk does not run the bot handoff.",
       status: presentKeys > 0 ? "live" : "mock",
-      detail: `${DEMO_PORTFOLIO.length} customers · slice save ~${tokenBudget.savingsTokensEst} tok · ${presentKeys}/${nhiCredentials.length} NHI keys present`,
+      detail: `${DEMO_PORTFOLIO.length} customers · app key ${presentKeys}/${nhiCredentials.length} present · Security participation is a Grok Bot stage`,
     },
   ];
 
@@ -314,8 +286,8 @@ export async function buildControlPlaneSnapshot(
       "npm run build:core && npm run build:lead && npm run build:specialists",
       "npm run desk",
       "open http://localhost:3002/control",
-      "optional live: export RELEASEDESK_GROK_API_KEY_BUILDER=... RELEASEDESK_GROK_API_KEY_LEAD=...",
-      "npm run demo:control-plane",
+      "live Grok intel: set XAI_API_KEY in apps/releasedesk/.env.local (never commit it)",
+      "bot flow: docs/sdlc/overview.md — #er-intake or #new-customer",
     ],
   };
 }

@@ -5,7 +5,7 @@
  *   npm run build:core && npm run build:lead && npm run build:specialists
  *   npm run demo:control-plane
  *
- * Live Desk UI: npm run desk → http://localhost:3001/control
+ * Live Desk UI: npm run desk → http://localhost:3002/control
  */
 import { buildControlPlaneSnapshot } from "../apps/releasedesk/src/lib/control-plane.ts";
 

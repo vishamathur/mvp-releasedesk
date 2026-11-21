@@ -12,31 +12,16 @@
 npm install
 npm run build:core && npm run build:lead && npm run build:specialists
 npm run test:core && npm run test:desk
-npm run desk          # http://localhost:3001
+npm run desk          # http://localhost:3002
 # optional CLI portfolio proof:
 npm run sdlc:mvp
-# optional live Grok Bot create (exclusive keys only):
+# preserves Grok Bot app teammates; does not POST api.x.ai:
 npm run create:grok-bots -- --dry-run
 ```
 
-### Live keys (optional — otherwise honest MOCK)
+### Live Grok (optional — otherwise honest MOCK)
 
-```bash
-# Live Desk Grok intel (Coding ship path)
-export RELEASEDESK_GROK_API_KEY_LEAD=...
-
-# Live Grok Bot create (all five)
-export RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST=...
-export RELEASEDESK_GROK_API_KEY_STANDARDS=...
-export RELEASEDESK_GROK_API_KEY_SECURITY=...
-export RELEASEDESK_GROK_API_KEY_BUILDER=...
-
-# Live Cursor Cloud Agents
-export RELEASEDESK_CURSOR_API_KEY_CODING=...
-export RELEASEDESK_CURSOR_API_KEY_TESTING=...
-export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
-export RELEASEDESK_CLOUD_CLIENT=real
-```
+Set `XAI_API_KEY` in `apps/releasedesk/.env.local`. Do not commit it. Per-bot keys are ignored. Do not set `RELEASEDESK_CLOUD_CLIENT=real`. Builder launches Cursor from the Grok Bot app. Process specs: `docs/sdlc/overview.md`.
 
 ---
 
@@ -61,9 +46,9 @@ Leave buffer for a live bot persona edit + Q&A.
 
 | Capability | Live when | Otherwise |
 | --- | --- | --- |
-| Desk Grok API intel (`grok-release-intel.ts`) | `RELEASEDESK_GROK_API_KEY_LEAD` set | **MOCK** labeled; shared `XAI_API_KEY`/`GROK_API_KEY` ignored |
+| Desk Grok API intel (`grok-release-intel.ts`) | `XAI_API_KEY` set | **MOCK** labeled; per-bot keys ignored |
 | Grok Bot teammates | Already created in the Grok Bot app (`grokBotAppAgentId` in `registry.json`, host `grok-bot-app`). App ids are not xAI API ids | `npm run create:grok-bots` does not call xAI for those rows. `liveBotId` stays null |
-| Cursor Coding / Testing / Review | Exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` **and** `RELEASEDESK_CLOUD_CLIENT=real` | **MOCK** cloud clients; shared `CURSOR_API_KEY` ignored |
+| Cursor cloud agent | Builder Grok Bot routine `on-build-stage` | Desk stays MOCK and does not launch |
 | Specialist runners (Desk UI path) | Wired real runners | **MOCK** stubs (labeled) |
 | GitHub PR client (Desk UI) | `GH_TOKEN` / `GITHUB_TOKEN` | **MOCK** GitHub |
 | Iteration gate demo on `/mvp` | Always real gate logic | Approvals are process-local demo store |

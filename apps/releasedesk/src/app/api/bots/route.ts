@@ -17,13 +17,7 @@ export async function GET() {
     bots,
     createScript: "npm run create:grok-bots",
     note:
-      "grokBotAppAgentId values are Grok Bot app teammate ids (host grok-bot-app), not xAI Agents API ids. Desk does not call api.x.ai with them. Exclusive RELEASEDESK_GROK_API_KEY_* keys authenticate application chat-completions calls and are unset here when missing.",
-    envVars: [
-      "RELEASEDESK_GROK_API_KEY_LEAD",
-      "RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST",
-      "RELEASEDESK_GROK_API_KEY_STANDARDS",
-      "RELEASEDESK_GROK_API_KEY_SECURITY",
-      "RELEASEDESK_GROK_API_KEY_BUILDER",
-    ],
+      "grokBotAppAgentId values are Grok Bot app teammate ids. Desk does not orchestrate handoffs and does not call api.x.ai with these ids. Bots do not take API keys. Shipped Grok calls read XAI_API_KEY.",
+    envVars: ["XAI_API_KEY"],
   });
 }

@@ -1,7 +1,9 @@
 {
   "version": 1,
   "title": "SpaceXAI Release Desk Grok Bots",
-  "stack": "Grok Bot (Lead + CA + Standards + Security + Builder) → Cursor cloud agent → Grok API",
+  "stack": "Grok Bot teammates (Lead + Change Analyst + Standards + Security + Builder) drive PID-ER and PID-NC. Builder launches a Cursor cloud agent. Shipped code calls the Grok API with XAI_API_KEY.",
   "preserveIterationGate": "red_team|security",
+  "orchestration": "grok-bot-native",
+  "processes": ["PID-ER", "PID-NC"],
   "bots": ["lead", "change-analyst", "standards", "security", "builder"]
 }

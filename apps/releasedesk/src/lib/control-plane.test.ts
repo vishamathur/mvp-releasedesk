@@ -3,9 +3,7 @@ import { buildControlPlaneSnapshot } from "./control-plane";
 
 describe("buildControlPlaneSnapshot", () => {
   it("returns seven stages covering enterprise SDLC depth", async () => {
-    const snap = await buildControlPlaneSnapshot({
-      XAI_API_KEY: "shared-ignored",
-    });
+    const snap = await buildControlPlaneSnapshot({});
     expect(snap.title).toBe("Release Desk SDLC Control Plane");
     expect(snap.stages).toHaveLength(7);
     expect(snap.stages.map((s) => s.id)).toEqual([
@@ -17,7 +15,7 @@ describe("buildControlPlaneSnapshot", () => {
       "human_merge_release",
       "portfolio_token_nhi",
     ]);
-    expect(snap.iterationGate.canProceed).toBe(true);
+    expect(snap.iterationGate.canProceed).toBe(false);
     expect(snap.atlasOwasp.atlasTags.length + snap.atlasOwasp.owaspTags.length).toBeGreaterThan(0);
     expect(snap.ship.specialistIntel.classify.mocked).toBe(true);
     expect(snap.portfolio.customers.length).toBeGreaterThanOrEqual(2);

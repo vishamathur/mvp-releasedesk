@@ -114,8 +114,7 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
             </p>
           ) : null}
           <p className="mt-1 text-xs text-rd-forest/55">
-            {current.definitionPath} · {current.apiKeyEnv}
-            {current.keyPresent ? " · key present" : " · key missing"}
+            {current.definitionPath} · no per-bot API key
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">

@@ -1,11 +1,9 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
-  GROK_API_KEY_ENV,
   grokBotProvisionView,
   listGrokBotDefinitions,
   loadGrokBotRegistry,
-  resolveAgentGrokApiKey,
   type GrokBotDefinition,
   type GrokBotProvisionView,
   type GrokBotRegistryEntry,
@@ -15,8 +13,9 @@ export type GrokBotPack = {
   id: string;
   displayName: string;
   label: string;
-  apiKeyEnv: string;
-  keyPresent: boolean;
+  /** Bots do not take keys. Always "none". */
+  apiKeyEnv: "none";
+  keyPresent: false;
   /** xAI Agents API id only. Null for Grok Bot app teammates. */
   liveBotId: string | null;
   /** Grok Bot app teammate id. Not sent to api.x.ai. */
@@ -58,7 +57,7 @@ function personaText(def: GrokBotDefinition): string {
     "**Boundaries:**",
     ...def.persona.boundaries.map((b) => `- ${b}`),
     "",
-    `**API key env:** ${def.apiKeyEnv}`,
+    "**API key:** none. Grok Bot teammates do not take keys. Shipped Grok calls use XAI_API_KEY.",
   ].join("\n");
 }
 
@@ -118,13 +117,12 @@ export async function listGrokBotPacks(): Promise<GrokBotPack[]> {
 
   return defs.map((def) => {
     const entry = byId.get(def.id);
-    const keyPresent = Boolean(resolveAgentGrokApiKey(def.role));
     return {
       id: def.id,
       displayName: def.displayName,
       label: def.label,
-      apiKeyEnv: def.apiKeyEnv,
-      keyPresent,
+      apiKeyEnv: "none" as const,
+      keyPresent: false as const,
       ...provisionFields(entry),
       definitionPath: `grok-bots/definitions/${def.id}.json`,
       persona: personaText(def),
@@ -151,16 +149,6 @@ async function listMarkdownFallback(root: string): Promise<GrokBotPack[]> {
 
   const registry = await loadGrokBotRegistry(root);
   const byId = new Map(registry.entries.map((e) => [e.definitionId, e]));
-  const roleFor = (id: string) =>
-    id === "change-analyst"
-      ? ("change_analyst" as const)
-      : id === "lead"
-        ? ("lead" as const)
-        : id === "standards"
-          ? ("standards" as const)
-          : id === "security"
-            ? ("security" as const)
-            : ("builder" as const);
 
   const packs: GrokBotPack[] = [];
   for (const id of ids) {
@@ -171,14 +159,12 @@ async function listMarkdownFallback(root: string): Promise<GrokBotPack[]> {
     } catch {
       continue;
     }
-    const role = roleFor(id);
-    const roleKey = GROK_API_KEY_ENV[role];
     packs.push({
       id,
       displayName: id,
       label: id,
-      apiKeyEnv: roleKey,
-      keyPresent: Boolean(resolveAgentGrokApiKey(role)),
+      apiKeyEnv: "none" as const,
+      keyPresent: false as const,
       ...provisionFields(byId.get(id)),
       definitionPath: `grok-bots/bots/${id}/PERSONA.md`,
       persona,

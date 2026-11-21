@@ -1,15 +1,14 @@
 /**
- * Grok API release intel — shipped Desk module (classify + extract + score + summarize).
+ * Grok API release intel — shipped application module (classify + extract + score + summarize).
  *
- * Live key: RELEASEDESK_GROK_API_KEY_LEAD only.
- * Shared XAI_API_KEY / GROK_API_KEY are never consulted.
- * Absent key → MOCK-labeled fallback.
+ * Live key: the single app key XAI_API_KEY. Per-bot RELEASEDESK_GROK_API_KEY_* values
+ * are ignored. Absent key → MOCK-labeled fallback. The live call asks for json_schema
+ * structured output. Grok output never approves a human gate.
  *
- * Specialist ship twin: packages/releasedesk-specialists/src/grok-api-intel.ts
- * (Builder exclusive key) — Cursor Coding agent hardens both.
+ * Cursor Coding, launched by the Builder Grok Bot, owns this file.
  */
 
-import { GROK_API_KEY_ENV, resolveAgentGrokApiKey } from "@releasedesk/core";
+import { APP_GROK_API_KEY_ENV, resolveAppGrokApiKey } from "@releasedesk/core";
 
 export type GrokIntelMode = "live" | "mock";
 
@@ -23,7 +22,7 @@ export type GrokIntelTrustCheck = {
   schemaValid: boolean;
   humanGateStillRequired: true;
   noAutoApprove: true;
-  keyEnvVar: string;
+  keyEnvVar: typeof APP_GROK_API_KEY_ENV;
   usedSharedFallback: false;
   notes: string[];
 };
@@ -32,7 +31,7 @@ export type GrokReleaseIntelResult = {
   mode: GrokIntelMode;
   /** Room-facing chip: MOCK vs LIVE (never claim live without exclusive key). */
   label: "MOCK" | "LIVE";
-  /** Whether RELEASEDESK_GROK_API_KEY_LEAD was present for this call. */
+  /** Whether XAI_API_KEY was present for this call. */
   keyPresent: boolean;
   model: string;
   classify: { category: string; confidence: number };
@@ -46,8 +45,40 @@ export type GrokReleaseIntelResult = {
 
 /** Default model: grok-2-latest is retired/404 for many teams — prefer grok-3. */
 const MODEL = process.env.GROK_MODEL?.trim() || "grok-3";
-const INTEL_ROLE = "lead" as const;
-const INTEL_KEY_ENV = GROK_API_KEY_ENV[INTEL_ROLE];
+const INTEL_KEY_ENV = APP_GROK_API_KEY_ENV;
+
+/** Structured output contract for the live chat-completions call. */
+export const GROK_RELEASE_INTEL_JSON_SCHEMA = {
+  name: "release_intel",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["classify", "extract", "score", "summarize"],
+    properties: {
+      classify: {
+        type: "object",
+        additionalProperties: false,
+        required: ["category", "confidence"],
+        properties: {
+          category: { type: "string" },
+          confidence: { type: "number" },
+        },
+      },
+      extract: { type: "array", items: { type: "string" } },
+      score: {
+        type: "object",
+        additionalProperties: false,
+        required: ["level", "rationale"],
+        properties: {
+          level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+          rationale: { type: "string" },
+        },
+      },
+      summarize: { type: "string" },
+    },
+  },
+} as const;
 
 /** Credential presence only — never returns secret values. */
 export function describeGrokIntelKeyStatus(env: NodeJS.ProcessEnv = process.env): {
@@ -57,15 +88,15 @@ export function describeGrokIntelKeyStatus(env: NodeJS.ProcessEnv = process.env)
   liveReady: boolean;
   mockUnlessLive: string;
 } {
-  const keyPresent = Boolean(resolveAgentGrokApiKey(INTEL_ROLE, env));
+  const keyPresent = Boolean(resolveAppGrokApiKey(env));
   return {
     keyEnvVar: INTEL_KEY_ENV,
     keyPresent,
     usedSharedFallback: false,
     liveReady: keyPresent,
     mockUnlessLive: keyPresent
-      ? `LIVE path ready via exclusive ${INTEL_KEY_ENV}`
-      : `MOCK until ${INTEL_KEY_ENV} is set (shared XAI/GROK keys ignored)`,
+      ? `LIVE path ready via app key ${INTEL_KEY_ENV}`
+      : `MOCK until ${INTEL_KEY_ENV} is set (per-bot RELEASEDESK_GROK_API_KEY_* ignored)`,
   };
 }
 
@@ -141,8 +172,8 @@ function mockIntel(
     summarize: `MOCK: ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); ${severe.length} high/critical. Human gates still required.`,
     trustCheck: trustNotes([
       reasonNote,
-      "Shared XAI_API_KEY / GROK_API_KEY never used",
-      "Grok never auto-approves merge/release",
+      "Per-bot RELEASEDESK_GROK_API_KEY_* ignored",
+      "Grok never auto-approves finance, security, or release",
     ]),
     mocked: true,
   };
@@ -167,7 +198,7 @@ export async function runGrokReleaseIntel(
   },
 ): Promise<GrokReleaseIntelResult> {
   const env = (opts?.env ?? process.env) as NodeJS.ProcessEnv;
-  const apiKey = resolveAgentGrokApiKey(INTEL_ROLE, env);
+  const apiKey = resolveAppGrokApiKey(env);
   if (!apiKey) return mockIntel(input);
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
@@ -178,7 +209,7 @@ export async function runGrokReleaseIntel(
     keyPresent: true,
   });
   const system =
-    "You are Release Desk Grok intel. Return ONLY JSON: classify{category,confidence 0-1}, extract(string[]), score{level:low|medium|high|critical,rationale}, summarize(string). Do not approve merges.";
+    "You are Release Desk Grok intel. Fill the json_schema: classify{category,confidence 0-1}, extract(string[]), score{level:low|medium|high|critical,rationale}, summarize(string). Do not approve finance, security, or release gates.";
 
   try {
     const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
@@ -187,9 +218,13 @@ export async function runGrokReleaseIntel(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
+        body: JSON.stringify({
         model: MODEL,
         temperature: 0.1,
+        response_format: {
+          type: "json_schema",
+          json_schema: GROK_RELEASE_INTEL_JSON_SCHEMA,
+        },
         messages: [
           { role: "system", content: system },
           {
@@ -251,7 +286,7 @@ export async function runGrokReleaseIntel(
       score: { level: scoreLevel, rationale: scoreRationale },
       summarize: String(parsed.summarize),
       trustCheck: trustNotes([
-        `LIVE Grok API via exclusive ${INTEL_KEY_ENV}`,
+        `LIVE Grok API via ${INTEL_KEY_ENV} with json_schema`,
         "Schema trust check passed",
         "Human merge/release gates remain authoritative",
       ]),

@@ -7,13 +7,14 @@ const sample: GrokBotDefinition = {
   role: "security",
   displayName: "Security",
   label: "Mandatory security",
-  apiKeyEnv: "RELEASEDESK_GROK_API_KEY_SECURITY",
+  mayAutoApproveHumanGate: false,
   persona: {
     job: "Mandatory review",
     personality: "Blunt",
     memory: ["blockers"],
     boundaries: ["Never auto-waive"],
   },
+  memoryKeys: [{ key: "pid.security.findings.{requestId}", stores: "findings" }],
   skills: [
     {
       name: "security-review",
@@ -21,33 +22,44 @@ const sample: GrokBotDefinition = {
       steps: ["review"],
       requiresApproval: [],
       output: "findings",
+      playbook: "grok-bots/bots/security/skills/security-review.md",
     },
   ],
-  routines: [{ name: "mandatory-every-change", trigger: "every check", steps: ["run"] }],
+  routines: [
+    {
+      name: "mandatory-every-change",
+      trigger: "every check",
+      prompt: "Review and do not approve.",
+      steps: ["run"],
+      playbook: "grok-bots/bots/security/routines/mandatory-every-change.md",
+    },
+  ],
   connectors: [{ name: "GitHub", purpose: "read", access: "read" }],
   teammates: ["lead"],
-  channels: [{ name: "#release-desk", purpose: "status" }],
+  channels: [{ name: "#release-desk", purpose: "status", posts: true, listens: true }],
   handsOffTo: ["lead"],
+  handoffs: [{ to: "lead", when: "findings ready", messageKind: "stage-return" }],
   mandatoryOnEveryChange: true,
   markdownPackDir: "grok-bots/bots/security",
 };
 
 describe("GrokBotApiClient", () => {
-  it("skips when exclusive key missing and ignores shared XAI_API_KEY", async () => {
+  it("skips when the app key is missing and ignores per-bot keys", async () => {
     const client = createGrokBotApiClient({
-      env: { XAI_API_KEY: "shared", GROK_API_KEY: "shared" },
+      env: { RELEASEDESK_GROK_API_KEY_SECURITY: "per-bot", GROK_API_KEY: "alias" },
       dryRun: false,
     });
     const result = await client.createBot(sample);
     expect(result.status).toBe("skipped_missing_key");
     expect(result.liveBotId).toBeNull();
-    expect(result.message).toContain("RELEASEDESK_GROK_API_KEY_SECURITY");
+    expect(result.keyEnv).toBe("XAI_API_KEY");
+    expect(result.message).toContain("XAI_API_KEY");
   });
 
-  it("dry-runs without inventing a liveBotId when key present", async () => {
+  it("dry-runs without inventing a liveBotId when the app key is present", async () => {
     const fetchImpl = vi.fn();
     const client = createGrokBotApiClient({
-      env: { RELEASEDESK_GROK_API_KEY_SECURITY: "sec-key" },
+      env: { XAI_API_KEY: "app-key" },
       dryRun: true,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -62,7 +74,7 @@ describe("GrokBotApiClient", () => {
       new Response(JSON.stringify({ id: "bot_live_123" }), { status: 200 }),
     );
     const client = createGrokBotApiClient({
-      env: { RELEASEDESK_GROK_API_KEY_SECURITY: "sec-key" },
+      env: { XAI_API_KEY: "app-key" },
       dryRun: false,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       baseUrl: "https://example.test/v1",
@@ -88,9 +100,8 @@ describe("GrokBotApiClient", () => {
     );
     const client = createGrokBotApiClient({
       env: {
-        RELEASEDESK_GROK_API_KEY_SECURITY: "sec-key",
         GROK_BOT_APP_AGENT_ID: appAgentId,
-        XAI_API_KEY: appAgentId,
+        XAI_API_KEY: "app-key",
       },
       dryRun: false,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -105,13 +116,13 @@ describe("GrokBotApiClient", () => {
     expect(body).not.toHaveProperty("agent_id");
     expect(JSON.stringify(body)).not.toContain(appAgentId);
     const headers = init.headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer sec-key");
+    expect(headers.Authorization).toBe("Bearer app-key");
   });
 
   it("refuses to invent liveBotId when response has none", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const client = createGrokBotApiClient({
-      env: { RELEASEDESK_GROK_API_KEY_SECURITY: "sec-key" },
+      env: { XAI_API_KEY: "app-key" },
       dryRun: false,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });

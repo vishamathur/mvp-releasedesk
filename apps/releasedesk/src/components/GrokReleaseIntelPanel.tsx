@@ -123,11 +123,11 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
         )}
       </div>
       <p className="mt-2 text-sm text-rd-forest/70">
-        Coding Cloud Agent ship path — classify / extract / score / summarize. Exclusive key{" "}
+        Shipped path — classify / extract / score / summarize with json_schema. App key{" "}
         <span className="font-mono text-[12px] text-rd-ink">
-          {keyStatus?.keyEnvVar ?? "RELEASEDESK_GROK_API_KEY_LEAD"}
+          {keyStatus?.keyEnvVar ?? "XAI_API_KEY"}
         </span>
-        . Shared XAI/GROK keys ignored. Trust check keeps human gates authoritative.
+        . Per-bot keys are ignored. Trust check keeps human gates with people.
       </p>
       {keyStatus ? (
         <p className="mt-2 text-xs text-rd-forest/55">{keyStatus.mockUnlessLive}</p>

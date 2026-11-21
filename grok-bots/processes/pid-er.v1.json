@@ -1,0 +1,101 @@
+{
+  "id": "PID-ER",
+  "version": "1.0.0",
+  "title": "Enhancement request — existing customer",
+  "summary": "A change to a product Northwind already runs for a known customer. The request joins a fixed sprint. There is no onboarding, discovery, scope workshop, or customer proposal.",
+  "customerKind": "existing",
+  "cadence": {
+    "kind": "fixed_sprint",
+    "detail": "Two-week sprint. Intake locks at sprint planning, every other Monday 09:00 America/New_York. Release window is Thursday of week 2 at 15:00 America/New_York. Work is accepted into the current sprint only when estimation and finance approval finish before planning lock; otherwise it waits for the next sprint. No separate kickoff."
+  },
+  "entry": {
+    "channel": "#er-intake",
+    "criteria": [
+      "Customer id already exists in the KYC book of record",
+      "Product id already exists for that customer",
+      "Request type is an enhancement, defect, or regulatory tweak to that product",
+      "No open severity-1 incident on that product",
+      "Posted in #er-intake using the intake card (customer, product, ask, desired sprint)"
+    ]
+  },
+  "humanGates": [
+    "finance-approval",
+    "security-compliance-approval",
+    "release-gate"
+  ],
+  "botsMayAutoApprove": false,
+  "securityMandatory": true,
+  "iterationGate": "red_team|security",
+  "stages": [
+    {
+      "id": "intake",
+      "name": "Intake",
+      "owner": "lead",
+      "consulting": ["change-analyst"],
+      "humanApprover": null,
+      "artifacts": ["intake card", "request thread", "pid state record"],
+      "sla": "Acknowledge in #er-intake within 4 business hours",
+      "autoApprove": false
+    },
+    {
+      "id": "estimation",
+      "name": "Estimation",
+      "owner": "change-analyst",
+      "consulting": ["standards"],
+      "humanApprover": null,
+      "artifacts": ["sprint estimate (engineer-days and sprint fit)"],
+      "sla": "2 business days, and before sprint-planning lock",
+      "autoApprove": false
+    },
+    {
+      "id": "finance-approval",
+      "name": "Finance approval",
+      "owner": "lead",
+      "consulting": ["change-analyst"],
+      "humanApprover": "Finance partner",
+      "artifacts": ["sprint-envelope decision"],
+      "sla": "2 business days. Required on every enhancement, including work inside the sprint envelope. No bot may record this decision.",
+      "autoApprove": false
+    },
+    {
+      "id": "security-compliance-approval",
+      "name": "Security and compliance approval",
+      "owner": "security",
+      "consulting": ["standards", "change-analyst"],
+      "humanApprover": "Security officer or AI red-team lead",
+      "artifacts": ["security findings", "compliance deviations", "sign-off request"],
+      "sla": "3 business days. Security runs on every change. One human signature of kind red_team or security opens the iteration gate. A bot signature does not.",
+      "autoApprove": false
+    },
+    {
+      "id": "build",
+      "name": "Build",
+      "owner": "builder",
+      "consulting": ["security", "standards"],
+      "humanApprover": null,
+      "artifacts": ["pull request", "cloud agent run reference"],
+      "sla": "Inside the committed sprint. Builder does not merge.",
+      "autoApprove": false
+    },
+    {
+      "id": "test-gate",
+      "name": "Test gate",
+      "owner": "lead",
+      "consulting": ["builder", "security"],
+      "humanApprover": null,
+      "artifacts": ["test report"],
+      "sla": "Before the sprint release window. A failed report returns the request to build. Lead records the result and does not waive a security finding.",
+      "autoApprove": false
+    },
+    {
+      "id": "release-gate",
+      "name": "Release gate",
+      "owner": "lead",
+      "consulting": ["security", "standards", "builder"],
+      "humanApprover": "Release manager",
+      "artifacts": ["release note", "go/no-go record"],
+      "sla": "Sprint release window, Thursday of week 2 at 15:00 America/New_York. Human go/no-go in the request thread.",
+      "autoApprove": false
+    }
+  ]
+}

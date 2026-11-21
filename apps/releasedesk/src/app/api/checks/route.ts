@@ -1,25 +1,20 @@
 import { NextResponse } from "next/server";
-import { startOnDemandCheck } from "@/lib/desk";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
-  try {
-    const body = (await request.json().catch(() => ({}))) as {
-      goal?: string;
-      repository?: string;
-      requestedBy?: string;
-    };
-    const result = await startOnDemandCheck(body);
-    return NextResponse.json({
-      runId: result.view.runId,
-      readiness: result.view.leadOutput.readiness,
-      list: result.list,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to start check" },
-      { status: 500 },
-    );
-  }
+/**
+ * Retired. Desk no longer starts a Lead orchestrator run.
+ * Open #er-intake or #new-customer in the Grok Bot app.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      ok: false,
+      orchestratedByDesk: false,
+      autoApproved: false,
+      error:
+        "Desk no longer orchestrates bot handoffs. Post an intake card in #er-intake (PID-ER) or #new-customer (PID-NC). See docs/sdlc/overview.md.",
+    },
+    { status: 410 },
+  );
 }

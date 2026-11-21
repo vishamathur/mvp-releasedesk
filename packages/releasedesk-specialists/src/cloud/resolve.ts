@@ -4,21 +4,17 @@ import {
   type CursorKeyedAgentId,
 } from "@releasedesk/core";
 import { createMockCloudAgentClient } from "./mock-client.js";
-import {
-  createRealCloudAgentClient,
-  createUnavailableRealClientStub,
-  type RealCloudAgentClientOptions,
-} from "./real-client.js";
+import type { RealCloudAgentClientOptions } from "./real-client.js";
 import type { CloudAgentClient, CloudAgentClientMode, CloudAgentKind } from "./types.js";
 
 export type ResolveCloudAgentClientOptions = {
   /**
-   * Force mode. When omitted / `auto`:
-   * - only `RELEASEDESK_CLOUD_CLIENT=real` + ≥1 exclusive Coding/Testing/Review key → real
-   * - otherwise → mock (CI-safe default)
+   * Ignored for live dispatch. Desk stays on the mock client.
+   * Builder launches Cursor from the Grok Bot app.
    */
   mode?: CloudAgentClientMode | "auto";
   env?: NodeJS.ProcessEnv;
+  /** Ignored. Kept so older callers still type-check. */
   real?: RealCloudAgentClientOptions;
   /** Injected client wins over env resolution (tests). */
   client?: CloudAgentClient;
@@ -50,57 +46,19 @@ export function resolveCursorApiKey(_env: NodeJS.ProcessEnv = process.env): stri
   return undefined;
 }
 
-function anyExclusiveCloudKeyPresent(env: NodeJS.ProcessEnv): boolean {
-  return (
-    Boolean(resolveCursorApiKeyForAgent("coding", env)) ||
-    Boolean(resolveCursorApiKeyForAgent("testing", env)) ||
-    Boolean(resolveCursorApiKeyForAgent("review", env))
-  );
-}
-
 /**
- * Select MOCK vs real Cursor Cloud Agent client.
+ * Desk no longer launches Cursor cloud agents.
  *
- * Enable real:
- *   export RELEASEDESK_CURSOR_API_KEY_CODING=...
- *   export RELEASEDESK_CURSOR_API_KEY_TESTING=...
- *   export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
- *   export RELEASEDESK_CLOUD_CLIENT=real
- *
- * Each kind uses its own exclusive key at dispatch time.
- * Shared CURSOR_API_KEY is never consulted.
+ * Builder does that from the Grok Bot app (skill launch-cursor-coding-agent).
+ * `RELEASEDESK_CLOUD_CLIENT=real` and per-bot Cursor keys are ignored so CI
+ * cannot go live from this path. An injected `options.client` is still honored
+ * for unit tests of the pipeline shape.
  */
 export function resolveCloudAgentClient(
   options: ResolveCloudAgentClientOptions = {},
 ): CloudAgentClient {
   if (options.client) return options.client;
-
-  const env = options.env ?? process.env;
-  const raw = options.mode ?? env.RELEASEDESK_CLOUD_CLIENT ?? "mock";
-  const requested = String(raw).toLowerCase() as CloudAgentClientMode | "auto";
-  const wantReal = requested === "real";
-
-  if (!wantReal) {
-    return createMockCloudAgentClient();
-  }
-
-  // Explicit single-key override (tests / injection) — still not a shared env fallback.
-  if (options.real?.apiKey) {
-    return createRealCloudAgentClient({
-      ...options.real,
-      apiKey: options.real.apiKey,
-    });
-  }
-
-  if (!anyExclusiveCloudKeyPresent(env)) {
-    return createUnavailableRealClientStub("RELEASEDESK_CURSOR_API_KEY_CODING");
-  }
-
-  return createRealCloudAgentClient({
-    ...options.real,
-    resolveApiKeyForKind: (kind) =>
-      resolveCursorApiKeyForAgent(cursorAgentIdForKind(kind), env),
-  });
+  return createMockCloudAgentClient();
 }
 
 export function describeCloudClientMode(client: CloudAgentClient): string {

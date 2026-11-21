@@ -1,21 +1,18 @@
 import {
-  resolveAgentGrokApiKey,
+  APP_GROK_API_KEY_ENV,
+  resolveAppGrokApiKey,
   type GrokKeyedAgentRole,
 } from "../agent-credentials.js";
 import type { GrokBotDefinition } from "./types.js";
 
 /**
- * Grok Bot management client (SpaceXAI: Lead + CA + Security + Builder).
+ * Optional xAI Agents API client. Not used to run the SDLC.
  *
- * Auth: exclusive RELEASEDESK_GROK_API_KEY_* only — never XAI_API_KEY / GROK_API_KEY.
- * Live bot IDs recorded only from successful API responses (never invented).
- *
- * Host note: product Grok Bots are created in the Grok Bot app. Those teammates
- * have app agent ids in registry.json (`grokBotAppAgentId`, host `grok-bot-app`).
- * App ids are not xAI Agents API ids, app bots do not take API keys, and this
- * client never sends them. There is no public POST /v1/bots (404). The xAI
- * management endpoint is POST /v1/agents with only `name` + `instructions`.
- * Teams without Agents enabled get HTTP 403; that does not clear app teammates.
+ * The five Release Desk bots are Grok Bot app teammates. This client never
+ * sends their app agent ids. `npm run create:grok-bots` does not call it.
+ * If a non-app create is attempted, the only accepted credential is the
+ * app key `XAI_API_KEY`. Per-bot RELEASEDESK_GROK_API_KEY_* values are ignored.
+ * Live ids are recorded only from a successful response (never invented).
  */
 
 export const DEFAULT_GROK_BOT_API_BASE = "https://api.x.ai/v1";
@@ -30,7 +27,8 @@ export type GrokBotCreateStatus =
 export type GrokBotCreateResult = {
   definitionId: string;
   role: GrokKeyedAgentRole;
-  apiKeyEnv: string;
+  /** Always the app key name. The secret value is never copied here. */
+  keyEnv: typeof APP_GROK_API_KEY_ENV;
   status: GrokBotCreateStatus;
   liveBotId: string | null;
   httpStatus?: number;
@@ -99,6 +97,9 @@ function buildCreatePayload(def: GrokBotDefinition) {
     "",
     "## Channels",
     ...(channelLines.length ? channelLines : ["- (none)"]),
+    "",
+    "## Memory keys",
+    ...def.memoryKeys.map((m) => `- ${m.key}: ${m.stores}`),
     "",
     "## Hands off to",
     def.handsOffTo.length ? def.handsOffTo.map((t) => `- ${t}`).join("\n") : "- (none)",
@@ -184,15 +185,15 @@ export class GrokBotApiClient {
   }
 
   async createBot(def: GrokBotDefinition): Promise<GrokBotCreateResult> {
-    const apiKey = resolveAgentGrokApiKey(def.role, this.env);
+    const apiKey = resolveAppGrokApiKey(this.env);
     if (!apiKey) {
       return {
         definitionId: def.id,
         role: def.role,
-        apiKeyEnv: def.apiKeyEnv,
+        keyEnv: APP_GROK_API_KEY_ENV,
         status: "skipped_missing_key",
         liveBotId: null,
-        message: `Missing exclusive key ${def.apiKeyEnv} (shared XAI_API_KEY / GROK_API_KEY ignored)`,
+        message: `Missing app key ${APP_GROK_API_KEY_ENV} (per-bot RELEASEDESK_GROK_API_KEY_* ignored)`,
         dryRun: this.dryRun,
       };
     }
@@ -202,7 +203,7 @@ export class GrokBotApiClient {
       return {
         definitionId: def.id,
         role: def.role,
-        apiKeyEnv: def.apiKeyEnv,
+        keyEnv: APP_GROK_API_KEY_ENV,
         status: "dry_run",
         liveBotId: null,
         message: `Dry run — would POST ${joinUrl(this.baseUrl, this.createPath)} for ${def.id}`,
@@ -246,7 +247,7 @@ export class GrokBotApiClient {
         return {
           definitionId: def.id,
           role: def.role,
-          apiKeyEnv: def.apiKeyEnv,
+          keyEnv: APP_GROK_API_KEY_ENV,
           status: "error",
           liveBotId: null,
           httpStatus: res.status,
@@ -260,7 +261,7 @@ export class GrokBotApiClient {
         return {
           definitionId: def.id,
           role: def.role,
-          apiKeyEnv: def.apiKeyEnv,
+          keyEnv: APP_GROK_API_KEY_ENV,
           status: "error",
           liveBotId: null,
           httpStatus: res.status,
@@ -273,7 +274,7 @@ export class GrokBotApiClient {
       return {
         definitionId: def.id,
         role: def.role,
-        apiKeyEnv: def.apiKeyEnv,
+        keyEnv: APP_GROK_API_KEY_ENV,
         status: "created",
         liveBotId,
         httpStatus: res.status,
@@ -285,7 +286,7 @@ export class GrokBotApiClient {
       return {
         definitionId: def.id,
         role: def.role,
-        apiKeyEnv: def.apiKeyEnv,
+        keyEnv: APP_GROK_API_KEY_ENV,
         status: "error",
         liveBotId: null,
         message: `Grok Bot create failed: ${message}`,

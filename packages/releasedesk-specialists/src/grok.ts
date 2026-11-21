@@ -1,15 +1,16 @@
 import {
   createMockMeta,
   formatMockNote,
-  GROK_API_KEY_ENV,
   resolveAgentGrokApiKey,
   type GrokKeyedAgentRole,
   type MockMeta,
 } from "@releasedesk/core";
 
 /**
- * Optional xAI / Grok enrichment with STRICT per-agent API keys.
- * Shared XAI_API_KEY / GROK_API_KEY are never consulted.
+ * @deprecated Specialist runners no longer call Grok with per-bot keys.
+ * The shipped call is apps/releasedesk/src/lib/grok-release-intel.ts,
+ * which reads XAI_API_KEY and sends json_schema. This helper stays mock
+ * unless the caller passes an explicit apiKey (the intel twin does).
  */
 
 export type GrokCompleteResult = {
@@ -25,6 +26,12 @@ export type GrokClientOptions = {
   endpoint?: string;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
+  /** When set, the live call uses response_format json_schema. */
+  jsonSchema?: {
+    name: string;
+    strict?: boolean;
+    schema: Record<string, unknown>;
+  };
 };
 
 export function resolveGrokApiKeyForAgent(
@@ -50,11 +57,11 @@ export async function grokComplete(
 
   if (!apiKey) {
     const envHint = opts.agentRole
-      ? `${GROK_API_KEY_ENV[opts.agentRole]} missing for ${opts.agentRole}`
-      : "agentRole required — exclusive RELEASEDESK_GROK_API_KEY_* only";
+      ? `per-bot key for ${opts.agentRole} is retired`
+      : "no apiKey passed — per-bot RELEASEDESK_GROK_API_KEY_* are retired";
     const mock = createMockMeta(
       "grok-api",
-      `${envHint}; local heuristic (shared XAI_API_KEY / GROK_API_KEY never used)`,
+      `${envHint}; local heuristic (shipped path uses XAI_API_KEY)`,
     );
     return {
       text: formatMockNote(opts.fallback || "Grok enrichment skipped (no per-agent API key)"),
@@ -76,15 +83,27 @@ export async function grokComplete(
       },
       body: JSON.stringify({
         model,
+        temperature: 0.2,
+        ...(opts.jsonSchema
+          ? {
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: opts.jsonSchema.name,
+                  strict: opts.jsonSchema.strict ?? true,
+                  schema: opts.jsonSchema.schema,
+                },
+              },
+            }
+          : {}),
         messages: [
           {
             role: "system",
             content:
-              "You are a Release Desk specialist. Reply with concise, evidence-oriented prose only.",
+              "You are a Release Desk specialist. Reply with concise, evidence-oriented prose only. Do not approve human gates.",
           },
           { role: "user", content: prompt },
         ],
-        temperature: 0.2,
       }),
     });
 
