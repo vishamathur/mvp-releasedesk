@@ -11,6 +11,8 @@ coverage
 .secrets/*
 !.secrets/*.example
 apps/kyc/data/store.json
+apps/intake/config.php
+apps/intake/storage/*.json
 packages/releasedesk-core/data/
 .releasedesk/
 .turbo

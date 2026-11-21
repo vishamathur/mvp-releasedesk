@@ -4,6 +4,8 @@
 
 A new intake card arrives in `#er-intake` or `#new-customer`.
 
+The customer-facing PHP app at `apps/intake` (host `intake.vishalmathur.org`) is what produces that card. It sets `kind` to `intake-card`, `to` to `lead`, and `humanGate` to null. Lead still mints the thread and the stage record. The page does not approve a gate.
+
 ## Steps
 
 1. Read the entry criteria in `grok-bots/processes/pid-er.v1.json` or `pid-nc.v1.json`.

@@ -2,6 +2,8 @@
 
 Northwind Bank runs two processes. Both are owned by five Grok Bot teammates: Release Desk Lead, Change Analyst, Standards, Security, and Builder. Desk does not hand work between them. Bots message each other, post on a thread per request, and store PID state in memory.
 
+Customers start at `intake.vishalmathur.org` (`apps/intake`, a PHP page for the GoDaddy document root). That page writes an intake card to Release Desk Lead and does not approve a gate. Existing customers go to `#er-intake`. New customers go to `#new-customer`.
+
 Canonical specs:
 
 - [PID-ER v1.0.0](./PID-ER.v1.md) — `grok-bots/processes/pid-er.v1.json`

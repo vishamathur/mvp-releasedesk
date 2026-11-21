@@ -11,7 +11,7 @@ The workflow runs in the Grok Bot app. Desk does not hand stages from bot to bot
 | PID-ER v1.0.0 | `processes/pid-er.v1.json` | Existing customer enhancement | Fixed two-week sprint | `#er-intake` |
 | PID-NC v1.0.0 | `processes/pid-nc.v1.json` | New customer product request | Kickoff first | `#new-customer` |
 
-Human gates (finance, security/compliance, release, and the PID-NC proposal) are answered by a person in the request thread. Overview and diagrams: `docs/sdlc/overview.md`.
+Customers submit at `intake.vishalmathur.org` (`apps/intake`). That PHP app hands an intake card to Lead. Human gates (finance, security/compliance, release, and the PID-NC proposal) are answered by a person in the request thread. Overview and diagrams: `docs/sdlc/overview.md`.
 
 Handoff message and stage-transition record: `protocols/handoff.v1.md`.
 
