@@ -48,5 +48,25 @@
   "teammates": ["change-analyst", "standards", "security", "builder"],
   "channels": [{ "name": "#release-desk", "purpose": "Status for humans" }],
   "handsOffTo": ["change-analyst", "standards", "security", "builder"],
+  "children": [
+    {
+      "id": "lead.intake-routing",
+      "responsibility": "Route the run onto the ER sprint track or the new-customer kickoff track.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "lead.kickoff",
+      "responsibility": "Discover scope and write a proposal that still needs human approval.",
+      "parallelGroup": 1,
+      "required": true
+    },
+    {
+      "id": "lead.release-aggregation",
+      "responsibility": "Aggregate specialist results into readiness without approving gates.",
+      "parallelGroup": 2,
+      "required": true
+    }
+  ],
   "markdownPackDir": "grok-bots/bots/lead"
 }

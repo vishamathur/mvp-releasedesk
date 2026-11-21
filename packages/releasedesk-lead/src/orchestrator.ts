@@ -10,10 +10,13 @@ import {
   nowIso,
   parseAiFrameworkWaiverRecord,
   SECURITY_TASK_KIND,
+  findChildResult,
+  mergeSubAgentAggregates,
   type AiFrameworkWaiverRecord,
   type LeadAgentOutput,
   type RunContext,
   type RunContextStore,
+  type SubAgentAggregate,
   type TaskRecord,
 } from "@releasedesk/core";
 import {
@@ -74,6 +77,13 @@ import {
   type ResolvePrClientOptions,
   type TrackedPullRequest,
 } from "./pr/index.js";
+import {
+  delegateLeadChildren,
+  readLeadTrack,
+  type LeadSubAgentContext,
+  type LeadSubAgentHooks,
+  type LeadTrack,
+} from "./sub-agents.js";
 
 type LeadDelegation = {
   taskId: string;
@@ -115,6 +125,8 @@ export type ReleaseCheckReport = {
   checkpoints: CheckpointRecord;
   pullRequests: PullRequestRecord;
   dmSession: DmSession;
+  /** Child sub-agent aggregate for Lead. Specialists stay on `delegations`. */
+  subAgents: SubAgentAggregate;
 };
 
 export type LeadOrchestratorOptions = {
@@ -131,6 +143,8 @@ export type LeadOrchestratorOptions = {
   prClient?: ResolvePrClientOptions;
   /** When false, skip opening/tracking PRs (default true). */
   enablePrWorkflow?: boolean;
+  /** Test seam for Lead child sub-agents. */
+  subAgents?: LeadSubAgentHooks;
 };
 
 /**
@@ -155,6 +169,7 @@ export class LeadOrchestrator {
   private readonly enableRemediation: boolean;
   private readonly enablePrWorkflow: boolean;
   private readonly prClient: PrWorkflowClient;
+  private readonly subAgentHooks: LeadSubAgentHooks | undefined;
   private dmSession: DmSession;
 
   constructor(options: LeadOrchestratorOptions) {
@@ -168,6 +183,7 @@ export class LeadOrchestrator {
     this.enableRemediation = options.enableRemediation ?? true;
     this.enablePrWorkflow = options.enablePrWorkflow ?? true;
     this.prClient = resolvePrClient(options.prClient);
+    this.subAgentHooks = options.subAgents;
     this.dmSession = createDmSession();
   }
 
@@ -282,6 +298,53 @@ export class LeadOrchestrator {
       });
     }
 
+    const leadContext: LeadSubAgentContext = {
+      goal: input.goal,
+      repository: input.target.repository,
+      baseRef: input.target.baseRef ?? "main",
+      headRef: input.target.headRef ?? "HEAD",
+      metadata: input.metadata ?? {},
+    };
+    const frontAgents = await delegateLeadChildren({
+      phase: "front",
+      context: leadContext,
+      ...(this.subAgentHooks ? { hooks: this.subAgentHooks } : {}),
+    });
+    const intake = findChildResult(frontAgents, "lead.intake-routing");
+    const kickoffChild = findChildResult(frontAgents, "lead.kickoff");
+    const track: LeadTrack =
+      intake?.payload.track === "new_customer_kickoff"
+        ? "new_customer_kickoff"
+        : readLeadTrack(input.metadata);
+    const kickoffPayload =
+      kickoffChild?.payload.applied === true ? kickoffChild.payload : undefined;
+    const sprint = {
+      track,
+      ...(kickoffPayload ? { kickoff: kickoffPayload } : {}),
+    };
+
+    const afterFront = await this.requireRun(run.runId);
+    await this.store.update(run.runId, {
+      metadata: {
+        ...afterFront.metadata,
+        track,
+        ...(kickoffChild ? { kickoff: kickoffChild.payload } : {}),
+      },
+    });
+    await this.store.appendAudit({
+      runId: run.runId,
+      action: "agent.invoked",
+      message: `Lead delegated child sub-agents (${frontAgents.status})`,
+      actor: { kind: "agent", agentRole: "lead" },
+      details: {
+        track,
+        children: frontAgents.children.map((child) => ({
+          id: child.id,
+          status: child.status,
+        })),
+      },
+    });
+
     // Wave 1: mandatory analysis specialists in parallel (Security always included).
     const delegations: LeadDelegation[] = [];
     for (const role of ANALYSIS_ROLES) {
@@ -291,7 +354,7 @@ export class LeadOrchestrator {
         status: "ready",
         retry: { attempt: 0, maxAttempts: this.defaultMaxAttempts },
         input: {
-          ...this.buildSpecialistInput(role, input, undefined),
+          ...this.buildSpecialistInput(role, input, undefined, sprint),
           ...(role === MANDATORY_SECURITY_ROLE
             ? { taskKind: SECURITY_TASK_KIND, mandatory: true }
             : {}),
@@ -405,7 +468,7 @@ export class LeadOrchestrator {
           dependsOn: [builderTask.id],
           retry: { attempt: 0, maxAttempts: this.defaultMaxAttempts },
           input: {
-            ...this.buildSpecialistInput(role, input, afterBuilder),
+            ...this.buildSpecialistInput(role, input, afterBuilder, sprint),
             reverify: true,
             remediationCycle: cycle,
             priorCheckpointId: cloudCheckpoint.id,
@@ -483,6 +546,30 @@ export class LeadOrchestrator {
       ...prMeta,
     });
 
+    const releaseContext: LeadSubAgentContext = {
+      ...leadContext,
+      release: {
+        delegationCount: delegations.length,
+        securityScheduled: delegations.some((item) => item.agentRole === MANDATORY_SECURITY_ROLE),
+        readiness: assessment.readiness,
+        blockingIssueCount: assessment.blockingIssues.length,
+      },
+    };
+    const backAgents = await delegateLeadChildren({
+      phase: "aggregation",
+      context: releaseContext,
+      ...(this.subAgentHooks ? { hooks: this.subAgentHooks } : {}),
+    });
+    const subAgents = mergeSubAgentAggregates("lead", [frontAgents, backAgents]);
+    const beforeLead = await this.requireRun(run.runId);
+    await this.store.update(run.runId, {
+      metadata: {
+        ...beforeLead.metadata,
+        track,
+        subAgents,
+      },
+    });
+
     const leadTaskId =
       finalRun.tasks.find((t) => t.agentRole === "lead")?.id ??
       (
@@ -515,6 +602,7 @@ export class LeadOrchestrator {
       checkpoints,
       pullRequests,
       autoMerge: false,
+      subAgents,
     });
 
     const completed = await this.store.complete(
@@ -539,6 +627,7 @@ export class LeadOrchestrator {
       checkpoints,
       pullRequests,
       dmSession: this.dmSession,
+      subAgents,
     };
   }
 
@@ -1360,13 +1449,21 @@ export class LeadOrchestrator {
     role: SpecialistRole,
     input: StartReleaseCheckInput,
     prior: RunContext | undefined,
+    sprint?: { track: LeadTrack; kickoff?: Record<string, unknown> },
   ): Record<string, unknown> {
     const baseRef = input.target.baseRef ?? "main";
     const headRef = input.target.headRef ?? "HEAD";
     const repository = input.target.repository;
+    const kickoffFields =
+      sprint?.track === "new_customer_kickoff"
+        ? {
+            track: sprint.track,
+            ...(sprint.kickoff ? { kickoffProposal: sprint.kickoff } : {}),
+          }
+        : {};
 
     if (role === "change_analyst") {
-      return { repository, baseRef, headRef, focusPaths: [] };
+      return { repository, baseRef, headRef, focusPaths: [], ...kickoffFields };
     }
     if (role === "standards") {
       const changeTask = prior?.tasks.find(
@@ -1378,12 +1475,13 @@ export class LeadOrchestrator {
         ...(changeTask?.output?.releaseNotesDraft
           ? { changeSummary: String(changeTask.output.releaseNotesDraft) }
           : {}),
+        ...kickoffFields,
       };
     }
     if (role === "security") {
-      return { repository, components: [], advisoryHints: [] };
+      return { repository, components: [], advisoryHints: [], ...kickoffFields };
     }
-    return { repository, remediationGoals: ["Remediate findings"] };
+    return { repository, remediationGoals: ["Remediate findings"], ...kickoffFields };
   }
 
   private collectRelatedFindings(tasks: readonly TaskRecord[]): Array<{

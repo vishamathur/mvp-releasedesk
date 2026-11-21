@@ -65,6 +65,10 @@ function buildCreatePayload(def: GrokBotDefinition) {
     (c) => `- ${c.name} (${c.access}): ${c.purpose}`,
   );
   const channelLines = def.channels.map((c) => `- ${c.name}: ${c.purpose}`);
+  const childLines = (def.children ?? []).map(
+    (child) =>
+      `- ${child.id} (group ${child.parallelGroup}, required ${child.required}): ${child.responsibility}`,
+  );
 
   const instructions = [
     `# ${def.displayName} — ${def.label}`,
@@ -102,6 +106,12 @@ function buildCreatePayload(def: GrokBotDefinition) {
     "",
     "## Hands off to",
     def.handsOffTo.length ? def.handsOffTo.map((t) => `- ${t}`).join("\n") : "- (none)",
+    "",
+    "## Child sub-agents",
+    ...(childLines.length
+      ? childLines
+      : ["- (none — parent still owns the public result)"]),
+    "Children are not separate roster bots. The parent delegates and aggregates.",
     "",
     `Mandatory on every change: ${def.mandatoryOnEveryChange ? "yes" : "no"}`,
     "Preserve iteration gate: red_team|security — never auto-merge.",

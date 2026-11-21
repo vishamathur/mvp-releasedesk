@@ -85,6 +85,35 @@ export {
 } from "./gates.js";
 
 export {
+  PARENT_BOT_IDS,
+  ParentBotIdSchema,
+  SubAgentChildStatusSchema,
+  SubAgentChildResultSchema,
+  SubAgentAggregateStatusSchema,
+  SubAgentAggregateSchema,
+  DEFAULT_SUB_AGENT_TIMEOUT_MS,
+  SUB_AGENT_CATALOG,
+  listSubAgentCatalog,
+  catalogEntry,
+  SubAgentTimeoutError,
+  bindChild,
+  rollupSubAgentResults,
+  delegateToChildren,
+  mergeSubAgentAggregates,
+  findChildResult,
+  type ParentBotId,
+  type SubAgentChildStatus,
+  type SubAgentChildResult,
+  type SubAgentAggregateStatus,
+  type SubAgentAggregate,
+  type SubAgentCatalogEntry,
+  type SubAgentChildOutcome,
+  type SubAgentChildRun,
+  type SubAgentChildSpec,
+  type SubAgentHooks,
+} from "./sub-agents/index.js";
+
+export {
   OWASP_LLM_TOP_10,
   ATLAS_TECHNIQUES,
   OwaspLlmTop10IdSchema,

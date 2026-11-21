@@ -29,6 +29,17 @@ export const GrokBotChannelDefSchema = z.object({
   purpose: z.string().min(1),
 });
 
+/**
+ * Child slice of a parent bot. Not a roster entry and not an API agent.
+ * The parent delegates to these and aggregates their results.
+ */
+export const GrokBotChildDefSchema = z.object({
+  id: z.string().min(1),
+  responsibility: z.string().min(1),
+  parallelGroup: z.number().int().nonnegative(),
+  required: z.boolean(),
+});
+
 export const GrokBotDefinitionSchema = z.object({
   id: z.string().min(1),
   role: AgentRoleSchema,
@@ -49,6 +60,8 @@ export const GrokBotDefinitionSchema = z.object({
   channels: z.array(GrokBotChannelDefSchema).default([]),
   handsOffTo: z.array(z.string()).default([]),
   mandatoryOnEveryChange: z.boolean().optional(),
+  /** Narrow slices this bot delegates to. Absent on older definitions. */
+  children: z.array(GrokBotChildDefSchema).optional(),
   markdownPackDir: z.string().min(1),
 });
 
@@ -153,6 +166,7 @@ export type GrokBotSkillDef = z.infer<typeof GrokBotSkillDefSchema>;
 export type GrokBotRoutineDef = z.infer<typeof GrokBotRoutineDefSchema>;
 export type GrokBotConnectorDef = z.infer<typeof GrokBotConnectorDefSchema>;
 export type GrokBotChannelDef = z.infer<typeof GrokBotChannelDefSchema>;
+export type GrokBotChildDef = z.infer<typeof GrokBotChildDefSchema>;
 export type GrokBotDefinition = z.infer<typeof GrokBotDefinitionSchema>;
 export type GrokBotCatalog = z.infer<typeof GrokBotCatalogSchema>;
 export type GrokBotProvisionHost = z.infer<typeof GrokBotProvisionHostSchema>;

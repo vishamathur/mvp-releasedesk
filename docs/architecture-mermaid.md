@@ -4,6 +4,8 @@ Last updated: 2026-11-17 (Asia/Calcutta)
 
 **Full SDLC control plane** — do not drop stages for slide brevity. Multi-customer ER + finance + priority fairness feed Lead; Grok Bots + Cursor Coding/Testing/Review; ATLAS/OWASP; Grok API intel; token efficiency; NHI exclusive keys; human gates; readiness closes the circle back to Lead.
 
+Child slices under each of the five bots are documented in [`sub-agents.md`](./sub-agents.md). They are not extra roster bots.
+
 **Slide 2** uses a 4-wire room map in [`spacexai-demo-slides.md`](./spacexai-demo-slides.md). **This file keeps the full workflow.** Live surface: `/control`.
 
 ```mermaid

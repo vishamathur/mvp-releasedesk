@@ -1,11 +1,17 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import {
+  bindChild,
   createMockMeta,
+  delegateToChildren,
+  findChildResult,
   formatMockNote,
   nowIso,
   SecurityAgentOutputSchema,
   type CreateEvidenceInput,
   type MockMeta,
   type SecurityFinding,
+  type SubAgentAggregate,
 } from "@releasedesk/core";
 import type { AgentRunner, AgentRunInvocation, AgentRunResult } from "@releasedesk/lead";
 import {
@@ -22,6 +28,7 @@ import { discoverNpmComponents } from "./components.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
 import { defaultWorkspaceRoot, sampleAdvisoriesPath } from "./paths.js";
+import { failedSubAgentResult, subAgentHooks } from "./sub-agent-hooks.js";
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -75,17 +82,89 @@ function detectAiWrittenFromRun(inv: AgentRunInvocation): boolean {
   return asBoolean(inv.task.input?.aiWrittenCodeDetected) === true;
 }
 
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/,
+  /api[_-]?key\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}['"]/i,
+  /AKIA[0-9A-Z]{16}/,
+];
+
+const PROMPT_BYPASS_PATTERNS: readonly RegExp[] = [
+  /ignore (all|any|previous) (instructions|security)/i,
+  /skip (the )?(security|red[_ -]?team) (review|gate|check)/i,
+  /waive (the )?security/i,
+  /auto-?approve (merge|release|security)/i,
+  /disable (the )?(iteration|security) gate/i,
+];
+
+function patternHit(text: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+async function secretScanText(workspaceRoot: string, inputText: string): Promise<string> {
+  const probes = [
+    "apps/kyc/src/lib/domain/risk.ts",
+    "apps/kyc/README.md",
+    "README.md",
+  ];
+  let blob = inputText;
+  for (const rel of probes) {
+    try {
+      const text = await readFile(path.join(workspaceRoot, rel), "utf8");
+      blob += `\n${text.slice(0, 20_000)}`;
+    } catch {
+      // optional probe
+    }
+  }
+  return blob;
+}
+
+function asFindingArray(value: unknown): SecurityFinding[] {
+  if (!Array.isArray(value)) return [];
+  const out: SecurityFinding[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const finding = item as SecurityFinding;
+    if (typeof finding.id !== "string" || typeof finding.title !== "string") continue;
+    if (typeof finding.summary !== "string" || typeof finding.severity !== "string") continue;
+    out.push(finding);
+  }
+  return out;
+}
+
+function failClosedFinding(aggregate: SubAgentAggregate): SecurityFinding {
+  const broken = [...aggregate.failedIds, ...aggregate.timedOutIds, ...aggregate.skippedIds];
+  return {
+    id: "security-sub-agent-fail-closed",
+    severity: "high",
+    title: "Security sub-agent failed closed",
+    summary: `A required security slice did not finish (${broken.join(", ") || "unknown"}). The security check fails closed and does not approve the iteration gate.`,
+    releaseBlocking: true,
+    hardFail: true,
+    frameworkMappings: [],
+  };
+}
+
+type SecurityContext = {
+  inv: AgentRunInvocation;
+  options: SpecialistRunnerOptions;
+  workspaceRoot: string;
+  repository: string;
+  components: ComponentRef[];
+  advisoryHints: string[];
+  aiComponentHints: string[];
+  focusPaths: string[];
+  aiWrittenCodeDetected: boolean;
+};
+
 export function createSecurityRunner(options: SpecialistRunnerOptions = {}): AgentRunner {
+  const hooks = subAgentHooks<SecurityContext>(options.subAgents);
   return async (inv: AgentRunInvocation): Promise<AgentRunResult> => {
     const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot();
     const input = inv.task.input ?? {};
-    const repository =
-      asString(input.repository) ?? inv.run.target.repository ?? "unknown/repo";
+    const repository = asString(input.repository) ?? inv.run.target.repository ?? "unknown/repo";
     const advisoryHints = asStringArray(input.advisoryHints);
     const aiComponentHints = asStringArray(input.aiComponentHints);
-
-    const mocksUsed: MockMeta[] = [];
-    const evidence: CreateEvidenceInput[] = [];
+    const focusPaths = asStringArray(input.focusPaths);
 
     let components = parseComponents(input.components);
     if (components.length === 0) {
@@ -98,60 +177,166 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       }
     }
 
-    const advisoriesPath = options.advisoriesPath ?? sampleAdvisoriesPath();
-    const corpus = await loadAdvisoryCorpus(advisoriesPath);
+    const context: SecurityContext = {
+      inv,
+      options,
+      workspaceRoot,
+      repository,
+      components,
+      advisoryHints,
+      aiComponentHints,
+      focusPaths,
+      aiWrittenCodeDetected: detectAiWrittenFromRun(inv) || aiComponentHints.length > 0,
+    };
 
-    // Live NVD/OSV not wired — fixture corpus is intentional MOCK for external advisory APIs.
-    const advisoryMock = createMockMeta(
-      "advisory-api",
-      "NVD/OSV credentials unavailable; using in-repo sample advisory fixtures",
-    );
-    mocksUsed.push(advisoryMock);
-
-    evidence.push({
-      kind: "advisory",
-      title: "Advisory corpus loaded",
-      summary: formatMockNote(
-        `Loaded ${corpus.advisories.length} sample advisory record(s) from fixtures`,
-      ),
-      source: "security",
-      uri: advisoriesPath,
-      mock: advisoryMock,
-      data: { source: corpus.source, count: corpus.advisories.length },
+    const aggregate = await delegateToChildren({
+      parentId: "security",
+      context,
+      children: [
+        bindChild(
+          "security",
+          "security.secret-scan",
+          async (ctx) => {
+            const text = await secretScanText(ctx.workspaceRoot, JSON.stringify(ctx.inv.task.input ?? {}));
+            const hit = patternHit(text, SECRET_PATTERNS);
+            const findings: SecurityFinding[] = hit
+              ? [
+                  {
+                    id: "secret-scan-hit",
+                    severity: "critical",
+                    title: "Possible secret in change input",
+                    summary:
+                      "A private-key or hardcoded credential pattern matched. The matched value was not recorded.",
+                    releaseBlocking: true,
+                    hardFail: true,
+                    frameworkMappings: [],
+                  },
+                ]
+              : [];
+            return {
+              summary: hit
+                ? "Secret scan found a credential-like pattern"
+                : "Secret scan found no credential-like pattern",
+              payload: { findings, hits: findings.length },
+            };
+          },
+          hooks,
+        ),
+        bindChild(
+          "security",
+          "security.dependency-cve",
+          async (ctx) => {
+            const advisoriesPath = ctx.options.advisoriesPath ?? sampleAdvisoriesPath();
+            const corpus = await loadAdvisoryCorpus(advisoriesPath);
+            const matched = correlateAdvisories(corpus.advisories, ctx.components, ctx.advisoryHints);
+            const findings: SecurityFinding[] = matched.map((m) =>
+              enforceFrameworkHardFail({
+                id: m.id,
+                severity: m.severity,
+                title: m.title,
+                summary: `${m.summary} Correlated to component ${m.matchedComponent.name}${
+                  m.matchedComponent.version ? `@${m.matchedComponent.version}` : ""
+                }.`,
+                component: m.matchedComponent.name,
+                advisoryId: m.advisoryId,
+                releaseBlocking: m.releaseBlocking,
+                hardFail: m.releaseBlocking,
+                frameworkMappings: [],
+              }),
+            );
+            return {
+              summary: `Correlated ${findings.length} advisory finding(s) from ${corpus.advisories.length} fixture record(s)`,
+              payload: {
+                findings,
+                corpusCount: corpus.advisories.length,
+                corpusSource: corpus.source,
+                advisoriesPath,
+              },
+            };
+          },
+          hooks,
+        ),
+        bindChild(
+          "security",
+          "security.red-team-prompts",
+          async (ctx) => {
+            const frameworkFindings = reviewAiSurfaceAgainstFrameworks({
+              components: ctx.components,
+              aiComponentHints: ctx.aiComponentHints,
+              focusPaths: ctx.focusPaths,
+              aiWrittenCodeDetected: ctx.aiWrittenCodeDetected,
+            }).map(enforceFrameworkHardFail);
+            const promptText = JSON.stringify(ctx.inv.task.input ?? {});
+            const promptFindings: SecurityFinding[] = patternHit(promptText, PROMPT_BYPASS_PATTERNS)
+              ? [
+                  enforceFrameworkHardFail({
+                    id: "red-team-prompt-bypass",
+                    severity: "high",
+                    title: "Prompt asks to bypass security or the iteration gate",
+                    summary:
+                      "Change input asked to skip, waive, or auto-approve a security or iteration gate. The request was refused.",
+                    releaseBlocking: true,
+                    hardFail: true,
+                    frameworkMappings: [],
+                  }),
+                ]
+              : [];
+            return {
+              summary:
+                frameworkFindings.length + promptFindings.length === 0
+                  ? "Red-team prompt check found no bypass"
+                  : `Red-team prompt check recorded ${frameworkFindings.length + promptFindings.length} finding(s)`,
+              payload: { frameworkFindings, promptFindings },
+            };
+          },
+          hooks,
+        ),
+      ],
     });
 
-    const matched = correlateAdvisories(corpus.advisories, components, advisoryHints);
+    const mocksUsed: MockMeta[] = [];
+    const evidence: CreateEvidenceInput[] = [];
 
-    const advisoryFindings: SecurityFinding[] = matched.map((m) =>
-      enforceFrameworkHardFail({
-        id: m.id,
-        severity: m.severity,
-        title: m.title,
-        summary: `${m.summary} Correlated to component ${m.matchedComponent.name}${
-          m.matchedComponent.version ? `@${m.matchedComponent.version}` : ""
-        }.`,
-        component: m.matchedComponent.name,
-        advisoryId: m.advisoryId,
-        releaseBlocking: m.releaseBlocking,
-        hardFail: m.releaseBlocking,
-        frameworkMappings: [],
-      }),
-    );
+    const cve = findChildResult(aggregate, "security.dependency-cve");
+    const redTeam = findChildResult(aggregate, "security.red-team-prompts");
+    const secrets = findChildResult(aggregate, "security.secret-scan");
 
-    // MITRE ATLAS + OWASP LLM Top 10 hard guardrails for AI surfaces.
-    const aiFindings = reviewAiSurfaceAgainstFrameworks({
-      components,
-      aiComponentHints,
-      focusPaths: asStringArray(input.focusPaths),
-      aiWrittenCodeDetected: detectAiWrittenFromRun(inv) || aiComponentHints.length > 0,
-    }).map(enforceFrameworkHardFail);
+    const advisoryFindings = asFindingArray(cve?.payload.findings);
+    const aiFindings = asFindingArray(redTeam?.payload.frameworkFindings);
+    const promptFindings = asFindingArray(redTeam?.payload.promptFindings);
+    const secretFindings = asFindingArray(secrets?.payload.findings);
+
+    const corpusCount = typeof cve?.payload.corpusCount === "number" ? cve.payload.corpusCount : 0;
+    const corpusSource = typeof cve?.payload.corpusSource === "string" ? cve.payload.corpusSource : "fixture";
+    const advisoriesPath =
+      typeof cve?.payload.advisoriesPath === "string"
+        ? cve.payload.advisoriesPath
+        : (options.advisoriesPath ?? sampleAdvisoriesPath());
+
+    if (cve?.status === "completed") {
+      const advisoryMock = createMockMeta(
+        "advisory-api",
+        "NVD/OSV credentials unavailable; using in-repo sample advisory fixtures",
+      );
+      mocksUsed.push(advisoryMock);
+      evidence.push({
+        kind: "advisory",
+        title: "Advisory corpus loaded",
+        summary: formatMockNote(
+          `Loaded ${corpusCount} sample advisory record(s) from fixtures`,
+        ),
+        source: "security",
+        uri: advisoriesPath,
+        mock: advisoryMock,
+        data: { source: corpusSource, count: corpusCount },
+      });
+    }
 
     const frameworkMock = createMockMeta(
       "ai-security-frameworks",
       "MITRE ATLAS + OWASP LLM Top 10 applied as hard Security guardrails",
     );
     mocksUsed.push(frameworkMock);
-
     evidence.push({
       kind: "policy_ref",
       title: "MITRE ATLAS + OWASP LLM Top 10 review",
@@ -169,8 +354,14 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       },
     });
 
-    const findings = [...advisoryFindings, ...aiFindings].map(enforceFrameworkHardFail);
+    let findings = [...advisoryFindings, ...aiFindings, ...secretFindings, ...promptFindings].map(
+      enforceFrameworkHardFail,
+    );
+    if (aggregate.securityGateHeld) {
+      findings = [...findings, failClosedFinding(aggregate)];
+    }
 
+    const advisoryMock = mocksUsed.find((mock) => mock.mockLabel === "advisory-api");
     for (const f of findings) {
       evidence.push({
         kind: f.frameworkMappings.length ? "finding" : "advisory",
@@ -192,7 +383,8 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
 
     const releaseBlockingCount = findings.filter((f) => f.releaseBlocking).length;
     const frameworkHardFailCount = findings.filter((f) => f.frameworkMappings.length > 0).length;
-    const securityCheckFailed = frameworkHardFailCount > 0 || releaseBlockingCount > 0;
+    const securityCheckFailed =
+      aggregate.securityGateHeld || frameworkHardFailCount > 0 || releaseBlockingCount > 0;
     const riskLevel = riskLevelFromFindings(findings);
 
     if (!options.skipGrok) {
@@ -218,8 +410,11 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       }
     }
 
-    const summary =
-      findings.length === 0
+    const summary = aggregate.securityGateHeld
+      ? formatMockNote(
+          `Security check FAILED closed — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, risk ${riskLevel}`,
+        )
+      : findings.length === 0
         ? formatMockNote("Security check complete — no correlated advisories (fixture corpus)")
         : formatMockNote(
             `Security check ${securityCheckFailed ? "FAILED" : "complete"} — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s), risk ${riskLevel}`,
@@ -229,7 +424,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       runId: inv.runId,
       taskId: inv.taskId,
       agentRole: "security",
-      status: "completed",
+      status: aggregate.securityGateHeld ? "failed" : "completed",
       completedAt: nowIso(),
       summary,
       evidence: [],
@@ -242,20 +437,34 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       securityCheckFailed,
     });
 
+    const resultPayload = {
+      agentRole: payload.agentRole,
+      findings: payload.findings,
+      releaseBlockingCount: payload.releaseBlockingCount,
+      riskLevel: payload.riskLevel,
+      frameworksApplied: payload.frameworksApplied,
+      frameworkHardFailCount: payload.frameworkHardFailCount,
+      securityCheckFailed: payload.securityCheckFailed,
+      evidence: payload.evidence,
+      mocksUsed: payload.mocksUsed,
+      subAgents: aggregate,
+    };
+
+    if (aggregate.securityGateHeld) {
+      const failed = failedSubAgentResult("security", aggregate, resultPayload);
+      return {
+        ...failed,
+        summary: payload.summary,
+        payload: resultPayload,
+        evidence,
+        mocksUsed,
+      };
+    }
+
     return {
       status: "completed",
       summary: payload.summary,
-      payload: {
-        agentRole: payload.agentRole,
-        findings: payload.findings,
-        releaseBlockingCount: payload.releaseBlockingCount,
-        riskLevel: payload.riskLevel,
-        frameworksApplied: payload.frameworksApplied,
-        frameworkHardFailCount: payload.frameworkHardFailCount,
-        securityCheckFailed: payload.securityCheckFailed,
-        evidence: payload.evidence,
-        mocksUsed: payload.mocksUsed,
-      },
+      payload: resultPayload,
       evidence,
       mocksUsed,
     };

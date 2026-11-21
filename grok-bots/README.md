@@ -84,3 +84,9 @@ If the team/key lacks Agents entitlement the script records an xAI error on **no
 ## Desk
 
 `npm run desk` → Grok Bots panel opens persona / skills / routines / connectors from these definitions and shows each bot as created in the Grok Bot app. Iteration gate (`red_team` \| `security`) from PR #14 is preserved.
+
+## Child sub-agents
+
+Each of the five bots delegates to child slices and aggregates their results. Children are not roster bots and are not registry rows. The map, parallel groups, and failure rollup are in [`docs/sub-agents.md`](../docs/sub-agents.md).
+
+Security's children (secret scan, dependency/CVE, red-team prompt checks) are required. A failed or timed-out security child fails the security check closed. That does not approve the iteration gate and does not replace a human `red_team` or `security` sign-off.

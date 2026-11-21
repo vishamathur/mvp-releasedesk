@@ -1,7 +1,21 @@
+import type { SubAgentChildRun, SubAgentChildResult } from "@releasedesk/core";
 import type { GrokClientOptions } from "./grok.js";
 import type { ComponentRef } from "./advisories.js";
 import type { CloudAgentClient } from "./cloud/types.js";
 import type { ResolveCloudAgentClientOptions } from "./cloud/resolve.js";
+
+/** Test seam for child delegation. Production leaves both unset. */
+export type SubAgentRunnerHooks = {
+  timeoutMs?: number;
+  timeoutMsById?: Record<string, number>;
+  runOverrides?: Record<
+    string,
+    (
+      context: unknown,
+      prior: readonly SubAgentChildResult[],
+    ) => ReturnType<SubAgentChildRun<unknown>>
+  >;
+};
 
 /** Shared options for specialist runners (injectable for tests). */
 export type SpecialistRunnerOptions = {
@@ -38,4 +52,9 @@ export type SpecialistRunnerOptions = {
    * Default false — M5 dispatches via MOCK or real client.
    */
   skipCloudDispatch?: boolean;
+  /**
+   * Replace or shorten child sub-agent runs. Used by delegation tests.
+   * Does not add roster bots and does not change the public result fields.
+   */
+  subAgents?: SubAgentRunnerHooks;
 };

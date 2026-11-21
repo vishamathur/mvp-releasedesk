@@ -35,5 +35,25 @@
   "channels": [{ "name": "#release-desk", "purpose": "Blocker posts" }],
   "handsOffTo": ["lead", "builder"],
   "mandatoryOnEveryChange": true,
+  "children": [
+    {
+      "id": "security.secret-scan",
+      "responsibility": "Scan change input for private keys and hardcoded credentials.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "security.dependency-cve",
+      "responsibility": "Correlate dependencies to advisory and CVE fixtures.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "security.red-team-prompts",
+      "responsibility": "Review AI surfaces and prompt text for red-team bypasses.",
+      "parallelGroup": 0,
+      "required": true
+    }
+  ],
   "markdownPackDir": "grok-bots/bots/security"
 }

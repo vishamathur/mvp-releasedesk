@@ -1,10 +1,13 @@
 import {
+  bindChild,
   createMockMeta,
+  delegateToChildren,
   formatMockNote,
   nowIso,
   BuilderAgentOutputSchema,
   type CreateEvidenceInput,
   type MockMeta,
+  type SubAgentAggregate,
 } from "@releasedesk/core";
 import type { AgentRunner, AgentRunInvocation, AgentRunResult } from "@releasedesk/lead";
 import type { CloudAgentHandoff } from "./builder-types.js";
@@ -15,6 +18,7 @@ import {
 } from "./cloud/index.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
+import { failedSubAgentResult, subAgentHooks } from "./sub-agent-hooks.js";
 
 export type { CloudAgentHandoff } from "./builder-types.js";
 
@@ -24,6 +28,27 @@ function asString(value: unknown): string | undefined {
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+const LAYER_PATTERNS: Record<string, RegExp> = {
+  "builder.backend-api": /api|server|backend|route|grok-release-intel|package/i,
+  "builder.frontend-ui": /ui|frontend|component|page|css|kyc/i,
+  "builder.tests-ci": /test|ci|vitest|workflow|infra|pipeline/i,
+};
+
+function layerLines(goals: string[], findingSummaries: string[], pattern: RegExp): string[] {
+  return [...goals, ...findingSummaries].filter((line) => pattern.test(line));
+}
+
+function layerSection(aggregate: SubAgentAggregate): string {
+  const lines = aggregate.children.map((child) => {
+    const owned = Array.isArray(child.payload.owned)
+      ? child.payload.owned.filter((item): item is string => typeof item === "string")
+      : [];
+    const detail = owned.length > 0 ? owned.join("; ") : "no goal matched this layer";
+    return `- ${child.id}: ${detail}`;
+  });
+  return ["", "## Layer sub-agents", ...lines].join("\n");
 }
 
 function slugify(text: string): string {
@@ -151,6 +176,9 @@ function planHandoffs(args: {
 }
 
 export function createBuilderRunner(options: SpecialistRunnerOptions = {}): AgentRunner {
+  const hooks = subAgentHooks<{ remediationGoals: string[]; findingSummaries: string[] }>(
+    options.subAgents,
+  );
   return async (inv: AgentRunInvocation): Promise<AgentRunResult> => {
     const input = inv.task.input ?? {};
     const repository =
@@ -191,6 +219,38 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       `5. Return branch name, test outcome, and PR URL to the Lead via Builder metadata.`,
     ].join("\n");
 
+    const findingSummaries = related.map((item) => item.summary);
+    const layerAggregate = await delegateToChildren({
+      parentId: "builder",
+      context: { remediationGoals, findingSummaries },
+      children: (Object.keys(LAYER_PATTERNS) as Array<keyof typeof LAYER_PATTERNS>).map((id) =>
+        bindChild(
+          "builder",
+          id,
+          async (ctx) => {
+            const pattern = LAYER_PATTERNS[id] ?? /$^/;
+            const owned = layerLines(ctx.remediationGoals, ctx.findingSummaries, pattern);
+            return {
+              summary:
+                owned.length > 0
+                  ? `${id} owns ${owned.length} goal line(s)`
+                  : `${id} owns no goal line`,
+              payload: { owned },
+            };
+          },
+          hooks,
+        ),
+      ),
+    });
+
+    if (layerAggregate.status === "failed") {
+      return failedSubAgentResult("builder", layerAggregate, {
+        implementationInstructions,
+      });
+    }
+
+    const instructionsWithLayers = `${implementationInstructions}${layerSection(layerAggregate)}`;
+
     const allEvidenceIds = related.flatMap((r) => r.evidenceIds);
 
     let handoffs = planHandoffs({
@@ -207,7 +267,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       title: "Implementation instructions",
       summary: `Prepared remediation instructions for ${remediationGoals.length} goal(s)`,
       source: "builder",
-      data: { implementationInstructions, proposedBranch, baseBranch },
+      data: { implementationInstructions: instructionsWithLayers, proposedBranch, baseBranch },
     });
 
     if (!options.skipGrok) {
@@ -216,7 +276,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         {
           ...options.grok,
           agentRole: options.grok?.agentRole ?? "builder",
-          fallback: implementationInstructions,
+          fallback: instructionsWithLayers,
         },
       );
       if (grok.mocked && grok.mock) mocksUsed.push(grok.mock);
@@ -397,7 +457,8 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         proposedBranch: payload.proposedBranch,
         proposedPrUrl: payload.proposedPrUrl,
         testsPassed: payload.testsPassed,
-        implementationInstructions,
+        implementationInstructions: instructionsWithLayers,
+        subAgents: layerAggregate,
         cloudAgentHandoffs: handoffs,
         cloudAgentAudit: cloudAudit,
         cloudAgentAttempts: cloudAttempts,

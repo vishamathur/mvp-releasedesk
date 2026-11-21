@@ -85,6 +85,15 @@ export {
 } from "./orchestrator.js";
 
 export {
+  delegateLeadChildren,
+  readLeadTrack,
+  type LeadTrack,
+  type LeadReleaseSnapshot,
+  type LeadSubAgentContext,
+  type LeadSubAgentHooks,
+} from "./sub-agents.js";
+
+export {
   CustomerIntake,
   createCustomerIntake,
   createInMemoryIntakeStore,

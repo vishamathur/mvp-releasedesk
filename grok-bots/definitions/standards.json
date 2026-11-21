@@ -42,5 +42,19 @@
   "teammates": ["lead", "change-analyst", "security"],
   "channels": [{ "name": "#release-desk", "purpose": "Deviation posts to Lead/humans" }],
   "handsOffTo": ["lead"],
+  "children": [
+    {
+      "id": "standards.policy-rules",
+      "responsibility": "Evaluate the change against Northwind policy rules.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "standards.docs-conventions",
+      "responsibility": "Check docs and repo conventions that sit beside the policy rules.",
+      "parallelGroup": 0,
+      "required": true
+    }
+  ],
   "markdownPackDir": "grok-bots/bots/standards"
 }

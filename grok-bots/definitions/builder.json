@@ -38,5 +38,25 @@
   "teammates": ["lead", "security"],
   "channels": [{ "name": "#release-desk", "purpose": "Handoff status" }],
   "handsOffTo": ["lead"],
+  "children": [
+    {
+      "id": "builder.backend-api",
+      "responsibility": "Plan the backend and API slice of the remediation.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "builder.frontend-ui",
+      "responsibility": "Plan the frontend and UI slice of the remediation.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "builder.tests-ci",
+      "responsibility": "Plan the tests and CI slice of the remediation.",
+      "parallelGroup": 0,
+      "required": true
+    }
+  ],
   "markdownPackDir": "grok-bots/bots/builder"
 }

@@ -34,5 +34,25 @@
   "teammates": ["lead", "standards", "security"],
   "channels": [{ "name": "#release-desk", "purpose": "Share findings with Lead/humans" }],
   "handsOffTo": ["lead"],
+  "children": [
+    {
+      "id": "change_analyst.er-intake",
+      "responsibility": "Normalize the ER or change request into repository, refs, and focus paths.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "change_analyst.diff-impact",
+      "responsibility": "Read the git range and score path-level impact.",
+      "parallelGroup": 0,
+      "required": true
+    },
+    {
+      "id": "change_analyst.estimation",
+      "responsibility": "Estimate effort from the diff and impact findings.",
+      "parallelGroup": 1,
+      "required": true
+    }
+  ],
   "markdownPackDir": "grok-bots/bots/change-analyst"
 }

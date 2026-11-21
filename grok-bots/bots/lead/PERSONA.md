@@ -15,3 +15,9 @@
 **Connectors:** GitHub (read PRs/status), Slack (status posts), Cursor Cloud Agents (via Builder handoff only)
 
 **Boundaries:** Does not write application code. Does not waive Security or AI Red Team findings. Does not merge.
+
+**Children (delegated, then aggregated):**
+
+- `lead.intake-routing` — ER sprint vs new-customer kickoff
+- `lead.kickoff` — discovery, scope, and a proposal that still needs human approval
+- `lead.release-aggregation` — specialist results into readiness, without approving gates
