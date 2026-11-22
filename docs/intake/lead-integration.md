@@ -5,7 +5,7 @@ The site never writes `pid.state`, never messages other teammates and never appr
 
 ```
 Visitor ──chat──> api/chat.php ──> Grok (draft fields only)
-Visitor ──submit─> api/intake.php ──> finance model (catalogue math + Grok recommendation)
+Visitor ──submit─> api/intake.php ──> finance model (catalogue option bill of materials, or Grok when there is no option)
                                   ──> data/submissions/REQ.json (card) + data/status/REQ.json ("received")
                                   ──> data/outbox/… ──(LEAD_DELIVERY)──> Lead's webhook routine ──> Lead
 Lead ──signed POST──> api/finance-estimate.php   (re-price on acceptance / scope change)
@@ -31,7 +31,7 @@ Envelope: `{source, kind: intake-card|visitor-message, requestId, to, leadBotId,
 Lead runs `curl` from its computer with the shared secret from its vault (skills `finance-estimate`, `public-status-update`).
 Both endpoints need `X-Intake-Timestamp` (±300 s) and `X-Intake-Signature = hex HMAC-SHA256(secret, ts + "." + rawBody)`.
 
-- `POST /api/finance-estimate.php` `{requestId?, pid, text, urgency, customerBudgetInr?, lines?}` → `{assessment}` (also saved next to the submission).
+- `POST /api/finance-estimate.php` `{requestId?, pid, text, urgency, customerBudgetInr?, lines?, catalogueOptionId?, addOns?}` → `{assessment}` (also saved next to the submission). `catalogueOptionId` prices that option's bill of materials (`source` `catalogue-option`) and records `catalogue:<id>@<version>` on the estimate. An unknown option, unknown add-on, or pid that does not match the option is HTTP 400. `lines` prices an agreed scope and skips Grok. With neither, Grok maps the text and a missing key is HTTP 503.
 - `POST /api/lead-update.php` `{requestId, updateId, from:"lead", stage|publicStatus, message, nextGate?, quote?}` → moves the public status (see `public-status-lifecycle.md`). Idempotent on `updateId`; backwards moves → 409; "approved" must name a human.
 
 ## What Kiran / Vishal must set up (nothing here is done yet)

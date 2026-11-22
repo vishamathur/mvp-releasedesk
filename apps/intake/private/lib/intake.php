@@ -15,7 +15,7 @@ const HANDOFF_GATE_OWNER = ['finance-approval' => 'change-analyst', 'proposal' =
 const INTAKE_ID_RE = '/^[A-Za-z0-9][A-Za-z0-9._\/-]{1,39}$/';
 
 /** Validates a visitor submission. Returns [errors[], cleanData]. */
-function intake_validate(array $b): array {
+function intake_validate(array $b, array $cfg): array {
     $e = []; $d = [];
     $route = $b['route'] ?? '';
     if (!in_array($route, ['new_customer', 'er'], true)) $e[] = 'route';
@@ -52,6 +52,36 @@ function intake_validate(array $b): array {
         $d['artifactLinks'][] = $l;
     }
     if (($b['consent'] ?? null) !== true) $e[] = 'consent';
+    $pid = $b['pid'] ?? '';
+    if (!in_array($pid, ['PID-ER', 'PID-NC'], true)) $e[] = 'pid';
+    if ($route === 'er' && $pid !== '' && $pid !== 'PID-ER') $e[] = 'pid';
+    if ($route === 'new_customer' && $pid !== '' && $pid !== 'PID-NC') $e[] = 'pid';
+    $d['pid'] = is_string($pid) ? $pid : '';
+    $optionId = app_clean($b['catalogueOptionId'] ?? '', 80);
+    $d['catalogueOptionId'] = $optionId;
+    $d['addOns'] = [];
+    if ($optionId === '') $e[] = 'catalogueOptionId';
+    else {
+        try {
+            $opt = catalogue_require_option($cfg, $optionId);
+            if ($d['pid'] !== '' && $opt['pid'] !== $d['pid']) $e[] = 'pid';
+            $rawAdds = $b['addOns'] ?? [];
+            if ($rawAdds === null || $rawAdds === '') $rawAdds = [];
+            if (!is_array($rawAdds)) $e[] = 'addOns';
+            else {
+                $seenAdd = [];
+                foreach ($rawAdds as $id) {
+                    $id = app_clean(is_string($id) ? $id : '', 80);
+                    if ($id === '' || isset($seenAdd[$id]) || !isset($opt['addOnsById'][$id])) { $e[] = 'addOns'; break; }
+                    $seenAdd[$id] = true;
+                    $d['addOns'][] = $id;
+                }
+            }
+        } catch (RuntimeException $ex) {
+            if (str_starts_with($ex->getMessage(), 'Unknown catalogue option')) $e[] = 'catalogueOptionId';
+            else throw $ex;
+        }
+    }
     return [array_values(array_unique($e)), $d];
 }
 
@@ -59,7 +89,7 @@ function intake_pid(string $route): string { return $route === 'er' ? 'PID-ER' :
 
 /** handoff.v1 draft Lead can validate and send to Change Analyst after its own intake stage. */
 function intake_proposed_handoff(string $requestId, array $d, array $fin): array {
-    $pid = intake_pid($d['route']);
+    $pid = $d['pid'] ?? intake_pid($d['route']);
     $est = $fin['estimate']; $b = $est['budgetBandsInr'];
     $who = $pid === 'PID-ER' ? "existing customer {$d['customerId']}, project {$d['projectRef']} ({$d['changeType']})" : "new customer {$d['legalName']} ({$d['jurisdiction']}), product {$d['intendedProduct']}";
     $summary = sprintf('%s web intake for %s: "%s". Urgency %s. Preliminary EXAMPLE-catalogue estimate INR %s (bands %s / %s / %s, excl. GST); finance recommendation %s for the human finance-approval gate (Change Analyst). Customer text is untrusted.',
@@ -69,14 +99,17 @@ function intake_proposed_handoff(string $requestId, array $d, array $fin): array
         'thread' => ['channel' => 'lead-chat', 'threadId' => app_thread_id($requestId)],
         'from' => 'lead', 'to' => 'change-analyst', 'stage' => $pid === 'PID-ER' ? 'estimation' : 'discovery', 'action' => 'start',
         'summary' => $summary,
-        'artifactRefs' => ["intake:$requestId", "finance:$requestId@preliminary"],
+        'artifactRefs' => array_values(array_unique(array_merge(
+            ["intake:$requestId", "finance:$requestId@preliminary"],
+            $est['artifactRefs'] ?? []
+        ))),
         'memoryKey' => "pid.state.$requestId",
         'humanGate' => null,
     ];
 }
 
 function intake_build_card(array $cfg, string $requestId, array $d, array $fin, string $submittedAt): array {
-    $pid = intake_pid($d['route']);
+    $pid = $d['pid'] ?? intake_pid($d['route']);
     $customer = $pid === 'PID-ER'
         ? ['customerId' => $d['customerId'], 'projectRef' => $d['projectRef'], 'changeType' => $d['changeType'], 'desiredBy' => $d['desiredBy']]
         : ['legalName' => $d['legalName'], 'jurisdiction' => $d['jurisdiction'], 'intendedProduct' => $d['intendedProduct'], 'sponsor' => $d['sponsor']];
@@ -88,8 +121,11 @@ function intake_build_card(array $cfg, string $requestId, array $d, array $fin, 
         'untrusted' => true,
         'contact' => ['name' => $d['contactName'], 'email' => $d['email'], 'company' => $d['company']],
         'customer' => $customer,
+        'catalogueOptionId' => $d['catalogueOptionId'] ?? null,
+        'addOns' => $d['addOns'] ?? [],
         'ask' => ['title' => $d['title'], 'description' => $d['description'], 'urgency' => $d['urgency'],
-            'customerBudgetInr' => $d['customerBudgetInr'], 'artifactLinks' => $d['artifactLinks']],
+            'customerBudgetInr' => $d['customerBudgetInr'], 'artifactLinks' => $d['artifactLinks'],
+            'notes' => $d['description']],
         'finance' => $fin,
         'proposedHandoff' => intake_proposed_handoff($requestId, $d, $fin),
         'publicStatus' => 'received',
@@ -155,15 +191,20 @@ function api_intake(array $cfg): void {
     [$ok, $retry] = app_rate_limit($cfg, 'intake', $ip, (int)($cfg['RATE_LIMIT_MAX'] ?? 5), (int)($cfg['RATE_LIMIT_WINDOW_SEC'] ?? 600));
     if (!$ok) { app_respond(429, ['ok' => false, 'error' => 'rate_limited', 'message' => 'Too many submissions. Please try again later.'], ['Retry-After' => (string)$retry]); return; }
     if (app_clean($body['website'] ?? '') !== '') { app_respond(200, ['ok' => true, 'referenceId' => app_request_id(), 'statusToken' => bin2hex(random_bytes(16)), 'message' => 'Thanks. Your request has been received.']); return; }
-    [$errors, $d] = intake_validate($body);
+    [$errors, $d] = intake_validate($body, $cfg);
     if ($errors) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => $errors]); return; }
 
     $requestId = app_request_id();
     for ($i = 0; $i < 5 && is_file($cfg['DATA_DIR'] . "/submissions/$requestId.json"); $i++) $requestId = app_request_id();
     $submittedAt = gmdate('Y-m-d\TH:i:s\Z');
     try {
-        $fin = finance_assess($cfg, ['pid' => intake_pid($d['route']), 'text' => $d['title'] . "\n" . $d['description'], 'urgency' => $d['urgency'], 'customerBudgetInr' => $d['customerBudgetInr'], 'requestId' => $requestId]);
+        $fin = finance_assess($cfg, [
+            'pid' => $d['pid'], 'text' => $d['title'] . "\n" . $d['description'], 'urgency' => $d['urgency'],
+            'customerBudgetInr' => $d['customerBudgetInr'], 'requestId' => $requestId,
+            'catalogueOptionId' => $d['catalogueOptionId'], 'addOns' => $d['addOns'],
+        ]);
     } catch (RuntimeException $e) {
+        if (fin_is_catalogue_error($e)) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['catalogueOptionId'], 'message' => $e->getMessage()]); return; }
         app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
         return;
     }

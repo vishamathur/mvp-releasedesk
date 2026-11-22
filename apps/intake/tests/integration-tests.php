@@ -15,25 +15,44 @@ function signed(string $url, array $body, string $secret, ?int $ts = null): arra
     return req('POST', $url, $raw, ['Content-Type: application/json', "X-Intake-Timestamp: $ts", 'X-Intake-Signature: ' . hash_hmac('sha256', "$ts.$raw", $secret)], true);
 }
 $J = ['Content-Type: application/json', "Origin: $O"];
-$er = ['route' => 'er', 'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'CUST-1042', 'projectRef' => 'PRJ-ONB-7',
+$er = ['route' => 'er', 'pid' => 'PID-ER', 'catalogueOptionId' => 'ER-KYC-LABELS', 'addOns' => [],
+    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'CUST-1042', 'projectRef' => 'PRJ-ONB-7',
     'changeType' => 'enhancement', 'title' => 'Rename two labels', 'description' => 'Rename two labels on the onboarding screen for clarity.', 'urgency' => 'standard',
     'artifactLinks' => ['https://example.com/shot.png'], 'website' => '', 'consent' => true];
 $R = [];
 function t(string $n, callable $f) { global $R; try { $f(); $R[] = "PASS  $n"; } catch (Throwable $e) { $R[] = "FAIL  $n  " . $e->getMessage(); } }
 function ok($c, string $m = 'assert') { if (!$c) throw new Exception($m); }
 
-t('catalogue endpoint returns EXAMPLE services', function () use ($base) {
-    [$c, $j] = req('GET', "$base/api/catalogue.php"); ok($c === 200 && count($j['services']) === 11 && str_contains($j['label'], 'EXAMPLE'), "c=$c");
+t('catalogue endpoint returns EXAMPLE services, enhancements and new applications', function () use ($base) {
+    [$c, $j] = req('GET', "$base/api/catalogue.php");
+    ok($c === 200 && count($j['services']) === 11 && str_contains($j['label'], 'EXAMPLE DATA - illustrative prices only'), "c=$c");
+    ok(isset($j['enhancements'][0]['options'][0]['billOfMaterials']) && isset($j['newApplications'][0]['billOfMaterials']), 'shape');
+    $ids = [];
+    foreach ($j['enhancements'] as $app) foreach ($app['options'] as $opt) $ids[] = $opt['id'];
+    foreach ($j['newApplications'] as $app) { $ids[] = $app['id']; foreach ($app['addOns'] as $add) $ids[] = $add['id']; }
+    ok(in_array('ER-KYC-LABELS', $ids, true) && in_array('NC-KYC', $ids, true) && count($ids) === count(array_unique($ids)), 'ids');
 });
 t('chat without GROK_API_KEY is a configuration error', function () use ($base, $J) {
     [$c, $j] = req('POST', "$base/api/chat.php", ['route' => 'er', 'messages' => [['role' => 'user', 'content' => 'Rename two labels']]], $J);
     ok($c === 503 && ($j['error'] ?? '') === 'grok_unavailable' && str_contains($j['message'] ?? '', 'GROK_API_KEY is not set'), json_encode($j));
     ok(!isset($j['reply']), 'no invented reply');
 });
-t('intake without GROK_API_KEY does not store a fabricated card', function () use ($base, $J, $er, $data) {
+t('intake with a valid catalogue option is priced from the bill of materials', function () use ($base, $J, $er, $data) {
     $before = count(glob("$data/submissions/REQ-*.json") ?: []);
     [$c, $j] = req('POST', "$base/api/intake.php", $er, $J);
-    ok($c === 503 && ($j['error'] ?? '') === 'grok_unavailable' && str_contains($j['message'] ?? '', 'Refusing to invent'), json_encode($j));
+    ok($c === 200 && ($j['ok'] ?? false) === true && isset($j['referenceId']), json_encode($j));
+    $card = json_decode((string)file_get_contents("$data/submissions/{$j['referenceId']}.json"), true);
+    ok($card['catalogueOptionId'] === 'ER-KYC-LABELS' && $card['pid'] === 'PID-ER', json_encode([$card['catalogueOptionId'] ?? null, $card['pid'] ?? null]));
+    ok($card['finance']['source'] === 'catalogue-option' && $card['finance']['estimate']['totalInr'] === 187000, json_encode($card['finance']['source'] ?? $card['finance']));
+    ok(in_array('catalogue:ER-KYC-LABELS@example-2026-11', $card['finance']['estimate']['artifactRefs'], true), json_encode($card['finance']['estimate']['artifactRefs'] ?? []));
+    ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before + 1, 'card stored');
+});
+t('intake with an invalid catalogue option is rejected', function () use ($base, $J, $er, $data) {
+    $before = count(glob("$data/submissions/REQ-*.json") ?: []);
+    [$c, $j] = req('POST', "$base/api/intake.php", ['catalogueOptionId' => 'NO-SUCH'] + $er, $J);
+    ok($c === 400 && in_array('catalogueOptionId', $j['fields'] ?? [], true), json_encode($j));
+    [$c, $j] = req('POST', "$base/api/intake.php", ['catalogueOptionId' => 'NC-KYC', 'pid' => 'PID-ER'] + $er, $J);
+    ok($c === 400 && in_array('pid', $j['fields'] ?? [], true), json_encode($j));
     ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before, 'no card stored');
 });
 t('validation, honeypot, origin, content-type, size', function () use ($base, $J, $er, $data) {

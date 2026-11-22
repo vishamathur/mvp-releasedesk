@@ -20,6 +20,9 @@ button{font:inherit;font-weight:600;padding:10px 16px;border-radius:8px;border:0
 .hint{color:var(--muted);font-size:.85rem;font-weight:400}.badge{background:#fff3cd;color:#7a5a00;font-size:.7rem;padding:3px 8px;border-radius:999px;vertical-align:middle;letter-spacing:.04em}
 .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}.num{text-align:right;white-space:nowrap}
 .consent{display:flex;gap:10px;font-weight:400;color:var(--muted)}.consent input{width:auto;margin-top:4px}
+.addons{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:8px}
+.addons label{font-weight:400;display:flex;gap:8px;align-items:flex-start}
+.addons input{width:auto;margin-top:4px}
 .hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
 #form-status.error{color:var(--err)}
 .steps{display:flex;flex-wrap:wrap;gap:6px;padding:0;list-style:none}.steps li{padding:6px 10px;border-radius:999px;background:#eef1f5;font-size:.85rem;color:var(--muted)}

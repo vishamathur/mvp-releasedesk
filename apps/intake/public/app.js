@@ -11,7 +11,8 @@
   const LABELS = { contactName: "name", email: "email", company: "company", customerId: "customer ID", projectRef: "project reference",
     changeType: "change type", legalName: "legal name", jurisdiction: "jurisdiction", intendedProduct: "intended product", sponsor: "sponsor",
     title: "title", description: "description (20+ characters)", urgency: "urgency", desiredBy: "needed-by date", customerBudgetInr: "budget",
-    artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type" };
+    artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
+    catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
 
   // ---- route selection
   let route = null;
@@ -24,10 +25,15 @@
     $$(".route-nc").forEach((x) => (x.hidden = r !== "new_customer"));
     ["customerId", "projectRef"].forEach((n) => (form.elements[n].required = r === "er"));
     ["legalName", "jurisdiction", "intendedProduct", "sponsor"].forEach((n) => (form.elements[n].required = r === "new_customer"));
-    $("#form-title").textContent = r === "er" ? "Enhancement request" : "New customer request";
+    const erApp = $("#er-app"); const erOpt = $("#er-option"); const ncTpl = $("#nc-template");
+    if (erApp) erApp.required = r === "er";
+    if (erOpt) erOpt.required = r === "er";
+    if (ncTpl) ncTpl.required = r === "new_customer";
+    $("#form-title").textContent = r === "er" ? "Enhance an existing service" : "New application";
+    renderEstimate();
     if (!chat.length) say("assistant", r === "er"
-      ? "Hi! Tell me which project this is for and what you'd like changed. I'll fill in the form as we go."
-      : "Hi! Tell me about your organisation and what you'd like to build. I'll fill in the form as we go.");
+      ? "Hi! Pick the application and the change, then tell me anything the notes should say. I'll fill in the form as we go."
+      : "Hi! Pick a template and any add-ons, then tell me about your organisation. I'll fill in the form as we go.");
     $("#start").scrollIntoView({ behavior: "smooth" });
   };
   $$(".option").forEach((b) => b.addEventListener("click", () => setRoute(b.dataset.route)));
@@ -64,7 +70,10 @@
     if (!route) { st.textContent = "Choose an option first."; return; }
     if (!form.reportValidity()) return;
     const f = form.elements;
-    const body = { route, contactName: f.contactName.value, email: f.email.value, company: f.company.value, urgency: f.urgency.value,
+    const picked = selectedOption();
+    if (!picked) { st.className = "error"; st.textContent = "Choose a catalogue option first."; return; }
+    const body = { route, pid: route === "er" ? "PID-ER" : "PID-NC", catalogueOptionId: picked.id, addOns: selectedAddOns(),
+      contactName: f.contactName.value, email: f.email.value, company: f.company.value, urgency: f.urgency.value,
       title: f.title.value, description: f.description.value, customerBudgetInr: f.customerBudgetInr.value || null,
       artifactLinks: f.artifactLinks.value.split(/\s+/).filter(Boolean), website: f.website.value, consent: f.consent.checked };
     if (route === "er") Object.assign(body, { customerId: f.customerId.value, projectRef: f.projectRef.value, changeType: f.changeType.value, desiredBy: f.desiredBy.value });
@@ -87,9 +96,81 @@
   });
 
   // ---- catalogue
+  let catalogue = null;
+  const selectedOption = () => {
+    if (!catalogue || !route) return null;
+    if (route === "er") {
+      const id = $("#er-option").value;
+      for (const app of catalogue.enhancements) {
+        const opt = app.options.find((o) => o.id === id);
+        if (opt) return opt;
+      }
+      return null;
+    }
+    return catalogue.newApplications.find((a) => a.id === $("#nc-template").value) || null;
+  };
+  const selectedAddOns = () => route === "new_customer"
+    ? $$("#nc-addons input:checked").map((i) => i.value) : [];
+  const priceLines = (lines, urgency) => {
+    const p = catalogue.pricing;
+    let sub = 0; let maxRisk = 1;
+    for (const l of lines) {
+      sub += l.unitPriceInr * l.qty * l.riskMultiplier;
+      maxRisk = Math.max(maxRisk, l.riskMultiplier);
+    }
+    const urg = p.urgency[urgency] ?? p.urgency.standard;
+    let pct = p.contingencyBasePct;
+    if (maxRisk >= p.highRiskThreshold) pct += p.contingencyHighRiskPct;
+    if (urgency === "critical") pct += p.contingencyCriticalPct;
+    const after = sub * urg;
+    const total = Math.round(after + after * pct / 100);
+    const roundTo = (v) => Math.round(v / p.roundToInr) * p.roundToInr;
+    return { total, low: roundTo(total * p.bandLowPct / 100), expected: roundTo(total), high: roundTo(total * p.bandHighPct / 100) };
+  };
+  const renderEstimate = () => {
+    const box = $("#example-estimate");
+    const opt = selectedOption();
+    if (!catalogue || !opt) { box.hidden = true; return; }
+    const urgency = form.elements.urgency.value || "standard";
+    const addIds = new Set(selectedAddOns());
+    const useServer = urgency === "standard" && addIds.size === 0 && opt.exampleEstimate;
+    const priced = useServer ? opt.exampleEstimate : priceLines([
+      ...opt.lines,
+      ...(opt.addOns || []).filter((a) => addIds.has(a.id)).flatMap((a) => a.lines),
+    ], urgency);
+    const bands = priced.budgetBandsInr || priced;
+    box.hidden = false;
+    box.textContent = `${catalogue.label}. Example estimate ${inr(priced.totalInr || priced.total)} (range ${inr(bands.low)}–${inr(bands.high)}, excl. GST). The submitted price is calculated on the server.`;
+  };
+  const fillErOptions = () => {
+    const appId = $("#er-app").value;
+    const app = catalogue.enhancements.find((a) => a.id === appId) || catalogue.enhancements[0];
+    const sel = $("#er-option");
+    sel.replaceChildren(...app.options.map((o) => { const opt = el("option", o.name); opt.value = o.id; return opt; }));
+    const chosen = app.options.find((o) => o.id === sel.value) || app.options[0];
+    $("#er-option-desc").textContent = chosen ? chosen.description : "";
+    renderEstimate();
+  };
+  const fillAddOns = () => {
+    const app = catalogue.newApplications.find((a) => a.id === $("#nc-template").value) || catalogue.newApplications[0];
+    $("#nc-template-desc").textContent = app ? app.description : "";
+    const box = $("#nc-addons");
+    box.replaceChildren(el("legend", "Add-ons"));
+    for (const add of app?.addOns || []) {
+      const label = el("label");
+      const input = document.createElement("input");
+      input.type = "checkbox"; input.value = add.id;
+      input.addEventListener("change", renderEstimate);
+      label.append(input, el("span", `${add.name}. ${add.description}`));
+      box.appendChild(label);
+    }
+    if (!(app?.addOns || []).length) box.appendChild(el("p", "No add-ons for this template.", "hint"));
+    renderEstimate();
+  };
   (async () => {
     try {
       const d = await (await fetch("api/catalogue.php")).json();
+      catalogue = d;
       $("#cat-label").textContent = `${d.label}. ${d.taxNote}`;
       const tb = $("#cat-table tbody");
       for (const s of d.services) {
@@ -98,6 +179,27 @@
         tr.append(name, el("td", "per " + s.unit), el("td", inr(s.unitPriceInr), "num"), el("td", s.effortDays + " days", "num"), el("td", "×" + s.riskMultiplier, "num"));
         tb.appendChild(tr);
       }
+      const list = $("#cat-options");
+      for (const app of d.enhancements) {
+        list.appendChild(el("h3", "Enhance: " + app.name));
+        for (const opt of app.options) list.appendChild(el("p", `${opt.name} — example ${inr(opt.exampleEstimate.totalInr)}`, "hint"));
+      }
+      for (const app of d.newApplications) {
+        list.appendChild(el("h3", "New: " + app.name));
+        list.appendChild(el("p", `${app.description} Example ${inr(app.exampleEstimate.totalInr)}.`, "hint"));
+      }
+      $("#er-app").replaceChildren(...d.enhancements.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
+      $("#nc-template").replaceChildren(...d.newApplications.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
+      $("#er-app").addEventListener("change", fillErOptions);
+      $("#er-option").addEventListener("change", () => {
+        const opt = selectedOption();
+        $("#er-option-desc").textContent = opt ? opt.description : "";
+        renderEstimate();
+      });
+      $("#nc-template").addEventListener("change", fillAddOns);
+      form.elements.urgency.addEventListener("change", renderEstimate);
+      fillErOptions();
+      fillAddOns();
     } catch { $("#cat-label").textContent = "Service list unavailable."; }
   })();
 

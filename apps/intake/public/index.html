@@ -21,15 +21,15 @@
     <h1>How can we help?</h1>
     <p>Pick an option. Our assistant helps you fill in the details, and Release Desk Lead takes it from there. People make every approval.</p>
     <div class="options" role="radiogroup" aria-label="Request type">
-      <button type="button" class="option" data-route="new_customer" role="radio" aria-checked="false">
-        <span class="tag">New customer</span>
-        <strong>Start something new</strong>
-        <small>New customer or a new product. Goes to discovery and a proposal.</small>
-      </button>
       <button type="button" class="option" data-route="er" role="radio" aria-checked="false">
-        <span class="tag">Existing customer</span>
-        <strong>Enhancement request</strong>
-        <small>Change to an existing project: enhancement, defect or regulatory tweak.</small>
+        <span class="tag">PID-ER</span>
+        <strong>Enhance an existing service</strong>
+        <small>Pick the application, then the change. Goes to estimation.</small>
+      </button>
+      <button type="button" class="option" data-route="new_customer" role="radio" aria-checked="false">
+        <span class="tag">PID-NC</span>
+        <strong>New application</strong>
+        <small>Pick a template and any add-ons. Goes to discovery and a proposal.</small>
       </button>
     </div>
   </section>
@@ -70,6 +70,17 @@
           <label>Intended product<input name="intendedProduct" maxlength="120" /></label>
           <label>Sponsor (name and role)<input name="sponsor" maxlength="120" /></label>
         </div>
+        <div class="route-er" id="catalogue-er">
+          <label>Application<select id="er-app"></select></label>
+          <label>Change<select id="er-option"></select></label>
+          <p id="er-option-desc" class="hint"></p>
+        </div>
+        <div class="route-nc" id="catalogue-nc">
+          <label>Template<select id="nc-template"></select></label>
+          <fieldset id="nc-addons" class="addons"><legend>Add-ons</legend></fieldset>
+          <p id="nc-template-desc" class="hint"></p>
+        </div>
+        <p id="example-estimate" class="hint" hidden></p>
         <label>Title<input name="title" required minlength="5" maxlength="150" /></label>
         <label>Description<textarea name="description" required minlength="20" maxlength="4000" rows="6"></textarea></label>
         <div class="grid">
@@ -89,6 +100,8 @@
     <h2>Services <span class="badge">EXAMPLE DATA</span></h2>
     <p class="hint" id="cat-label"></p>
     <div class="table-wrap"><table id="cat-table"><thead><tr><th>Service</th><th>Unit</th><th class="num">List price (INR)</th><th class="num">Typical effort</th><th class="num">Risk factor</th></tr></thead><tbody></tbody></table></div>
+    <h3>What you can request</h3>
+    <div id="cat-options"></div>
   </section>
 
   <section id="track" class="card">

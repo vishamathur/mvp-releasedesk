@@ -35,7 +35,44 @@ t('grok body: guidelines, hashed safety id, no stop or n', function () {
     ok($noModel, 'model');
 });
 t('catalogue: 11 EXAMPLE services load and validate', function () use ($cfg) {
-    $c = catalogue_load($cfg); ok(count($c['byId']) === 11, 'count'); ok(str_contains($c['label'], 'EXAMPLE'), 'label');
+    $c = catalogue_load($cfg);
+    ok(count($c['byId']) === 11, 'count');
+    ok(str_contains($c['label'], 'EXAMPLE DATA - illustrative prices only'), 'label');
+    ok(isset($c['optionById']['ER-KYC-LABELS']) && isset($c['optionById']['NC-KYC']), 'options');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['enhancements'][0]['options'][0]['billOfMaterials'][0]['serviceId'] = 'SVC-NOPE';
+    $badService = false;
+    try { catalogue_index($raw); } catch (RuntimeException $e) { $badService = str_contains($e->getMessage(), 'catalogue_unknown_service'); }
+    ok($badService, 'unknown service');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['enhancements'][0]['options'][0]['billOfMaterials'][0]['qty'] = 0;
+    $badQty = false;
+    try { catalogue_index($raw); } catch (RuntimeException $e) { $badQty = str_contains($e->getMessage(), 'catalogue_bad_qty'); }
+    ok($badQty, 'qty');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['newApplications'][0]['id'] = 'SVC-KYC';
+    $dup = false;
+    try { catalogue_index($raw); } catch (RuntimeException $e) { $dup = str_contains($e->getMessage(), 'catalogue_duplicate_id'); }
+    ok($dup, 'duplicate');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['services'][] = ['id' => 'SVC-WEB', 'name' => 'Web presence', 'description' => 'A small public site.', 'unit' => 'site', 'unitPriceInr' => 90000, 'effortDays' => 5, 'riskMultiplier' => 1.0];
+    $raw['enhancements'][0]['options'][] = ['id' => 'ER-KYC-WEB', 'name' => 'KYC landing page', 'description' => 'A landing page on the KYC app.', 'targetServiceId' => 'SVC-WEB', 'billOfMaterials' => [['serviceId' => 'SVC-WEB', 'qty' => 1], ['serviceId' => 'SVC-REL', 'qty' => 1]]];
+    $raw['enhancements'][] = ['id' => 'APP-LATER', 'name' => 'Reserved application', 'description' => 'A group that can gain options later.', 'options' => []];
+    $idx = catalogue_index($raw);
+    ok(isset($idx['byId']['SVC-WEB']) && isset($idx['optionById']['ER-KYC-WEB']) && $idx['enhancements'][count($idx['enhancements']) - 1]['options'] === [], 'append');
+});
+t('catalogue: BOM pricing, unknown option, pid mismatch', function () use ($cfg) {
+    $est = finance_price_option($cfg, 'ER-KYC-LABELS', [], 'PID-ER', 'standard');
+    ok($est['totalInr'] === 187000 && $est['subtotalInr'] === 170000 && abs($est['effortDays'] - 7.0) < 0.01, json_encode($est));
+    ok($est['artifactRefs'] === ['catalogue:ER-KYC-LABELS@example-2026-11'], json_encode($est['artifactRefs']));
+    $withAdd = finance_price_option($cfg, 'NC-KYC', ['ADD-NC-KYC-API'], 'PID-NC', 'standard');
+    ok($withAdd['totalInr'] === 1907850, 'addon ' . $withAdd['totalInr']);
+    $unknown = false;
+    try { finance_price_option($cfg, 'NO-SUCH', [], 'PID-ER'); } catch (RuntimeException $e) { $unknown = str_starts_with($e->getMessage(), 'Unknown catalogue option'); }
+    ok($unknown, 'unknown option');
+    $mismatch = false;
+    try { finance_price_option($cfg, 'NC-KYC', [], 'PID-ER'); } catch (RuntimeException $e) { $mismatch = str_contains($e->getMessage(), 'not PID-ER'); }
+    ok($mismatch, 'pid mismatch');
 });
 t('math: 2x UI-S + 1x REL, standard, high conf = 187,000', function () use ($cfg) {
     $e = finance_estimate($cfg, [['serviceId' => 'SVC-UI-S', 'qty' => 2], ['serviceId' => 'SVC-REL', 'qty' => 1]]);
@@ -76,20 +113,24 @@ t('assess: explicit lines from Lead bypass Grok', function () use ($cfg) {
     $a = finance_assess($cfg, ['pid' => 'PID-ER', 'text' => '', 'lines' => [['serviceId' => 'SVC-SEC', 'qty' => 1]]]);
     ok($a['source'] === 'explicit-lines' && $a['estimate']['totalInr'] === 220000, json_encode([$a['source'], $a['estimate']['totalInr']]));
 });
-$base = ['route' => 'er', 'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'CUST-1042', 'projectRef' => 'PRJ-ONB-7',
+$base = ['route' => 'er', 'pid' => 'PID-ER', 'catalogueOptionId' => 'ER-KYC-LABELS', 'addOns' => [],
+    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'CUST-1042', 'projectRef' => 'PRJ-ONB-7',
     'changeType' => 'enhancement', 'title' => 'Rename two labels', 'description' => 'Rename two labels on the onboarding screen for clarity.', 'urgency' => 'standard', 'consent' => true];
-t('validation: valid ER passes; bad ids/date/budget/route caught', function () use ($base) {
-    ok(intake_validate($base)[0] === [], json_encode(intake_validate($base)[0]));
-    $e = intake_validate(['customerId' => 'bad id with spaces', 'projectRef' => '', 'desiredBy' => '2026-02-30', 'customerBudgetInr' => 'lots', 'urgency' => 'asap'] + $base)[0];
+t('validation: valid ER passes; bad ids/date/budget/route caught', function () use ($cfg, $base) {
+    ok(intake_validate($base, $cfg)[0] === [], json_encode(intake_validate($base, $cfg)[0]));
+    $e = intake_validate(['customerId' => 'bad id with spaces', 'projectRef' => '', 'desiredBy' => '2026-02-30', 'customerBudgetInr' => 'lots', 'urgency' => 'asap'] + $base, $cfg)[0];
     sort($e); ok($e === ['customerBudgetInr', 'customerId', 'desiredBy', 'projectRef', 'urgency'], json_encode($e));
-    ok(in_array('route', intake_validate(['route' => 'x'] + $base)[0], true), 'route');
+    ok(in_array('route', intake_validate(['route' => 'x'] + $base, $cfg)[0], true), 'route');
+    ok(in_array('catalogueOptionId', intake_validate(['catalogueOptionId' => 'NO-SUCH'] + $base, $cfg)[0], true), 'unknown option');
+    ok(in_array('pid', intake_validate(['catalogueOptionId' => 'NC-KYC'] + $base, $cfg)[0], true), 'pid mismatch');
 });
-t('validation: NC requires legalName/jurisdiction/intendedProduct/sponsor', function () use ($base) {
-    $e = intake_validate(['route' => 'new_customer'] + $base)[0]; sort($e); ok($e === ['intendedProduct', 'jurisdiction', 'legalName', 'sponsor'], json_encode($e));
+t('validation: NC requires legalName/jurisdiction/intendedProduct/sponsor', function () use ($cfg, $base) {
+    $e = intake_validate(['route' => 'new_customer', 'pid' => 'PID-NC', 'catalogueOptionId' => 'NC-KYC'] + $base, $cfg)[0];
+    sort($e); ok($e === ['intendedProduct', 'jurisdiction', 'legalName', 'sponsor'], json_encode($e));
 });
 t('handoff: proposed handoff passes validate-handoff (ER -> estimation, NC -> discovery)', function () use ($cfg, $base) {
-    foreach (['er' => ['PID-ER', 'estimation'], 'new_customer' => ['PID-NC', 'discovery']] as $route => [$pid, $stage]) {
-        $d = intake_validate(['route' => $route, 'legalName' => 'Acme Pvt Ltd', 'jurisdiction' => 'India', 'intendedProduct' => 'Lending', 'sponsor' => 'R. Rao, CFO'] + $base)[1];
+    foreach (['er' => ['PID-ER', 'estimation', 'ER-KYC-LABELS'], 'new_customer' => ['PID-NC', 'discovery', 'NC-KYC']] as $route => [$pid, $stage, $opt]) {
+        $d = intake_validate(['route' => $route, 'pid' => $pid, 'catalogueOptionId' => $opt, 'legalName' => 'Acme Pvt Ltd', 'jurisdiction' => 'India', 'intendedProduct' => 'Lending', 'sponsor' => 'R. Rao, CFO'] + $base, $cfg)[1];
         $rid = 'REQ-20261122-000123';
         $fin = finance_assess(['GROK_API_KEY' => ''] + $cfg, ['pid' => $pid, 'text' => $d['description'], 'urgency' => 'standard', 'lines' => [['serviceId' => 'SVC-UI-S', 'qty' => 1]]]);
         $card = intake_build_card($cfg, $rid, $d, $fin, '2026-11-22T12:00:00Z');

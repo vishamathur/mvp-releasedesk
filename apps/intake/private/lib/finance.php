@@ -22,6 +22,14 @@ const FIN_POLICY = [
 
 function fin_round_to(float $v, int $step = 1000): int { return (int)(round($v / $step) * $step); }
 
+function fin_is_catalogue_error(Throwable $e): bool {
+    $m = $e->getMessage();
+    return str_starts_with($m, 'Unknown catalogue option')
+        || str_starts_with($m, 'Catalogue option ')
+        || str_starts_with($m, 'Unknown add-on')
+        || str_starts_with($m, 'Add-on ');
+}
+
 /** @param array<int,array{serviceId:string,qty:int}> $lines */
 function finance_estimate(array $cfg, array $lines, string $urgency = 'standard', string $confidence = 'high'): array {
     $cat = catalogue_load($cfg)['byId'];
@@ -53,7 +61,23 @@ function finance_estimate(array $cfg, array $lines, string $urgency = 'standard'
         'effortDays' => round($effort * ($urgency === 'critical' ? 1.0 : 1.0), 1),
         'maxRiskMultiplier' => $maxRisk,
         'budgetBandsInr' => ['low' => fin_round_to($total * FIN_POLICY['bandLowPct'] / 100), 'expected' => fin_round_to($total), 'high' => fin_round_to($total * FIN_POLICY['bandHighPct'] / 100)],
+        'artifactRefs' => [],
     ];
+}
+
+/**
+ * Price a catalogue option from its bill of materials plus selected add-ons.
+ * Unknown option or add-on throws. The lines are not guessed from free text.
+ */
+function finance_price_option(array $cfg, string $optionId, array $addOnIds, string $pid, string $urgency = 'standard'): array {
+    $lines = catalogue_option_lines($cfg, $optionId, $addOnIds, $pid);
+    $est = finance_estimate($cfg, $lines, $urgency, 'high');
+    $version = (string)(catalogue_load($cfg)['version'] ?? '');
+    $est['catalogueOptionId'] = $optionId;
+    $est['catalogueVersion'] = $version;
+    $est['addOns'] = array_values($addOnIds);
+    $est['artifactRefs'] = ['catalogue:' . $optionId . '@' . $version];
+    return $est;
 }
 
 /** Deterministic policy. Returns [recommendation, reasons[]]. */
@@ -99,8 +123,16 @@ function finance_assess(array $cfg, array $req): array {
     $budget = isset($req['customerBudgetInr']) && is_numeric($req['customerBudgetInr']) ? (int)$req['customerBudgetInr'] : null;
     $cat = catalogue_load($cfg);
     $source = 'grok'; $grok = null; $error = null;
+    $priced = null;
 
-    if (!empty($req['lines']) && is_array($req['lines'])) {
+    if (trim((string)($req['catalogueOptionId'] ?? '')) !== '') {
+        $addOns = [];
+        foreach ((array)($req['addOns'] ?? []) as $id) $addOns[] = (string)$id;
+        $priced = finance_price_option($cfg, (string)$req['catalogueOptionId'], $addOns, $pid, $urgency);
+        $lines = array_map(fn($l) => ['serviceId' => $l['serviceId'], 'qty' => $l['qty']], $priced['lines']);
+        $confidence = 'high';
+        $source = 'catalogue-option';
+    } elseif (!empty($req['lines']) && is_array($req['lines'])) {
         $lines = $req['lines']; $confidence = 'high'; $source = 'explicit-lines';
     } else {
         try {
@@ -127,7 +159,7 @@ function finance_assess(array $cfg, array $req): array {
             throw new RuntimeException($why);
         }
     }
-    $est = finance_estimate($cfg, $lines, $urgency, $confidence);
+    $est = $priced ?? finance_estimate($cfg, $lines, $urgency, $confidence);
     [$policyRec, $reasons] = finance_policy($pid, $est, $confidence, $budget);
     $grokRec = $grok['recommendation'] ?? null;
     $final = ($grokRec !== null && FIN_RECS[$grokRec] > FIN_RECS[$policyRec]) ? $grokRec : $policyRec; // Grok can only tighten
@@ -151,6 +183,7 @@ function finance_assess(array $cfg, array $req): array {
         'suspectedPromptInjection' => (bool)($grok['suspectedPromptInjection'] ?? false),
         'gate' => ['gate' => 'finance-approval', 'owner' => 'change-analyst', 'decidedBy' => null, 'status' => 'pending'],
         'notice' => 'Recommendation only. The finance-approval decision is made by a human (Vishal / Finance partner) through Change Analyst.',
+        'artifactRefs' => $est['artifactRefs'] ?? [],
     ];
 }
 
@@ -161,14 +194,19 @@ function api_finance_estimate(array $cfg): void {
     if ($why = app_verify_lead_signature($cfg, $GLOBALS['APP_RAW_BODY'])) { app_log($cfg, ['event' => 'finance_auth_failed', 'why' => $why]); app_respond(401, ['ok' => false, 'error' => 'unauthorized']); return; }
     $pid = in_array($body['pid'] ?? '', ['PID-ER', 'PID-NC'], true) ? $body['pid'] : null;
     $text = app_clean($body['text'] ?? '', 4000);
-    if (!$pid || ($text === '' && empty($body['lines']))) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['pid', 'text']]); return; }
+    $optionId = app_clean($body['catalogueOptionId'] ?? '', 80);
+    if (!$pid || ($text === '' && empty($body['lines']) && $optionId === '')) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['pid', 'text']]); return; }
     $lines = [];
     foreach (array_slice((array)($body['lines'] ?? []), 0, 8) as $l) if (is_array($l)) $lines[] = ['serviceId' => app_clean($l['serviceId'] ?? '', 20), 'qty' => (int)($l['qty'] ?? 1)];
+    $addOns = [];
+    foreach ((array)($body['addOns'] ?? []) as $id) if (is_string($id)) $addOns[] = app_clean($id, 80);
     $rid = app_clean($body['requestId'] ?? '', 40);
     try {
         $res = finance_assess($cfg, ['pid' => $pid, 'text' => $text, 'urgency' => app_clean($body['urgency'] ?? 'standard', 20),
-            'customerBudgetInr' => $body['customerBudgetInr'] ?? null, 'lines' => $lines, 'requestId' => $rid]);
+            'customerBudgetInr' => $body['customerBudgetInr'] ?? null, 'lines' => $lines, 'requestId' => $rid,
+            'catalogueOptionId' => $optionId, 'addOns' => $addOns]);
     } catch (RuntimeException $e) {
+        if (fin_is_catalogue_error($e)) { app_respond(400, ['ok' => false, 'error' => 'catalogue', 'message' => $e->getMessage()]); return; }
         app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
         return;
     }

@@ -8,7 +8,7 @@ INBOUND to Lead: handoff.v1 intake-request from intake, to lead, with referenceI
 2. If pid.state.{requestId} already exists, treat the intake-request as a duplicate and stop.
 3. Create pid.state.{requestId} (currentStage intake, status open, thread {channel:"lead-chat", threadId: thr_<digits of requestId>}); append a transition; cc Log.
 4. Run the intake stage (PID-NC: also customer-onboarding). Consult change-analyst if the card is unclear.
-5. Call skill finance-estimate. PID-ER: stage-handoff to change-analyst, stage estimation. PID-NC: after customer-onboarding, stage discovery. Attach the finance artifactRef. Never add fields beyond handoff.v1.
+5. Call skill finance-estimate. If the intake-request has catalogueOptionId, pass that id, pid, and addOns so the price comes from the catalogue bill of materials. PID-ER: stage-handoff to change-analyst, stage estimation. PID-NC: after customer-onboarding, stage discovery. Attach the finance artifactRef, including catalogue:<optionId>@<version> when present. Never add fields beyond handoff.v1.
 6. Send public-status to intake: estimating, the next step, the quote, nextGate {gate:"finance-approval", owner:"change-analyst"} for PID-ER or {gate:"proposal", owner:"change-analyst"} for PID-NC.
 
 Visitors talk to Intake. Intake answers only from the latest public-status you sent. You do not take visitor-message webhooks.
