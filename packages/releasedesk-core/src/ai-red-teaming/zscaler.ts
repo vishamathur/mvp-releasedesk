@@ -1,18 +1,17 @@
-import { createMockMeta, formatMockNote } from "../mock.js";
+import { MissingCredentialError } from "../config-error.js";
 import {
   ZscalerAiRedTeamNotWiredError,
-  type AiRedTeamFinding,
-  type AiRedTeamFramework,
   type AiRedTeamHealthCheck,
   type AiRedTeamProbeResult,
   type AiRedTeamProbeTarget,
+  type AiRedTeamFramework,
   type AiRedTeamingProvider,
 } from "./types.js";
 
 /**
  * Credential env keys recognized by the Zscaler stub.
  * Presence means "subscription configured" — the stub still does **not** call
- * Zscaler APIs (throws not-wired). Absence → MOCK sample findings for CI/demo.
+ * Zscaler APIs (throws not-wired). Absence throws MissingCredentialError.
  */
 export const ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS = [
   "ZSCALER_AI_RED_TEAM_API_KEY",
@@ -90,70 +89,6 @@ function notWiredMessage(config: ZscalerLocalConfig): string {
   );
 }
 
-function filterByFrameworks(
-  findings: AiRedTeamFinding[],
-  frameworks: readonly AiRedTeamFramework[],
-): AiRedTeamFinding[] {
-  if (frameworks.length === 0) return findings;
-  const wantAtlas = frameworks.includes("atlas");
-  const wantOwasp = frameworks.includes("owasp_llm_top_10");
-  return findings.filter((f) => {
-    if (wantAtlas && f.atlas.length > 0) return true;
-    if (wantOwasp && f.owasp.length > 0) return true;
-    return false;
-  });
-}
-
-/** Deterministic MOCK findings labeled for Zscaler provider (no network). */
-export function createZscalerMockFindings(app: string): AiRedTeamFinding[] {
-  const mock = createMockMeta(
-    "zscaler-ai-red-teaming",
-    "Zscaler credentials unavailable; returning MOCK sample findings (no live API call)",
-  );
-
-  return [
-    {
-      id: "zscaler-mock-jailbreak",
-      severity: "high",
-      title: "MOCK: Jailbreak / policy bypass probe",
-      summary: formatMockNote(
-        `Zscaler AI Red Teaming sample: jailbreak probe against ${app}`,
-      ),
-      atlas: ["AML.T0054"],
-      owasp: ["LLM01"],
-      releaseBlocking: true,
-      mocked: true,
-      mock,
-    },
-    {
-      id: "zscaler-mock-hallucination",
-      severity: "medium",
-      title: "MOCK: Hallucination / misinformation probe",
-      summary: formatMockNote(
-        `Zscaler AI Red Teaming sample: hallucination probe against ${app}`,
-      ),
-      atlas: ["AML.T0048.000"],
-      owasp: ["LLM09"],
-      releaseBlocking: false,
-      mocked: true,
-      mock,
-    },
-    {
-      id: "zscaler-mock-rag-poison",
-      severity: "critical",
-      title: "MOCK: RAG poisoning / indirect injection",
-      summary: formatMockNote(
-        `Zscaler AI Red Teaming sample: RAG poisoning probe against ${app}`,
-      ),
-      atlas: ["AML.T0051.001"],
-      owasp: ["LLM03"],
-      releaseBlocking: true,
-      mocked: true,
-      mock,
-    },
-  ];
-}
-
 export type ZscalerAiRedTeamingProviderOptions = {
   env?: NodeJS.ProcessEnv;
   /** Inject credentials for tests (skips env lookup when set, including empty). */
@@ -163,7 +98,7 @@ export type ZscalerAiRedTeamingProviderOptions = {
 /**
  * Optional Zscaler AI Red Teaming provider stub.
  *
- * - No credentials → MOCK mode (sample ATLAS/OWASP findings, CI-safe).
+ * - No credentials → MissingCredentialError.
  * - Credentials present → `not_wired`: healthCheck reports not wired;
  *   `runProbes` throws `ZscalerAiRedTeamNotWiredError` (never calls Zscaler).
  */
@@ -189,41 +124,19 @@ export function createZscalerAiRedTeamingProvider(
           message: notWiredMessage(config),
         };
       }
-      return {
-        provider: "zscaler",
-        ok: true,
-        mode: "mock",
-        message: formatMockNote(
-          "Zscaler AI Red Teaming provider in MOCK mode (no credentials; sample findings only)",
-        ),
-      };
+      throw new MissingCredentialError("ZSCALER_AI_RED_TEAM_API_KEY");
     },
 
     async runProbes(
-      target: AiRedTeamProbeTarget,
-      frameworks: readonly AiRedTeamFramework[],
+      _target: AiRedTeamProbeTarget,
+      _frameworks: readonly AiRedTeamFramework[],
     ): Promise<AiRedTeamProbeResult> {
       if (hasCreds) {
         // Documented path: refuse live Zscaler calls until a real client is wired.
         throw new ZscalerAiRedTeamNotWiredError();
       }
 
-      const app = target.appLabel ?? target.repository ?? target.endpoint ?? "unknown-target";
-      const findings = filterByFrameworks(createZscalerMockFindings(app), frameworks);
-      const mock = createMockMeta(
-        "zscaler-ai-red-teaming",
-        "Zscaler credentials unavailable; MOCK sample findings (no live API call)",
-      );
-
-      return {
-        provider: "zscaler",
-        mode: "mock",
-        findings,
-        summary: formatMockNote(
-          `Zscaler AI Red Teaming MOCK returned ${findings.length} sample finding(s) for ${app}`,
-        ),
-        mocksUsed: [mock],
-      };
+      throw new MissingCredentialError("ZSCALER_AI_RED_TEAM_API_KEY");
     },
   };
 }

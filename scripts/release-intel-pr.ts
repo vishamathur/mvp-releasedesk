@@ -1,8 +1,7 @@
 #!/usr/bin/env npx tsx
 /**
  * Read a pull request title and changed paths, call grok-release-intel, print JSON.
- * A missing RELEASEDESK_GROK_API_KEY_LEAD yields a MOCK-labelled result and exit 0.
- * Never prints the key.
+ * A missing RELEASEDESK_GROK_API_KEY_LEAD exits 1. Never prints the key or a stand-in result.
  */
 import { pathToFileURL } from "node:url";
 import { releaseIntelForPullRequest } from "../apps/releasedesk/src/lib/release-intel-pr.ts";
@@ -20,9 +19,7 @@ if (isDirectRun()) {
     })
     .catch((err: unknown) => {
       const message = err instanceof Error ? err.message : "release-intel failed";
-      process.stdout.write(
-        `${JSON.stringify({ heading: "release-intel v1", label: "MOCK", mode: "mock", error: message }, null, 2)}\n`,
-      );
-      process.exitCode = 0;
+      process.stderr.write(`${message}\n`);
+      process.exitCode = 1;
     });
 }

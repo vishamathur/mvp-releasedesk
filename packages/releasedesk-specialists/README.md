@@ -15,7 +15,7 @@ npm run typecheck -w @releasedesk/specialists
 npm run build:specialists
 ```
 
-On-demand check with real specialists (Cloud Agents default to **MOCK**):
+On-demand check with real specialists (Cursor dispatch needs exclusive keys):
 
 ```bash
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
@@ -34,8 +34,7 @@ const lead = new LeadOrchestrator({
   runners: createSpecialistRunners({
     workspaceRoot: process.cwd(),
     skipGrok: !process.env.RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST,
-    // Cloud Agents: omit to use MOCK client (CI-safe).
-    // cloudClient: createMockCloudAgentClient(),
+    // Cloud Agents: resolveCloudAgentClient() throws if an exclusive key is missing.
   }),
 });
 
@@ -55,12 +54,12 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 
 | Agent | Behavior |
 | --- | --- |
-| **Change Analyst** | Local `git diff` / `git log` for `base...head`; impact heuristics; release-notes draft. Fixture notes if git empty/unavailable (`MOCK:`). |
+| **Change Analyst** | Local `git diff` / `git log` for `base...head`; impact heuristics; release-notes draft. An empty git range throws. |
 | **Standards** | Loads in-repo Northwind policy markdown; evaluates deviations with evidence (`policy_ref`). |
 | **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
-Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). Without the agent’s key, local analysis still runs; Grok calls are `MOCK:`-labeled.
+Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). A Grok call without that key throws. `skipGrok: true` keeps local analysis and does not call Grok.
 
 ## Cursor Cloud Agents (Milestone 5)
 
@@ -71,47 +70,12 @@ Builder plans three handoffs with clear boundaries, then runs:
 
 Results land on the Builder task output / evidence / `cloudAgentAudit` trail in the shared run context. Lead human **merge** and **release** gates remain pending — Cloud Agents must not merge.
 
-### MOCK vs real client
+### Real Cursor client
 
-| Mode | How to enable | CI |
-| --- | --- | --- |
-| **MOCK** (default) | unset `RELEASEDESK_CLOUD_CLIENT`, or set `=mock` | Passes without Cursor credentials |
-| **real** | `RELEASEDESK_CLOUD_CLIENT=real` **and** exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` | Not required for CI |
-
-Shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` are **never** used.
+There is no mock client and no `RELEASEDESK_CLOUD_CLIENT` switch. `resolveCloudAgentClient` returns the real client when `RELEASEDESK_CURSOR_API_KEY_CODING`, `RELEASEDESK_CURSOR_API_KEY_TESTING`, and `RELEASEDESK_CURSOR_API_KEY_REVIEW` are set. A missing key throws. Shared `CURSOR_API_KEY` / `CURSOR_SERVICE_ACCOUNT_KEY` are never used. CI does not set the exclusive keys and does not launch agents.
 
 ```bash
-# Default / CI — MOCK client (same interface as real)
 npm run test:specialists
-
-# Opt-in live Cursor Cloud Agents (per-agent exclusive keys)
-export RELEASEDESK_CURSOR_API_KEY_CODING=...
-export RELEASEDESK_CURSOR_API_KEY_TESTING=...
-export RELEASEDESK_CURSOR_API_KEY_REVIEW=...
-export RELEASEDESK_CLOUD_CLIENT=real
-npm run check:release -- --repo vishamathur/mvp-releasedesk --json
-```
-
-Programmatic injection (tests):
-
-```ts
-import {
-  createBuilderRunner,
-  createMockCloudAgentClient,
-  createRealCloudAgentClient,
-  resolveCloudAgentClient,
-} from "@releasedesk/specialists";
-
-createBuilderRunner({
-  cloudClient: createMockCloudAgentClient(),
-  cloudMaxAttempts: 2,
-});
-
-// Per-kind exclusive keys:
-resolveCloudAgentClient({
-  mode: "real",
-  env: process.env, // reads RELEASEDESK_CURSOR_API_KEY_CODING|TESTING|REVIEW
-});
 ```
 
 Tracked fields on Builder output:
@@ -139,7 +103,7 @@ packages/releasedesk-specialists/
   fixtures/
   src/
     change-analyst.ts, standards.ts, security.ts, builder.ts
-    cloud/              # MOCK + real Cursor Cloud Agent clients + dispatch
+    cloud/              # real Cursor Cloud Agent client + dispatch
     runners.ts, git-diff.ts, policy-corpus.ts, advisories.ts
     grok.ts, cli.ts, *.test.ts
   README.md
@@ -147,7 +111,7 @@ packages/releasedesk-specialists/
 
 ## Milestone 6 — consumed by Lead
 
-Builder `proposedPrUrl` / `testsPassed` / `pr_ref` evidence feed Lead checkpoint verification and PR tracking in `@releasedesk/lead` (MOCK GitHub or real via `GH_TOKEN`/`GITHUB_TOKEN`). Human merge/release gates remain authoritative — never auto-merge.
+Builder `proposedPrUrl` / `testsPassed` / `pr_ref` evidence feed Lead checkpoint verification and PR tracking in `@releasedesk/lead` (real GitHub via `GH_TOKEN`/`GITHUB_TOKEN`). Human merge/release gates remain authoritative — never auto-merge.
 
 ## Milestone 7 handoff — Release Desk UI
 

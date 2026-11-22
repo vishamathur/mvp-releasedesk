@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MockLabel } from "./MockLabel";
 
 type Intel = {
   mode: string;
-  label: "MOCK" | "LIVE";
+  label: "LIVE";
   keyPresent: boolean;
   mocked: boolean;
   classify: { category: string; confidence: number };
@@ -107,20 +106,15 @@ export function GrokReleaseIntelPanel({ runId }: { runId: string }) {
     }
   }
 
-  const label = intel?.label ?? (keyStatus?.liveReady ? "LIVE?" : "MOCK");
-  const isMock = intel ? intel.mocked || intel.label === "MOCK" : !keyStatus?.liveReady;
+  const label = intel?.label ?? (keyStatus?.liveReady ? "LIVE" : "KEY REQUIRED");
 
   return (
     <section>
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="font-display text-2xl text-rd-ink">Grok API release intel</h2>
-        {isMock ? (
-          <MockLabel>MOCK Grok API</MockLabel>
-        ) : (
-          <span className="rounded-sm bg-rd-brass/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-rd-brass">
-            LIVE Grok API
-          </span>
-        )}
+        <span className="rounded-sm bg-rd-brass/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-rd-brass">
+          {label}
+        </span>
       </div>
       <p className="mt-2 text-sm text-rd-forest/70">
         Coding Cloud Agent ship path — classify / extract / score / summarize. Exclusive key{" "}

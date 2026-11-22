@@ -1,4 +1,4 @@
-import { createMockMeta, formatMockNote } from "@releasedesk/core";
+import { MissingCredentialError } from "@releasedesk/core";
 import type {
   CloudAgentClient,
   CloudAgentDispatchRequest,
@@ -9,7 +9,7 @@ import type {
 /**
  * Real Cursor Cloud Agents API client (v1 public beta).
  * Enabled when exclusive RELEASEDESK_CURSOR_API_KEY_* keys are present
- * and RELEASEDESK_CLOUD_CLIENT=real (see resolveCloudAgentClient).
+ * (see resolveCloudAgentClient). Missing exclusive keys throw.
  * Shared CURSOR_API_KEY / CURSOR_SERVICE_ACCOUNT_KEY are never used.
  *
  * Docs: https://cursor.com/docs/cloud-agent/api/endpoints
@@ -310,22 +310,7 @@ export function createRealCloudAgentClient(
             : request.agentKind === "testing"
               ? "RELEASEDESK_CURSOR_API_KEY_TESTING"
               : "RELEASEDESK_CURSOR_API_KEY_REVIEW";
-        const mock = createMockMeta(
-          "cursor-cloud-agents",
-          `Exclusive ${expected} missing for ${request.agentKind} (shared CURSOR_* never used)`,
-        );
-        return {
-          handoffId: request.handoffId,
-          agentKind: request.agentKind,
-          status: "failed",
-          mocked: true,
-          mock,
-          summary: formatMockNote(
-            `Cannot dispatch ${request.agentKind} Cloud Agent — ${expected} unavailable`,
-          ),
-          attempt,
-          error: `missing ${expected}`,
-        };
+        throw new MissingCredentialError(expected);
       }
 
       try {
@@ -346,33 +331,3 @@ export function createRealCloudAgentClient(
   };
 }
 
-/**
- * Real-client stub factory that falls back to an explicit error result when
- * credentials are missing — used by resolveCloudAgentClient when mode=real
- * was requested without a key (should not happen if resolve is correct).
- */
-export function createUnavailableRealClientStub(
-  expectedEnvVar = "RELEASEDESK_CURSOR_API_KEY_CODING",
-): CloudAgentClient {
-  return {
-    mode: "real",
-    async dispatch(request): Promise<CloudAgentDispatchResult> {
-      const mock = createMockMeta(
-        "cursor-cloud-agents",
-        `Real client requested but exclusive ${expectedEnvVar} missing (shared CURSOR_* never used)`,
-      );
-      return {
-        handoffId: request.handoffId,
-        agentKind: request.agentKind,
-        status: "failed",
-        mocked: true,
-        mock,
-        summary: formatMockNote(
-          `Cannot dispatch real Cloud Agent — ${expectedEnvVar} unavailable`,
-        ),
-        attempt: 1,
-        error: `missing ${expectedEnvVar}`,
-      };
-    },
-  };
-}

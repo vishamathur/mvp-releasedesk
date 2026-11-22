@@ -3,15 +3,15 @@
  *
  * Live key: RELEASEDESK_GROK_API_KEY_LEAD only.
  * Shared XAI_API_KEY / GROK_API_KEY are never consulted.
- * Absent key → MOCK-labeled fallback.
+ * Absent key throws MissingCredentialError. There is no stand-in result.
  *
  * Specialist ship twin: packages/releasedesk-specialists/src/grok-api-intel.ts
  * (Builder exclusive key) — Cursor Coding agent hardens both.
  */
 
-import { GROK_API_KEY_ENV, resolveAgentGrokApiKey } from "@releasedesk/core";
+import { GROK_API_KEY_ENV, MissingCredentialError, resolveAgentGrokApiKey } from "@releasedesk/core";
 
-export type GrokIntelMode = "live" | "mock";
+export type GrokIntelMode = "live";
 
 export type GrokReleaseIntelInput = {
   repository: string;
@@ -30,8 +30,7 @@ export type GrokIntelTrustCheck = {
 
 export type GrokReleaseIntelResult = {
   mode: GrokIntelMode;
-  /** Room-facing chip: MOCK vs LIVE (never claim live without exclusive key). */
-  label: "MOCK" | "LIVE";
+  label: "LIVE";
   /** Whether RELEASEDESK_GROK_API_KEY_LEAD was present for this call. */
   keyPresent: boolean;
   model: string;
@@ -67,7 +66,7 @@ export function describeGrokIntelKeyStatus(env: NodeJS.ProcessEnv = process.env)
     liveReady: keyPresent,
     mockUnlessLive: keyPresent
       ? `LIVE path ready via exclusive ${INTEL_KEY_ENV}`
-      : `MOCK until ${INTEL_KEY_ENV} is set (shared XAI/GROK keys ignored)`,
+      : `${INTEL_KEY_ENV} is not set. Refusing to invent a result.`,
   };
 }
 
@@ -153,46 +152,6 @@ export function trustCheckGrokIntelPayload(payload: {
   return { ok: true, confidence };
 }
 
-function mockIntel(
-  input: GrokReleaseIntelInput,
-  reason: "missing_key" | "upstream" = "missing_key",
-): GrokReleaseIntelResult {
-  const severe = input.findings.filter((f) =>
-    ["high", "critical"].includes((f.severity ?? "").toLowerCase()),
-  );
-  const riskTier: ReleaseIntelRiskTier = severe.length ? "high" : input.findings.length ? "medium" : "low";
-  const blockers = severe.map((finding) => finding.text);
-  const reasonNote =
-    reason === "missing_key"
-      ? `MOCK: no ${INTEL_KEY_ENV} — deterministic fallback`
-      : `MOCK: ${INTEL_KEY_ENV} present but live Grok call failed — deterministic fallback`;
-  return {
-    mode: "mock",
-    label: "MOCK",
-    keyPresent: false,
-    model: MODEL,
-    classify: {
-      category: severe.length ? "security_or_compliance_hold" : "routine_release_candidate",
-      confidence: 0.62,
-    },
-    extract: input.findings.slice(0, 3).map((f) => `Remediate: ${f.text}`),
-    score: {
-      level: severe.length ? "high" : input.findings.length ? "medium" : "low",
-      rationale: severe.length
-        ? "Blocking severity present in findings"
-        : "No high/critical findings in sample",
-    },
-    summarize: `MOCK: ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); ${severe.length} high/critical. Human gates still required.`,
-    riskTier,
-    blockers,
-    trustCheck: trustNotes([
-      reasonNote,
-      "Shared XAI_API_KEY / GROK_API_KEY never used",
-      "Grok never auto-approves merge/release",
-    ]),
-    mocked: true,
-  };
-}
 
 function parseIntelJson(text: string): Partial<GrokReleaseIntelResult> | null {
   const start = text.indexOf("{");
@@ -214,15 +173,9 @@ export async function runGrokReleaseIntel(
 ): Promise<GrokReleaseIntelResult> {
   const env = (opts?.env ?? process.env) as NodeJS.ProcessEnv;
   const apiKey = resolveAgentGrokApiKey(INTEL_ROLE, env);
-  if (!apiKey) return mockIntel(input);
+  if (!apiKey) throw new MissingCredentialError(INTEL_KEY_ENV);
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
-  const markMockFallback = (result: GrokReleaseIntelResult): GrokReleaseIntelResult => ({
-    ...result,
-    label: "MOCK",
-    // Key was present but call fell back — still not LIVE.
-    keyPresent: true,
-  });
   const system =
     "You are Release Desk Grok intel. Return ONLY JSON matching the schema: classify{category,confidence 0-1}, summarize, riskTier low|medium|high, blockers string[], extract string[], score{level,rationale}. Do not approve merges.";
 
@@ -259,9 +212,7 @@ export async function runGrokReleaseIntel(
     });
 
     if (!res.ok) {
-      const fallback = markMockFallback(mockIntel(input, "upstream"));
-      fallback.trustCheck.notes.unshift(`MOCK fallback: Grok HTTP ${res.status}`);
-      return fallback;
+      throw new Error(`Grok request failed (${res.status})`);
     }
 
     const body = (await res.json()) as {
@@ -274,12 +225,8 @@ export async function runGrokReleaseIntel(
       : { ok: false as const, reason: "unparseable JSON" };
 
     if (!trusted.ok || !parsed) {
-      const fallback = markMockFallback(mockIntel(input, "upstream"));
-      fallback.trustCheck.notes.unshift(
-        `MOCK fallback: trust check failed (${"reason" in trusted ? trusted.reason : "parse"})`,
-      );
-      fallback.rawPreview = text.slice(0, 500);
-      return fallback;
+      const reason = "reason" in trusted ? trusted.reason : "parse";
+      throw new Error(`Grok response failed the trust check (${reason})`);
     }
 
     const extract = Array.isArray(parsed.extract)
@@ -319,10 +266,8 @@ export async function runGrokReleaseIntel(
       rawPreview: text.slice(0, 400),
     };
   } catch (err) {
-    const fallback = markMockFallback(mockIntel(input, "upstream"));
-    fallback.trustCheck.notes.unshift(
-      `MOCK fallback: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return fallback;
+    if (err instanceof MissingCredentialError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Grok request failed: ${message}`);
   }
 }

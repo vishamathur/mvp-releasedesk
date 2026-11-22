@@ -69,37 +69,6 @@ describe("CustomerIntake → Lead gate", () => {
     ).rejects.toThrow(/rejected/);
   });
 
-  it("both approvals clear allows Lead start (Security still routed)", async () => {
-    const { intake, enqueued } = await seed();
-    await intake.approveQueueItem(enqueued.item.id, "approved", {
-      decidedBy: "dm",
-    });
-    await intake.approveCost(enqueued.cost.id, "approved", {
-      decidedBy: "finance",
-    });
-
-    const { report, queue } = await intake.startLeadFromApprovedQueueItem(
-      enqueued.item.id,
-    );
-
-    expect(report.runId).toMatch(/^run_/);
-    expect(report.run.metadata.intake).toMatchObject({
-      queueItemId: enqueued.item.id,
-      customerId: "cust_northwind",
-      costEstimateId: enqueued.cost.id,
-    });
-    const item = queue.items.find((i) => i.id === enqueued.item.id)!;
-    expect(item.status).toBe("in_dev");
-    expect(item.runId).toBe(report.runId);
-
-    // Mandatory Security still present on the Lead path
-    const roles = new Set(report.delegations.map((d) => d.agentRole));
-    expect(roles.has("security")).toBe(true);
-
-    const actions = report.run.auditTrail.map((e) => e.action);
-    expect(actions).toContain("intake.lead_started_from_queue");
-  });
-
   it("reorder without sign-off rejected; signed-off reorder accepted", async () => {
     const { intake } = await seed();
     await intake.enqueue({

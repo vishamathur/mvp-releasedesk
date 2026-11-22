@@ -5,7 +5,7 @@ Northwind Bank KYC release readiness. Desk on `:3002`, KYC on `:3000`.
 
 ## Required stack (do not skip)
 1. **Grok Bot host** packs in `grok-bots/bots/*` (Lead + Change Analyst + Standards + Security + Builder). The five bots are teammates in the **Grok Bot app** (created 2026-11-18). Ids are `grokBotAppAgentId` in `grok-bots/registry.json` with `host: "grok-bot-app"` and `status: "created_in_grok_bot_app"`. They are not xAI Agents API ids (`liveBotId` stays null). Do not call `api.x.ai` with them. App bots do not take API keys. See `grok-bots/README.md`. Release Desk Log is a sixth teammate (`definitionId` `log`) that only records handoff copies. It is not a handoff sender or recipient and it does not take an API key.
-2. **Cursor cloud agent** under Builder: Builder launches one cloud agent on the repo. That agent ships the change and opens a pull request. It does not merge. In-process Coding, Testing, and Review clients stay MOCK behind `RELEASEDESK_CLOUD_CLIENT` (never `real` in CI).
+2. **Cursor cloud agent** under Builder: Builder launches one cloud agent on the repo. That agent ships the change and opens a pull request. It does not merge. There is no mock mode. A missing exclusive Cursor key throws a configuration error. CI does not launch cloud agents and does not open pull requests.
 3. **Grok API** called by shipped Desk module `apps/releasedesk/src/lib/grok-release-intel.ts` (**classify + summarize + riskTier + blockers** + trustCheck). Builder copies that result into `build-result.testsSummary`. Security uses `riskTier` and `blockers` at the test gate; an open blocker sends the request back to build.
 
 ## Spine to preserve
@@ -31,9 +31,9 @@ These keys authenticate **application** calls. They are not Grok Bot app credent
 | Testing Cloud Agent | `RELEASEDESK_CURSOR_API_KEY_TESTING` | Cursor Testing dispatch |
 | Review Cloud Agent | `RELEASEDESK_CURSOR_API_KEY_REVIEW` | Cursor Review dispatch |
 
-A live Cursor dispatch needs `RELEASEDESK_CLOUD_CLIENT=real`. CI keeps that value `mock`.
+There is no mock mode and no `RELEASEDESK_CLOUD_CLIENT` switch. A live Cursor dispatch uses the exclusive key for that agent. CI does not hold those keys.
 
-`XAI_API_KEY` / `GROK_API_KEY` / `CURSOR_API_KEY` are **never** used. Absent exclusive key → **MOCK** labeled for that agent. Missing Lead key does not borrow Builder’s key, and the reverse is also true.
+`XAI_API_KEY` / `GROK_API_KEY` / `CURSOR_API_KEY` are **never** used. An absent exclusive key is a configuration error. Missing Lead key does not borrow Builder’s key, and the reverse is also true.
 
 ## Verify
 ```bash

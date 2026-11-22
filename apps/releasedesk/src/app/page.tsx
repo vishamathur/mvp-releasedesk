@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { DeskHeader } from "@/components/DeskHeader";
-import { MockLabel } from "@/components/MockLabel";
 
 export default function HomePage() {
   return (
@@ -36,9 +35,6 @@ export default function HomePage() {
             >
               Open desk
             </Link>
-            <span className="inline-flex items-center gap-2 text-sm text-white/55">
-              <MockLabel>MOCK integrations labeled</MockLabel>
-            </span>
           </div>
         </div>
       </section>
@@ -53,7 +49,7 @@ export default function HomePage() {
             {
               step: "01",
               title: "Handover",
-              body: "Read the request trace at /handoff from RELEASEDESK_LOG_DIR, a local .jsonl file, or Replay (MOCK).",
+              body: "Read the request trace at /handoff from RELEASEDESK_LOG_DIR or a local .jsonl file.",
             },
             {
               step: "02",
@@ -63,7 +59,7 @@ export default function HomePage() {
             {
               step: "03",
               title: "Intel",
-              body: "The release-intel workflow calls the Grok API. Without the Lead key it stays MOCK.",
+              body: "The release-intel workflow calls the Grok API. A missing Lead key is a configuration error.",
             },
           ].map((item) => (
             <li key={item.step}>

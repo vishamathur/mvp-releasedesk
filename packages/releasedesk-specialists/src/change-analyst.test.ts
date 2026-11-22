@@ -52,7 +52,7 @@ describe("ChangeAnalystRunner", () => {
     expect(["low", "medium", "high", "unknown"]).toContain(result.payload.overallImpact);
   });
 
-  it("falls back to fixture synthesis when git range yields nothing useful", async () => {
+  it("refuses to invent a change set when git yields nothing", async () => {
     const runner = createChangeAnalystRunner({
       workspaceRoot: "/tmp/nonexistent-releasedesk-workspace",
       skipGrok: true,
@@ -63,12 +63,6 @@ describe("ChangeAnalystRunner", () => {
       headRef: "HEAD",
     });
 
-    const result = await runner(inv);
-    expect(result.status).toBe("completed");
-    expect(result.summary.startsWith("MOCK:") || result.mocksUsed?.some((m) => m.mocked)).toBe(
-      true,
-    );
-    expect((result.payload.findings as unknown[]).length).toBeGreaterThan(0);
-    expect(result.evidence?.some((e) => e.kind === "artifact" || e.kind === "diff")).toBe(true);
+    await expect(runner(inv)).rejects.toThrow(/Refusing to invent a change set/);
   });
 });

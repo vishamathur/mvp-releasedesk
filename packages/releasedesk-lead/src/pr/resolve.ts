@@ -1,14 +1,11 @@
-import { createMockPrClient, type MockPrClientOptions } from "./mock-client.js";
+import { MissingCredentialError } from "@releasedesk/core";
 import { createRealPrClient, type RealPrClientOptions } from "./real-client.js";
-import type { PrClientMode, PrWorkflowClient } from "./types.js";
+import type { PrWorkflowClient } from "./types.js";
 
 export type ResolvePrClientOptions = {
-  /** Force mode; default resolves from env. */
-  mode?: PrClientMode | "auto";
   token?: string;
-  mock?: MockPrClientOptions;
   real?: Omit<RealPrClientOptions, "token"> & { token?: string };
-  /** Inject a pre-built client (tests). */
+  /** Inject a pre-built client. */
   client?: PrWorkflowClient;
 };
 
@@ -18,49 +15,22 @@ export function resolveGithubToken(env: NodeJS.ProcessEnv = process.env): string
 }
 
 /**
- * Resolve PR workflow client:
- * - Injected `client` wins
- * - `mode: "mock"` → MOCK
- * - `mode: "real"` → real (requires token)
- * - auto (default): real when GH_TOKEN/GITHUB_TOKEN present, else MOCK
+ * Real GitHub PR client only. Missing GH_TOKEN/GITHUB_TOKEN throws.
  */
 export function resolvePrClient(options: ResolvePrClientOptions = {}): PrWorkflowClient {
   if (options.client) return options.client;
 
-  const mode = options.mode ?? "auto";
   const token = options.token ?? options.real?.token ?? resolveGithubToken();
-
-  if (mode === "mock") {
-    return createMockPrClient(options.mock);
+  if (!token) {
+    throw new MissingCredentialError("GH_TOKEN");
   }
-
-  if (mode === "real") {
-    if (!token) {
-      throw new Error(
-        "Real GitHub PR client requested but GH_TOKEN/GITHUB_TOKEN is not set",
-      );
-    }
-    return createRealPrClient({
-      token,
-      ...(options.real?.fetchImpl ? { fetchImpl: options.real.fetchImpl } : {}),
-      ...(options.real?.apiBase ? { apiBase: options.real.apiBase } : {}),
-    });
-  }
-
-  // auto
-  if (token) {
-    return createRealPrClient({
-      token,
-      ...(options.real?.fetchImpl ? { fetchImpl: options.real.fetchImpl } : {}),
-      ...(options.real?.apiBase ? { apiBase: options.real.apiBase } : {}),
-    });
-  }
-  return createMockPrClient(options.mock);
+  return createRealPrClient({
+    token,
+    ...(options.real?.fetchImpl ? { fetchImpl: options.real.fetchImpl } : {}),
+    ...(options.real?.apiBase ? { apiBase: options.real.apiBase } : {}),
+  });
 }
 
-export function describePrClientMode(client: PrWorkflowClient): string {
-  if (client.mode === "mock") {
-    return "MOCK: GitHub PR client (no GH_TOKEN/GITHUB_TOKEN)";
-  }
-  return "Real GitHub PR client (token present)";
+export function describePrClientMode(_client: PrWorkflowClient): string {
+  return "Real GitHub PR client (GH_TOKEN or GITHUB_TOKEN)";
 }

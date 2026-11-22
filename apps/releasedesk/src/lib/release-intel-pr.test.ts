@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MissingCredentialError } from "@releasedesk/core";
 import { releaseIntelForPullRequest } from "./release-intel-pr";
 
 const KEY = "lead-exclusive-test-key";
@@ -11,7 +12,7 @@ function githubResponse(body: unknown, ok = true): Response {
 }
 
 describe("releaseIntelForPullRequest", () => {
-  it("prints a MOCK report when the Lead key is absent and does not call Grok", async () => {
+  it("throws when the Lead key is absent and does not call Grok", async () => {
     const urls: string[] = [];
     const fetchImpl: typeof fetch = async (input) => {
       const url = String(input);
@@ -20,25 +21,18 @@ describe("releaseIntelForPullRequest", () => {
       if (url.includes("/files")) return githubResponse([{ filename: "apps/releasedesk/src/lib/grok-release-intel.ts" }]);
       throw new Error(`unexpected ${url}`);
     };
-    const report = await releaseIntelForPullRequest({
-      fetchImpl,
-      env: {
-        GITHUB_REPOSITORY: "vishamathur/mvp-releasedesk",
-        PR_NUMBER: "36",
-        GITHUB_TOKEN: "ghs_test",
-        XAI_API_KEY: "shared-must-not-use",
-      },
-    });
-    expect(report.heading).toBe("release-intel v1");
-    expect(report.label).toBe("MOCK");
-    expect(report.mode).toBe("mock");
-    expect(report.title).toBe("Add riskTier");
-    expect(report.changedPaths).toEqual(["apps/releasedesk/src/lib/grok-release-intel.ts"]);
-    expect(report.intel.riskTier).toBe("medium");
-    expect(report.intel.blockers).toEqual([]);
+    await expect(
+      releaseIntelForPullRequest({
+        fetchImpl,
+        env: {
+          GITHUB_REPOSITORY: "vishamathur/mvp-releasedesk",
+          PR_NUMBER: "36",
+          GITHUB_TOKEN: "ghs_test",
+          XAI_API_KEY: "shared-must-not-use",
+        },
+      }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
     expect(urls.some((url) => url.includes("api.x.ai"))).toBe(false);
-    expect(JSON.stringify(report)).not.toContain("shared-must-not-use");
-    expect(JSON.stringify(report)).not.toContain("ghs_test");
   });
 
   it("calls Grok with the exclusive key and returns LIVE riskTier and blockers", async () => {
@@ -85,19 +79,19 @@ describe("releaseIntelForPullRequest", () => {
     expect(JSON.stringify(report)).not.toContain(KEY);
   });
 
-  it("stays MOCK and does not throw when GitHub is unreachable", async () => {
+  it("throws when the Lead key is absent even if GitHub is unreachable", async () => {
     const fetchImpl: typeof fetch = async () => {
       throw new Error("network down");
     };
-    const report = await releaseIntelForPullRequest({
-      fetchImpl,
-      env: {
-        GITHUB_REPOSITORY: "vishamathur/mvp-releasedesk",
-        PR_NUMBER: "36",
-        GITHUB_TOKEN: "ghs_test",
-      },
-    });
-    expect(report.label).toBe("MOCK");
-    expect(report.changedPaths).toEqual([]);
+    await expect(
+      releaseIntelForPullRequest({
+        fetchImpl,
+        env: {
+          GITHUB_REPOSITORY: "vishamathur/mvp-releasedesk",
+          PR_NUMBER: "36",
+          GITHUB_TOKEN: "ghs_test",
+        },
+      }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
   });
 });

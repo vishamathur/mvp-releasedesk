@@ -9,19 +9,13 @@ export type {
 } from "./types.js";
 
 export {
-  createMockCloudAgentClient,
-  type MockCloudAgentClientOptions,
-} from "./mock-client.js";
-
-export {
   createRealCloudAgentClient,
-  createUnavailableRealClientStub,
-  resolveCursorApiKey,
   type RealCloudAgentClientOptions,
 } from "./real-client.js";
 
 export {
   resolveCloudAgentClient,
+  resolveCursorApiKey,
   resolveCursorApiKeyForAgent,
   describeCloudClientMode,
   cursorAgentIdForKind,

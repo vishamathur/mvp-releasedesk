@@ -12,7 +12,7 @@ When implementing Builder → Cursor remediation for Release Desk:
 3. Return structured **classify + summarize** + trustCheck.
 4. `trustCheck.humanGateStillRequired` and `trustCheck.noAutoApprove` must stay `true`.
 5. Live path uses **only** `RELEASEDESK_GROK_API_KEY_LEAD`. Shared `XAI_API_KEY` / `GROK_API_KEY` are never consulted.
-6. Without that exclusive key, return MOCK-labeled fallback — never fake a live mode.
+6. Without that exclusive key, throw a configuration error. There is no mock mode and no stand-in result.
 7. Do not auto-approve merge/release from Grok output.
 8. Preserve iteration gate + ATLAS/OWASP merge block behavior.
 9. Keep **Coding + Testing + Review** Cursor cloud agents: Coding ships; Testing verifies; Review reviews; **none merge**.

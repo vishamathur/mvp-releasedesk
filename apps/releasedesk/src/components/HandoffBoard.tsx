@@ -25,7 +25,7 @@ type RequestSummary = {
 
 type ListBody = {
   copy: string;
-  source: "log" | "replay" | "unset";
+  source: "log" | "unset";
   logDirEnv: string;
   requests: RequestSummary[];
   malformed: Array<{ file: string; line: number; error: string }>;
@@ -43,34 +43,31 @@ function laneFor(line: { from: string; event: string }): string {
 }
 
 export function HandoffBoard() {
-  const [replay, setReplay] = useState(false);
   const [list, setList] = useState<ListBody | null>(null);
   const [trace, setTrace] = useState<HandoffTrace | null>(null);
   const [importedLabel, setImportedLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const loadList = useCallback(async (useReplay: boolean) => {
-    const res = await fetch(useReplay ? "/api/handoff?replay=1" : "/api/handoff");
+  const loadList = useCallback(async () => {
+    const res = await fetch("/api/handoff");
     const body = (await res.json()) as ListBody;
     setList(body);
     return body;
   }, []);
 
   useEffect(() => {
-    void loadList(replay).catch((err: unknown) => {
+    void loadList().catch((err: unknown) => {
       setError(err instanceof Error ? err.message : "Could not load the log");
     });
-  }, [loadList, replay]);
+  }, [loadList]);
 
   async function openRequest(requestId: string) {
     setBusy(true);
     setError(null);
     setImportedLabel(null);
     try {
-      const res = await fetch(
-        replay ? `/api/handoff/${requestId}?replay=1` : `/api/handoff/${requestId}`,
-      );
+      const res = await fetch(`/api/handoff/${requestId}`);
       const body = (await res.json()) as TraceBody;
       if (!body.ok) throw new Error(body.error);
       setTrace(body.trace);
@@ -85,9 +82,8 @@ export function HandoffBoard() {
     if (!files || files.length === 0) return;
     setBusy(true);
     setError(null);
-    setReplay(false);
     try {
-      const processes = list?.processes ?? (await loadList(false)).processes;
+      const processes = list?.processes ?? (await loadList()).processes;
       const lines: LogLine[] = [];
       const problems: string[] = [];
       for (const file of Array.from(files)) {
@@ -122,9 +118,7 @@ export function HandoffBoard() {
   const sourceLabel =
     importedLabel != null
       ? `Imported ${importedLabel}`
-      : list?.source === "replay"
-        ? "Replay (MOCK) fixtures"
-        : list?.source === "log"
+      : list?.source === "log"
           ? "Release Desk Log directory"
           : `No log directory. Set ${list?.logDirEnv ?? "RELEASEDESK_LOG_DIR"}.`;
 
@@ -132,17 +126,6 @@ export function HandoffBoard() {
     <section className="space-y-6">
       <p className="max-w-3xl text-rd-forest/80">{list?.copy ?? COPY}</p>
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          className={replay ? "btn-primary" : "btn-secondary"}
-          onClick={() => {
-            setReplay((value) => !value);
-            setImportedLabel(null);
-            setTrace(null);
-          }}
-        >
-          {replay ? "Replay (MOCK) on" : "Replay (MOCK)"}
-        </button>
         <label className="btn-secondary cursor-pointer">
           Import .jsonl
           <input
@@ -159,7 +142,7 @@ export function HandoffBoard() {
         <span className="text-sm text-rd-forest/70">{sourceLabel}</span>
       </div>
 
-      {list?.source === "unset" && importedLabel == null && !replay ? (
+      {list?.source === "unset" && importedLabel == null ? (
         <p className="rounded-2xl border border-dashed border-rd-fog bg-white px-4 py-6 text-sm text-rd-forest/80">
           Desk is empty until <code className="font-mono">{list.logDirEnv}</code> points at the
           Release Desk Log directory, or you import a <code className="font-mono">.jsonl</code> file.

@@ -43,12 +43,10 @@ import {
   type FeatureSignOffItemId,
   type FeatureSignOffRecord,
 } from "./feature-signoff.js";
-import { createDefaultStubRunners } from "./stub-runners.js";
 import { assessReadiness, type ReadinessAssessment } from "./readiness.js";
 import {
   createDmSession,
   receiveDmText,
-  receiveDmVoiceStub,
   replyAsLead,
   type DmSession,
 } from "./dm-interface.js";
@@ -96,7 +94,7 @@ export type StartReleaseCheckInput = {
     releaseTag?: string;
   };
   trigger?: ReleaseCheckTrigger;
-  /** Override default stub runners per role. */
+  /** Real specialist runners. There is no stand-in. */
   runners?: AgentRunnerMap;
   metadata?: Record<string, unknown>;
 };
@@ -119,7 +117,7 @@ export type ReleaseCheckReport = {
 
 export type LeadOrchestratorOptions = {
   store: RunContextStore;
-  /** Defaults to MOCK stub runners for all specialists. */
+  /** Real specialist runners. A missing role throws when that role is dispatched. */
   runners?: AgentRunnerMap;
   /** Max builder → reverify cycles after the analysis wave (default 2 for M6 loops). */
   maxRemediationCycles?: number;
@@ -140,6 +138,19 @@ export type LeadOrchestratorOptions = {
 const ANALYSIS_ROLES: SpecialistRole[] = [...MANDATORY_ANALYSIS_ROLES];
 assertMandatoryAnalysisRoles(ANALYSIS_ROLES);
 
+function unsetPrClient(): PrWorkflowClient {
+  const refuse = () => {
+    throw new Error("PR workflow is off. Pass enablePrWorkflow and GH_TOKEN or GITHUB_TOKEN to open a pull request.");
+  };
+  return {
+    mode: "real",
+    openPullRequest: refuse,
+    getPullRequest: refuse,
+    getPullRequestStatus: refuse,
+    mergePullRequest: refuse,
+  };
+}
+
 const ROLE_TASK_NAME: Record<SpecialistRole, string> = {
   change_analyst: "Change analysis",
   standards: "Standards compliance",
@@ -159,15 +170,14 @@ export class LeadOrchestrator {
 
   constructor(options: LeadOrchestratorOptions) {
     this.store = options.store;
-    this.runners = {
-      ...createDefaultStubRunners(),
-      ...options.runners,
-    };
+    this.runners = { ...(options.runners ?? {}) } as Record<SpecialistRole, AgentRunner>;
     this.maxRemediationCycles = options.maxRemediationCycles ?? 2;
     this.defaultMaxAttempts = options.defaultMaxAttempts ?? 2;
     this.enableRemediation = options.enableRemediation ?? true;
-    this.enablePrWorkflow = options.enablePrWorkflow ?? true;
-    this.prClient = resolvePrClient(options.prClient);
+    this.enablePrWorkflow = options.enablePrWorkflow ?? false;
+    this.prClient = this.enablePrWorkflow
+      ? resolvePrClient(options.prClient)
+      : (options.prClient?.client ?? unsetPrClient());
     this.dmSession = createDmSession();
   }
 
@@ -177,10 +187,9 @@ export class LeadOrchestrator {
     return this.dmSession;
   }
 
-  /** Voice is MOCK-only in M3. */
-  handleDmVoice(transcript: string): DmSession {
-    this.dmSession = receiveDmVoiceStub(this.dmSession, transcript);
-    return this.dmSession;
+  /** Voice is not a Release Desk channel. */
+  handleDmVoice(_transcript: string): DmSession {
+    throw new Error("Voice is not available. Use text.");
   }
 
   getDmSession(): DmSession {
@@ -1465,6 +1474,9 @@ export class LeadOrchestrator {
           const snapshot = await this.requireRun(runId);
           const attempt = started.retry?.attempt ?? 0;
           const runner = runners[role];
+          if (!runner) {
+            throw new Error(`No specialist runner for ${role}. There is no stand-in runner.`);
+          }
           let result: AgentRunResult;
           try {
             result = await runner({

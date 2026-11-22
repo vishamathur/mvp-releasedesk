@@ -26,23 +26,18 @@ KYC demo remains on port 3000 (`npm run dev`).
 | --- | --- |
 | `/agents` | Grok Bot roster from `GET /api/bots` |
 | `/desk` | Bot navigation and the handover trace |
-| `/handoff` | PID-ER and PID-NC trace (Log directory or Replay MOCK) |
+| `/handoff` | PID-ER and PID-NC trace from the Log directory or an imported `.jsonl` file |
 
 ## Demo script
 
 1. Open [http://localhost:3002/handoff](http://localhost:3002/handoff).
-2. Turn on Replay (MOCK), or set `RELEASEDESK_LOG_DIR`, or import a `.jsonl` file in the browser.
+2. Set `RELEASEDESK_LOG_DIR`, or import a `.jsonl` file in the browser. There is no Replay.
 3. Open a request and read the lanes, gate decisions, and anomalies.
 4. Open `/agents` for each bot's persona, skills, and routines.
 
-## MOCK integrations (labeled in UI)
+## Credentials
 
-| Integration | Behavior |
-| --- | --- |
-| Specialist runners (default UI path) | Lead stub runners (`MOCK:` summaries) unless you wire real specialists via CLI |
-| GitHub PR client | MOCK unless `GH_TOKEN` / `GITHUB_TOKEN` is set (UI uses MOCK client) |
-| Cursor Cloud Agents | Appear only when Builder remediates; MOCK by default |
-| Voice channel | Stub acknowledgment only |
+There is no mock mode. The Desk does not launch Cursor agents or open pull requests. A missing exclusive key throws a configuration error in the client that needs it. Voice is not a channel.
 
 ## Layout
 
@@ -60,7 +55,7 @@ API surface:
 - `GET /api/bots` — Grok Bot roster
 - `GET /api/grok/release-intel` — key presence only
 - `POST /api/grok/release-intel` — stateless classify/summarize (no run id)
-- `GET /api/handoff` — list requests from `RELEASEDESK_LOG_DIR`, or Replay (MOCK) fixtures
+- `GET /api/handoff` — list requests from `RELEASEDESK_LOG_DIR`
 - `GET /api/handoff/:requestId` — the Log trace for one request
 
-Handover specs are `grok-bots/processes/pid-er.v1.json`, `grok-bots/processes/pid-nc.v1.json`, and `grok-bots/protocols/handoff.v1.json`. The desk runs them with mock teammates. It does not set `RELEASEDESK_CLOUD_CLIENT=real` and it does not call Cursor. `apps/intake` is not part of this app.
+Handover specs are `grok-bots/processes/pid-er.v1.json`, `grok-bots/processes/pid-nc.v1.json`, and `grok-bots/protocols/handoff.v1.json`. The desk reads the log. It does not call Cursor. `apps/intake` is not part of this app.

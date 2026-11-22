@@ -1,7 +1,6 @@
 import {
-  createMockMeta,
-  formatMockNote,
   GROK_API_KEY_ENV,
+  MissingCredentialError,
   resolveAgentGrokApiKey,
   type GrokKeyedAgentRole,
   type MockMeta,
@@ -41,7 +40,7 @@ export function resolveGrokApiKey(_env: NodeJS.ProcessEnv = process.env): string
 
 export async function grokComplete(
   prompt: string,
-  opts: GrokClientOptions & { fallback: string } = { fallback: "" },
+  opts: GrokClientOptions & { fallback?: string } = {},
 ): Promise<GrokCompleteResult> {
   const env = opts.env ?? process.env;
   const apiKey =
@@ -49,18 +48,10 @@ export async function grokComplete(
     (opts.agentRole !== undefined ? resolveGrokApiKeyForAgent(opts.agentRole, env) : undefined);
 
   if (!apiKey) {
-    const envHint = opts.agentRole
-      ? `${GROK_API_KEY_ENV[opts.agentRole]} missing for ${opts.agentRole}`
-      : "agentRole required — exclusive RELEASEDESK_GROK_API_KEY_* only";
-    const mock = createMockMeta(
-      "grok-api",
-      `${envHint}; local heuristic (shared XAI_API_KEY / GROK_API_KEY never used)`,
-    );
-    return {
-      text: formatMockNote(opts.fallback || "Grok enrichment skipped (no per-agent API key)"),
-      mocked: true,
-      mock,
-    };
+    const envVar = opts.agentRole
+      ? GROK_API_KEY_ENV[opts.agentRole]
+      : "RELEASEDESK_GROK_API_KEY_*";
+    throw new MissingCredentialError(envVar);
   }
 
   const endpoint = opts.endpoint ?? "https://api.x.ai/v1/chat/completions";
@@ -89,12 +80,7 @@ export async function grokComplete(
     });
 
     if (!res.ok) {
-      const mock = createMockMeta("grok-api", `Grok HTTP ${res.status}; falling back to local narrative`);
-      return {
-        text: formatMockNote(opts.fallback || `Grok request failed (${res.status})`),
-        mocked: true,
-        mock,
-      };
+      throw new Error(`Grok request failed (${res.status})`);
     }
 
     const body = (await res.json()) as {
@@ -102,21 +88,12 @@ export async function grokComplete(
     };
     const text = body.choices?.[0]?.message?.content?.trim();
     if (!text) {
-      const mock = createMockMeta("grok-api", "Empty Grok response; local fallback");
-      return {
-        text: formatMockNote(opts.fallback || "Empty Grok response"),
-        mocked: true,
-        mock,
-      };
+      throw new Error("Empty Grok response");
     }
     return { text, mocked: false };
   } catch (err) {
+    if (err instanceof MissingCredentialError) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    const mock = createMockMeta("grok-api", `Grok error: ${message}`);
-    return {
-      text: formatMockNote(opts.fallback || `Grok error: ${message}`),
-      mocked: true,
-      mock,
-    };
+    throw new Error(`Grok request failed: ${message}`);
   }
 }

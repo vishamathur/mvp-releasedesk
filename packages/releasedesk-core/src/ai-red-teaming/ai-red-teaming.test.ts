@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMockNote } from "../mock.js";
+import { MissingCredentialError } from "../config-error.js";
 import {
   AI_RED_TEAM_PROVIDER_ENV,
   createCustomAiRedTeamingProvider,
@@ -64,72 +64,22 @@ describe("resolveAiRedTeamingProvider factory", () => {
 });
 
 describe("custom provider", () => {
-  it("healthCheck is ok in mock mode", async () => {
+  it("refuses sample probes when no live engine is attached", async () => {
     const provider = createCustomAiRedTeamingProvider();
-    const health = await provider.healthCheck();
-    expect(health.ok).toBe(true);
-    expect(health.mode).toBe("mock");
-    expect(health.provider).toBe("custom");
-    expect(isMockNote(health.message)).toBe(true);
-  });
-
-  it("runProbes returns ATLAS/OWASP-mapped findings", async () => {
-    const provider = createCustomAiRedTeamingProvider();
-    const result = await provider.runProbes(target, frameworks);
-    expect(result.provider).toBe("custom");
-    expect(result.mode).toBe("mock");
-    expect(result.findings.length).toBeGreaterThan(0);
-    for (const f of result.findings) {
-      expect(f.atlas.length + f.owasp.length).toBeGreaterThan(0);
-      expect(isMockNote(f.summary)).toBe(true);
-    }
+    await expect(provider.healthCheck()).rejects.toBeInstanceOf(MissingCredentialError);
+    await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
+      MissingCredentialError,
+    );
   });
 });
 
-describe("zscaler provider MOCK without credentials", () => {
-  it("healthCheck reports MOCK when no credentials", async () => {
+describe("zscaler provider without credentials", () => {
+  it("throws instead of inventing findings", async () => {
     const provider = createZscalerAiRedTeamingProvider({ env: {}, apiKey: null });
-    const health = await provider.healthCheck();
-    expect(health.ok).toBe(true);
-    expect(health.mode).toBe("mock");
-    expect(health.provider).toBe("zscaler");
-    expect(isMockNote(health.message)).toBe(true);
-  });
-
-  it("runProbes returns MOCK-labeled sample findings mapped to ATLAS/OWASP", async () => {
-    const provider = createZscalerAiRedTeamingProvider({ env: {}, apiKey: null });
-    const result = await provider.runProbes(target, frameworks);
-    expect(result.provider).toBe("zscaler");
-    expect(result.mode).toBe("mock");
-    expect(result.findings.length).toBeGreaterThan(0);
-    expect(isMockNote(result.summary)).toBe(true);
-    expect(result.mocksUsed.some((m) => m.mockLabel === "zscaler-ai-red-teaming")).toBe(
-      true,
+    await expect(provider.healthCheck()).rejects.toBeInstanceOf(MissingCredentialError);
+    await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
+      MissingCredentialError,
     );
-
-    for (const f of result.findings) {
-      expect(f.mocked).toBe(true);
-      expect(f.title.startsWith("MOCK:") || isMockNote(f.summary)).toBe(true);
-      expect(isMockNote(f.summary)).toBe(true);
-      expect(f.atlas.length).toBeGreaterThan(0);
-      expect(f.owasp.length).toBeGreaterThan(0);
-    }
-
-    const atlasIds = result.findings.flatMap((f) => f.atlas);
-    const owaspIds = result.findings.flatMap((f) => f.owasp);
-    expect(atlasIds.some((id) => id.startsWith("AML."))).toBe(true);
-    expect(owaspIds.some((id) => id.startsWith("LLM"))).toBe(true);
-  });
-
-  it("factory zscaler path without credentials yields MOCK findings", async () => {
-    const provider = resolveAiRedTeamingProvider({
-      env: { [AI_RED_TEAM_PROVIDER_ENV]: "zscaler" },
-      zscalerApiKey: null,
-    });
-    expect(provider.name).toBe("zscaler");
-    const result = await provider.runProbes(target, ["atlas"]);
-    expect(result.mode).toBe("mock");
-    expect(result.findings.every((f) => f.mocked)).toBe(true);
   });
 });
 

@@ -16,7 +16,7 @@
       "Does not merge or force-push",
       "Does not set a gate without Vishal's reply",
       "Does not invent a run id, branch, or pull request",
-      "Does not set RELEASEDESK_CLOUD_CLIENT=real in CI"
+      "There is no mock mode. A missing exclusive key is a configuration error"
     ]
   },
   "skills": [

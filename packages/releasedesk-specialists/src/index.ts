@@ -21,9 +21,7 @@ export {
 export type { SpecialistRunnerOptions } from "./options.js";
 
 export {
-  createMockCloudAgentClient,
   createRealCloudAgentClient,
-  createUnavailableRealClientStub,
   resolveCloudAgentClient,
   resolveCursorApiKey,
   resolveCursorApiKeyForAgent,
@@ -38,7 +36,6 @@ export {
   type CloudDispatchAttempt,
   type CloudPipelineOptions,
   type CloudPipelineResult,
-  type MockCloudAgentClientOptions,
   type RealCloudAgentClientOptions,
   type ResolveCloudAgentClientOptions,
 } from "./cloud/index.js";
