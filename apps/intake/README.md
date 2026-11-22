@@ -30,4 +30,4 @@ Requires PHP 8.1+, ext-curl, Apache mod_rewrite/mod_headers.
 Customer text is fenced as untrusted; the model can only draft fields or recommend. If the API fails, chat says so and the finance model falls back to keyword mapping.
 
 ## Tests
-`bash tests/run-tests.sh` — 15 unit + 15 integration checks, xAI mocked.
+`bash tests/run-tests.sh` — unit checks for catalogue math, policy, validation, and handoff, plus HTTP checks that do not call Grok. There is no mock mode. A missing `GROK_API_KEY` is a configuration error.

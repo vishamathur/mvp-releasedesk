@@ -10,7 +10,6 @@ function app_config(): array {
     $cfg = is_file($file) ? (require $file) : null;
     if (!is_array($cfg)) return $cfg = [];
     foreach (['GROK_API_KEY', 'LEAD_HMAC_SECRET', 'LEAD_WEBHOOK_KEY'] as $k) if (getenv($k)) $cfg[$k] = getenv($k);
-    if (empty($cfg['GROK_API_KEY']) && getenv('XAI_API_KEY')) $cfg['GROK_API_KEY'] = getenv('XAI_API_KEY');
     $cfg['DATA_DIR'] = rtrim($cfg['DATA_DIR'] ?? (__DIR__ . '/data'), '/');
     $cfg['CATALOGUE_FILE'] = $cfg['CATALOGUE_FILE'] ?? (__DIR__ . '/catalogue.example.json');
     foreach (['', '/submissions', '/status', '/outbox', '/ratelimit', '/sent'] as $d) if (!is_dir($cfg['DATA_DIR'] . $d)) @mkdir($cfg['DATA_DIR'] . $d, 0700, true);

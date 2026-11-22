@@ -49,11 +49,17 @@ function api_chat(array $cfg): void {
     $route = in_array($body['route'] ?? '', ['new_customer', 'er'], true) ? $body['route'] : 'unknown';
     $cat = catalogue_load($cfg);
     try {
-        if (($cfg['GROK_MOCK'] ?? '0') === '1') throw new RuntimeException('grok_mock_mode');
+        if (trim((string)($cfg['GROK_API_KEY'] ?? '')) === '') {
+            throw new RuntimeException('GROK_API_KEY is not set. Refusing to invent a chat reply.');
+        }
         $out = grok_json($cfg, chat_system_prompt($cat), "Selected option: $route\n<visitor_input>\n" . implode("\n", $msgs) . "\n</visitor_input>", 'intake_chat', chat_schema(array_keys($cat['byId'])), 900);
     } catch (Throwable $e) {
-        app_log($cfg, ['event' => 'chat_fallback', 'reason' => substr($e->getMessage(), 0, 80)]);
-        app_respond(200, ['ok' => true, 'fallback' => true, 'reply' => 'The assistant is unavailable right now. Please fill in the form below; Release Desk Lead will pick it up.', 'route' => $route, 'draft' => (object)[], 'missingFields' => [], 'readyToSubmit' => false, 'suggestedServices' => []]);
+        $why = $e->getMessage();
+        if (!str_contains($why, 'Refusing to invent')) {
+            $why = 'Grok chat failed (' . $why . '). Refusing to invent a chat reply.';
+        }
+        app_log($cfg, ['event' => 'chat_unavailable', 'reason' => substr($why, 0, 80)]);
+        app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $why]);
         return;
     }
     $draft = [];
@@ -62,6 +68,6 @@ function api_chat(array $cfg): void {
     if (isset($draft['urgency']) && !array_key_exists($draft['urgency'], FIN_URGENCY)) unset($draft['urgency']);
     $services = [];
     foreach ($out['suggestedServiceIds'] as $id) if (isset($cat['byId'][$id])) $services[] = ['id' => $id, 'name' => $cat['byId'][$id]['name'], 'unitPriceInr' => $cat['byId'][$id]['unitPriceInr'], 'unit' => $cat['byId'][$id]['unit']];
-    app_respond(200, ['ok' => true, 'fallback' => false, 'reply' => app_clean($out['reply'], 1200), 'route' => $out['route'], 'draft' => (object)$draft,
+    app_respond(200, ['ok' => true, 'reply' => app_clean($out['reply'], 1200), 'route' => $out['route'], 'draft' => (object)$draft,
         'missingFields' => array_values(array_intersect($out['missingFields'], CHAT_DRAFT_FIELDS)), 'readyToSubmit' => (bool)$out['readyToSubmit'], 'suggestedServices' => $services]);
 }

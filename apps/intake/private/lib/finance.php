@@ -4,9 +4,9 @@ declare(strict_types=1);
  * Finance estimation model.
  *  (a) finance_estimate(): deterministic cost from catalogue lines x qty x risk x urgency + contingency.
  *  (b) finance_assess(): Grok maps free text to catalogue lines and writes a recommendation;
- *      the deterministic policy is a floor Grok can only make STRICTER. Falls back to keyword
- *      mapping + policy when the API fails. Output is a RECOMMENDATION for Change Analyst's
- *      finance-approval gate. It never approves anything.
+ *      the deterministic policy is a floor Grok can only make STRICTER. A missing key or a
+ *      failed call throws. There is no stand-in mapping. Output is a RECOMMENDATION for
+ *      Change Analyst's finance-approval gate. It never approves anything.
  */
 
 const FIN_URGENCY = ['standard' => 1.00, 'expedited' => 1.15, 'critical' => 1.30];
@@ -72,26 +72,6 @@ function finance_policy(string $pid, array $est, string $confidence, ?int $custo
     return $reasons ? ['review', $reasons] : ['approve-recommended', ['Small, low-risk enhancement within the catalogue and threshold.']];
 }
 
-/** Keyword fallback mapper (no network). */
-function finance_keyword_lines(string $pid, string $text): array {
-    $t = strtolower($text); $lines = [];
-    $add = function (string $id, int $q = 1) use (&$lines) { foreach ($lines as $l) if ($l['serviceId'] === $id) return; $lines[] = ['serviceId' => $id, 'qty' => $q]; };
-    if (preg_match('/\bkyc\b|know your customer|onboard/', $t)) $add('SVC-KYC');
-    if (preg_match('/\bapi\b|integrat|webhook|connect to/', $t)) $add('SVC-API');
-    if (preg_match('/migrat|import data|data move/', $t)) $add('SVC-DATA');
-    if (preg_match('/regulat|compliance|\brbi\b|sebi|audit requirement/', $t)) $add('SVC-REG');
-    if (preg_match('/security|pen ?test|vulnerab/', $t)) $add('SVC-SEC');
-    if (preg_match('/support|retainer|maintenance/', $t)) $add('SVC-RET');
-    if (preg_match('/redesign|new screens?|journey|large/', $t)) $add('SVC-UI-L');
-    elseif (preg_match('/\b(label|text|typo|colou?r|copy|minor|small)\b/', $t)) $add('SVC-UI-S');
-    elseif (preg_match('/\b(ui|screen|page|form|button|field|dashboard)\b/', $t)) $add('SVC-UI-M');
-    $confidence = $lines ? 'medium' : 'low';
-    if ($pid === 'PID-NC') { array_unshift($lines, ['serviceId' => 'SVC-DISC', 'qty' => 1]); $add('SVC-SEC'); }
-    if (!$lines) $add('SVC-UI-M');
-    $add('SVC-REL');
-    return [$lines, $confidence];
-}
-
 function finance_schema(array $ids): array {
     return [
         'type' => 'object', 'additionalProperties' => false,
@@ -124,7 +104,9 @@ function finance_assess(array $cfg, array $req): array {
         $lines = $req['lines']; $confidence = 'high'; $source = 'explicit-lines';
     } else {
         try {
-            if (($cfg['GROK_MOCK'] ?? '0') === '1') throw new RuntimeException('grok_mock_mode');
+            if (trim((string)($cfg['GROK_API_KEY'] ?? '')) === '') {
+                throw new RuntimeException('GROK_API_KEY is not set. Refusing to invent a finance recommendation.');
+            }
             $menu = array_map(fn($s) => "{$s['id']} | {$s['name']} | per {$s['unit']} | INR {$s['unitPriceInr']} | {$s['description']}", array_values($cat['byId']));
             $system = "You are the finance estimation assistant for Release Desk (software delivery). Map the request to catalogue services and quantities, then give a finance-approval RECOMMENDATION for a human Finance partner. You never approve.\n"
                 . "Use only these catalogue ids (EXAMPLE prices, INR, excl. GST):\n" . implode("\n", $menu) . "\n"
@@ -136,9 +118,11 @@ function finance_assess(array $cfg, array $req): array {
             $confidence = $grok['mappingConfidence'];
             if (!$lines) throw new RuntimeException('grok_no_valid_lines');
         } catch (Throwable $e) {
-            $error = $e->getMessage();
-            [$lines, $confidence] = finance_keyword_lines($pid, (string)$req['text']);
-            $source = 'deterministic-fallback';
+            $why = $e->getMessage();
+            if (!str_contains($why, 'Refusing to invent')) {
+                $why = 'Grok finance assessment failed (' . $why . '). Refusing to invent a finance recommendation.';
+            }
+            throw new RuntimeException($why);
         }
     }
     $est = finance_estimate($cfg, $lines, $urgency, $confidence);
@@ -178,8 +162,13 @@ function api_finance_estimate(array $cfg): void {
     if (!$pid || ($text === '' && empty($body['lines']))) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['pid', 'text']]); return; }
     $lines = [];
     foreach (array_slice((array)($body['lines'] ?? []), 0, 8) as $l) if (is_array($l)) $lines[] = ['serviceId' => app_clean($l['serviceId'] ?? '', 20), 'qty' => (int)($l['qty'] ?? 1)];
-    $res = finance_assess($cfg, ['pid' => $pid, 'text' => $text, 'urgency' => app_clean($body['urgency'] ?? 'standard', 20),
-        'customerBudgetInr' => $body['customerBudgetInr'] ?? null, 'lines' => $lines]);
+    try {
+        $res = finance_assess($cfg, ['pid' => $pid, 'text' => $text, 'urgency' => app_clean($body['urgency'] ?? 'standard', 20),
+            'customerBudgetInr' => $body['customerBudgetInr'] ?? null, 'lines' => $lines]);
+    } catch (RuntimeException $e) {
+        app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
+        return;
+    }
     $rid = app_clean($body['requestId'] ?? '', 40);
     if (app_valid_request_id($rid)) {
         app_write_json($cfg['DATA_DIR'] . "/submissions/$rid.finance-" . gmdate('YmdHis') . '.json', $res);

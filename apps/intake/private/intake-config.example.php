@@ -1,11 +1,11 @@
 <?php
 // Copy to ~/intake-private/intake-config.php (OUTSIDE public_html), chmod 600. Never commit the real file.
-// Environment variables override: GROK_API_KEY (or XAI_API_KEY), LEAD_HMAC_SECRET, LEAD_WEBHOOK_KEY.
+// Environment variables override: GROK_API_KEY, LEAD_HMAC_SECRET, LEAD_WEBHOOK_KEY.
+// There is no mock mode. A missing GROK_API_KEY is a configuration error. XAI_API_KEY is not a fallback.
 return [
     'GROK_API_KEY'          => '',                      // xAI key; server only
     'GROK_MODEL'            => 'grok-4.20-0309-non-reasoning',   // fast (~1-2 s); 'grok-4.3' or 'grok-4.7' are slower (~15 s)
     'GROK_BASE_URL'         => 'https://api.x.ai/v1',
-    'GROK_MOCK'             => '0',                     // '1' = never call xAI (testing)
     'ALLOWED_ORIGINS'       => 'https://intake.vishalmathur.org',
     'PUBLIC_HOST'           => 'intake.vishalmathur.org',
     'RATE_LIMIT_MAX'        => 5,                       // submissions per IP per window

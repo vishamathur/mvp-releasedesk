@@ -1,5 +1,5 @@
 <?php
-// Pure unit tests: catalogue math, policy, fallback, validation, handoff shape, status lifecycle.
+// Pure unit tests: catalogue math, policy, validation, handoff shape, status lifecycle.
 declare(strict_types=1);
 $priv = getenv('PRIVATE_DIR') ?: __DIR__ . '/../intake-private';
 putenv('INTAKE_CONFIG=' . getenv('UNIT_CONFIG'));
@@ -38,16 +38,14 @@ t('policy: NC always >= review; high risk -> review; over ceiling -> reject; tin
     ok(finance_policy('PID-ER', finance_estimate($cfg, [['serviceId' => 'SVC-UI-M', 'qty' => 1]]), 'high', 10000)[0] === 'reject-suggested', 'budget');
     ok(finance_policy('PID-ER', finance_estimate($cfg, []), 'high', null)[0] === 'reject-suggested', 'empty');
 });
-t('fallback mapper: keywords + NC defaults + always release', function () {
-    [$l, $c] = finance_keyword_lines('PID-ER', 'Please integrate the KYC API and fix a typo label');
-    $ids = array_column($l, 'serviceId'); ok($ids === ['SVC-KYC', 'SVC-API', 'SVC-UI-S', 'SVC-REL'], json_encode($ids)); ok($c === 'medium', $c);
-    [$l, $c] = finance_keyword_lines('PID-NC', 'We want a platform'); $ids = array_column($l, 'serviceId');
-    ok($ids === ['SVC-DISC', 'SVC-SEC', 'SVC-REL'] && $c === 'low', json_encode([$ids, $c]));
-});
-t('assess: Grok down -> deterministic-fallback, still a recommendation, never approves for NC', function () use ($cfg) {
-    $a = finance_assess(['GROK_API_KEY' => ''] + $cfg, ['pid' => 'PID-NC', 'text' => 'new KYC onboarding', 'urgency' => 'standard']);
-    ok($a['source'] === 'deterministic-fallback' && $a['grokError'] === 'grok_key_missing', $a['source']);
-    ok(in_array($a['recommendation'], ['review', 'reject-suggested'], true), $a['recommendation']); ok($a['gate']['decidedBy'] === null && $a['gate']['owner'] === 'change-analyst', 'gate');
+t('assess: missing GROK_API_KEY throws and does not invent a recommendation', function () use ($cfg) {
+    $threw = false;
+    try {
+        finance_assess(['GROK_API_KEY' => ''] + $cfg, ['pid' => 'PID-NC', 'text' => 'new KYC onboarding', 'urgency' => 'standard']);
+    } catch (RuntimeException $e) {
+        $threw = str_contains($e->getMessage(), 'GROK_API_KEY is not set');
+    }
+    ok($threw, 'expected a clear configuration error');
 });
 t('assess: explicit lines from Lead bypass Grok', function () use ($cfg) {
     $a = finance_assess($cfg, ['pid' => 'PID-ER', 'text' => '', 'lines' => [['serviceId' => 'SVC-SEC', 'qty' => 1]]]);
@@ -68,7 +66,7 @@ t('handoff: proposed handoff passes validate-handoff (ER -> estimation, NC -> di
     foreach (['er' => ['PID-ER', 'estimation'], 'new_customer' => ['PID-NC', 'discovery']] as $route => [$pid, $stage]) {
         $d = intake_validate(['route' => $route, 'legalName' => 'Acme Pvt Ltd', 'jurisdiction' => 'India', 'intendedProduct' => 'Lending', 'sponsor' => 'R. Rao, CFO'] + $base)[1];
         $rid = 'REQ-20261122-000123';
-        $fin = finance_assess(['GROK_API_KEY' => ''] + $cfg, ['pid' => $pid, 'text' => $d['description'], 'urgency' => 'standard']);
+        $fin = finance_assess(['GROK_API_KEY' => ''] + $cfg, ['pid' => $pid, 'text' => $d['description'], 'urgency' => 'standard', 'lines' => [['serviceId' => 'SVC-UI-S', 'qty' => 1]]]);
         $card = intake_build_card($cfg, $rid, $d, $fin, '2026-11-22T12:00:00Z');
         $h = $card['proposedHandoff'];
         ok(handoff_v1_validate($h, 'lead') === [], json_encode(handoff_v1_validate($h, 'lead')));

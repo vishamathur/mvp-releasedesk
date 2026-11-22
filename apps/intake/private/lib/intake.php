@@ -161,7 +161,12 @@ function api_intake(array $cfg): void {
     $requestId = app_request_id();
     for ($i = 0; $i < 5 && is_file($cfg['DATA_DIR'] . "/submissions/$requestId.json"); $i++) $requestId = app_request_id();
     $submittedAt = gmdate('Y-m-d\TH:i:s\Z');
-    $fin = finance_assess($cfg, ['pid' => intake_pid($d['route']), 'text' => $d['title'] . "\n" . $d['description'], 'urgency' => $d['urgency'], 'customerBudgetInr' => $d['customerBudgetInr']]);
+    try {
+        $fin = finance_assess($cfg, ['pid' => intake_pid($d['route']), 'text' => $d['title'] . "\n" . $d['description'], 'urgency' => $d['urgency'], 'customerBudgetInr' => $d['customerBudgetInr']]);
+    } catch (RuntimeException $e) {
+        app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
+        return;
+    }
     $card = intake_build_card($cfg, $requestId, $d, $fin, $submittedAt);
     if (!app_write_json($cfg['DATA_DIR'] . "/submissions/$requestId.json", $card)) throw new RuntimeException('store_failed');
     $token = status_create($cfg, $requestId, $card['pid']);
