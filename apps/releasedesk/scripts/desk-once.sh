@@ -9,8 +9,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT"
 
 holders="$(pgrep -f "next dev --port ${PORT}" 2>/dev/null || true)"
-if curl -sS -o /dev/null --connect-timeout 1 "http://127.0.0.1:${PORT}/control" 2>/dev/null; then
-  echo "WARN: Desk already responding on :${PORT} (GET /control ok)."
+if curl -sS -o /dev/null --connect-timeout 1 "http://127.0.0.1:${PORT}/handoff" 2>/dev/null; then
+  echo "WARN: Desk already responding on :${PORT} (GET /handoff ok)."
   echo "Do not run a second \`npm run desk\` on the same port — that causes: listen EADDRINUSE ::: ${PORT}"
   echo "Use the existing process/tmux session, or set PORT to a free port (e.g. PORT=3003 npm run desk)."
   if [[ -n "$holders" ]]; then

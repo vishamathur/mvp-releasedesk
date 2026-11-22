@@ -65,5 +65,4 @@ flowchart TB
 
 - Diagram: [sdlc/release-desk-handover-diagram.png](./sdlc/release-desk-handover-diagram.png)
 - Processes: `grok-bots/processes/pid-er.v1.json`, `pid-nc.v1.json` (version 1.1.0)
-- Gate detail: [demo-architecture-diagram.md](./demo-architecture-diagram.md)
 - Brief slide wording: [spacexai-two-slides.md](./spacexai-two-slides.md)

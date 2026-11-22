@@ -17,30 +17,24 @@ export default function HomePage() {
             Release Desk
           </p>
           <h1 className="animate-rise-delay mt-6 max-w-xl text-2xl font-medium text-white/88 sm:text-3xl">
-            Enterprise SDLC control plane for multi-customer IT services.
+            Six Grok Bot teammates run the release. Desk only shows the log.
           </h1>
           <p className="animate-rise-delay mt-4 max-w-lg text-base text-white/65">
-            Grok Bots → Cursor Coding → Grok API intel, with mandatory Security/ATLAS, iteration
-            gate, and human merge/release. Northwind KYC is the worked example.
+            Lead writes pid.state. Change Analyst, Security, and Builder raise the human gates.
+            Northwind KYC is the worked example.
           </p>
           <div className="animate-rise-late mt-10 flex flex-wrap items-center gap-3">
             <Link
-              href="/mvp"
+              href="/handoff"
               className="btn-primary !bg-[color:var(--rd-brass)] !text-[color:var(--rd-ink)]"
             >
-              Open control plane
+              Open handover
             </Link>
             <Link
               href="/desk"
               className="btn-secondary !border-white/25 !bg-white/10 !text-white hover:!bg-white/20"
             >
-              Challenge desk
-            </Link>
-            <Link
-              href="/handoff"
-              className="btn-secondary !border-white/25 !bg-white/10 !text-white hover:!bg-white/20"
-            >
-              SDLC handover
+              Open desk
             </Link>
             <span className="inline-flex items-center gap-2 text-sm text-white/55">
               <MockLabel>MOCK integrations labeled</MockLabel>
@@ -52,24 +46,24 @@ export default function HomePage() {
       <section className="mx-auto max-w-6xl px-6 py-20">
         <h2 className="font-display text-3xl text-rd-ink">What the desk shows</h2>
         <p className="mt-3 max-w-2xl text-rd-forest/75">
-          One job per surface — driven by real orchestrator run context, not scripted agent chat.
+          Bots run the process; Release Desk Log records it; Desk shows it.
         </p>
         <ol className="mt-12 grid gap-12 md:grid-cols-3">
           {[
             {
               step: "01",
-              title: "Check",
-              body: "Launch Lead on-demand release checks wired to specialist runners and checkpoints.",
+              title: "Handover",
+              body: "Read the request trace at /handoff from RELEASEDESK_LOG_DIR, a local .jsonl file, or Replay (MOCK).",
             },
             {
               step: "02",
-              title: "Evidence",
-              body: "Inspect run ID, specialist results, cloud handoffs, PR metadata, and the audit trail.",
+              title: "Gates",
+              body: "Change Analyst, Security, and Builder ask Vishal in their own chats. Lead only records the reply.",
             },
             {
               step: "03",
-              title: "Decide",
-              body: "Approve or reject merge and release gates. Auto-merge is never performed.",
+              title: "Intel",
+              body: "The release-intel workflow calls the Grok API. Without the Lead key it stays MOCK.",
             },
           ].map((item) => (
             <li key={item.step}>
