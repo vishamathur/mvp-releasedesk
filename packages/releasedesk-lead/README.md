@@ -91,7 +91,7 @@ console.log(report.checkpoints, report.pullRequests, report.approvals);
 ```
 packages/releasedesk-lead/
   src/
-    agent-runner.ts, stub-runners.ts, approval.ts, readiness.ts
+    agent-runner.ts, approval.ts, readiness.ts
     verification.ts       # Checkpoint evaluation (M6)
     pr/                   # real GitHub PR client (M6)
     dm-interface.ts, orchestrator.ts, cli.ts, index.ts
