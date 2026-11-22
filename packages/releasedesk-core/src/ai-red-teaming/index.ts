@@ -7,8 +7,6 @@ export {
   AiRedTeamFindingSchema,
   AiRedTeamProbeResultSchema,
   AiRedTeamHealthCheckSchema,
-  ZSCALER_NOT_WIRED_CODE,
-  ZscalerAiRedTeamNotWiredError,
   type AiRedTeamProviderName,
   type AiRedTeamFramework,
   type AiRedTeamProviderMode,
@@ -20,17 +18,14 @@ export {
 } from "./types.js";
 
 export { createCustomAiRedTeamingProvider } from "./custom.js";
-
 export {
-  ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS,
-  ZSCALER_FINDINGS_ROUTING_VALUES,
-  resolveZscalerAiRedTeamCredentials,
-  resolveZscalerLocalConfig,
-  createZscalerAiRedTeamingProvider,
-  type ZscalerFindingsRouting,
-  type ZscalerLocalConfig,
-  type ZscalerAiRedTeamingProviderOptions,
-} from "./zscaler.js";
+  createGrokGuardrailsProvider,
+  buildGuardrailProbeBody,
+  assessGuardrailProbe,
+  GROK_GUARDRAIL_PROBES,
+  type GrokGuardrailProbe,
+  type GrokGuardrailsProviderOptions,
+} from "./grok-guardrails-provider.js";
 
 export {
   AI_RED_TEAM_PROVIDER_ENV,

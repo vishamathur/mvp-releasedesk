@@ -9,7 +9,8 @@ Northwind Bank KYC release readiness. Desk on `:3002`, KYC on `:3000`.
 3. **Grok API** called by shipped Desk module `apps/releasedesk/src/lib/grok-release-intel.ts` (**classify + summarize + riskTier + blockers** + trustCheck). Builder copies that result into `build-result.testsSummary`. Security uses `riskTier` and `blockers` at the test gate; an open blocker sends the request back to build.
 
 ## Spine to preserve
-- Iteration gate: Security's security-compliance-approval, raised in Security's chat. `evaluateIterationProceedGate` in core (`checkpoint-gate.ts`) still requires a human `red_team` or `security` sign-off. The Desk does not approve it.
+- Iteration gate: Security's security-compliance-approval, raised in Security's chat. `evaluateIterationProceedGate` in core (`checkpoint-gate.ts`) still requires a human `red_team` or `security` sign-off. The Desk does not approve it. The red-team providers are `custom` (throws until a live engine is attached) and `grok-guardrails` (fixed probes through the guarded Grok config; needs `RELEASEDESK_GROK_API_KEY_SECURITY`). Zscaler has been removed.
+- Grok chat completions send the shared `guidelines` (nsfw, violence, and profanity set to `decline`) and a SHA-256 `safety_identifier`. See `docs/security/grok-guardrails.md`. A 400 or 422 is a hard failure.
 - ATLAS/OWASP merge hard-block for review-ready PRs (drafts exempt).
 - Human merge + release gates — never auto-merge.
 

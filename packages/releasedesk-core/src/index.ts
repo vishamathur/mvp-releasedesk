@@ -15,6 +15,16 @@ export {
 } from "./ids.js";
 
 export { MissingCredentialError } from "./config-error.js";
+export {
+  GROK_GUIDELINES,
+  GROK_CHAT_COMPLETIONS_URL,
+  GROK_REQUEST_TIMEOUT_MS,
+  GrokGuidelineError,
+  hashSafetyIdentifier,
+  buildGrokChatCompletionBody,
+  assertGrokChatEndpoint,
+  assertGrokChatStatus,
+} from "./grok-guardrails.js";
 
 export {
   MOCK_NOTE_PREFIX,
@@ -246,14 +256,8 @@ export {
   AiRedTeamFindingSchema,
   AiRedTeamProbeResultSchema,
   AiRedTeamHealthCheckSchema,
-  ZSCALER_NOT_WIRED_CODE,
-  ZscalerAiRedTeamNotWiredError,
   createCustomAiRedTeamingProvider,
-  ZSCALER_AI_RED_TEAM_CREDENTIAL_ENV_KEYS,
-  ZSCALER_FINDINGS_ROUTING_VALUES,
-  resolveZscalerAiRedTeamCredentials,
-  resolveZscalerLocalConfig,
-  createZscalerAiRedTeamingProvider,
+  createGrokGuardrailsProvider,
   AI_RED_TEAM_PROVIDER_ENV,
   parseAiRedTeamProviderName,
   resolveAiRedTeamingProvider,
@@ -280,9 +284,6 @@ export {
   type AiRedTeamProbeResult,
   type AiRedTeamHealthCheck,
   type AiRedTeamingProvider,
-  type ZscalerFindingsRouting,
-  type ZscalerLocalConfig,
-  type ZscalerAiRedTeamingProviderOptions,
   type ResolveAiRedTeamingProviderOptions,
   type AiRedTeamCollapsedGatePhase,
   type AiRedTeamMainFlowStage,

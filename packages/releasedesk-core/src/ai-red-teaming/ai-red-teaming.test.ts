@@ -3,16 +3,13 @@ import { MissingCredentialError } from "../config-error.js";
 import {
   AI_RED_TEAM_PROVIDER_ENV,
   createCustomAiRedTeamingProvider,
-  createZscalerAiRedTeamingProvider,
+  createGrokGuardrailsProvider,
   DEFAULT_AI_RED_TEAM_PROVIDER,
   evaluateIterationProceedGate,
   isNonBlockingRemediation,
   parseAiRedTeamProviderName,
   resolveAiRedTeamingProvider,
-  resolveZscalerLocalConfig,
   runCollapsedAiRedTeamGate,
-  ZSCALER_NOT_WIRED_CODE,
-  ZscalerAiRedTeamNotWiredError,
   type IterationApproval,
 } from "./index.js";
 
@@ -30,9 +27,13 @@ describe("parseAiRedTeamProviderName", () => {
     expect(DEFAULT_AI_RED_TEAM_PROVIDER).toBe("custom");
   });
 
-  it("accepts custom and zscaler (case-insensitive)", () => {
+  it("accepts custom and grok-guardrails", () => {
     expect(parseAiRedTeamProviderName("custom")).toBe("custom");
-    expect(parseAiRedTeamProviderName("ZSCALER")).toBe("zscaler");
+    expect(parseAiRedTeamProviderName("GROK-GUARDRAILS")).toBe("grok-guardrails");
+  });
+
+  it("rejects zscaler instead of selecting a removed provider", () => {
+    expect(() => parseAiRedTeamProviderName("zscaler")).toThrow(/Zscaler AI red-team provider was removed/);
   });
 });
 
@@ -42,17 +43,17 @@ describe("resolveAiRedTeamingProvider factory", () => {
     expect(provider.name).toBe("custom");
   });
 
-  it(`selects zscaler when ${AI_RED_TEAM_PROVIDER_ENV}=zscaler`, () => {
+  it(`selects grok-guardrails when ${AI_RED_TEAM_PROVIDER_ENV}=grok-guardrails`, () => {
     const provider = resolveAiRedTeamingProvider({
-      env: { [AI_RED_TEAM_PROVIDER_ENV]: "zscaler" },
+      env: { [AI_RED_TEAM_PROVIDER_ENV]: "grok-guardrails" },
     });
-    expect(provider.name).toBe("zscaler");
+    expect(provider.name).toBe("grok-guardrails");
   });
 
   it("honors explicit provider override over env", () => {
     const provider = resolveAiRedTeamingProvider({
       provider: "custom",
-      env: { [AI_RED_TEAM_PROVIDER_ENV]: "zscaler" },
+      env: { [AI_RED_TEAM_PROVIDER_ENV]: "grok-guardrails" },
     });
     expect(provider.name).toBe("custom");
   });
@@ -73,71 +74,13 @@ describe("custom provider", () => {
   });
 });
 
-describe("zscaler provider without credentials", () => {
-  it("throws instead of inventing findings", async () => {
-    const provider = createZscalerAiRedTeamingProvider({ env: {}, apiKey: null });
+describe("grok-guardrails provider", () => {
+  it("throws a configuration error when the Security key is missing", async () => {
+    const provider = createGrokGuardrailsProvider({ env: {}, apiKey: "" });
     await expect(provider.healthCheck()).rejects.toBeInstanceOf(MissingCredentialError);
     await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
       MissingCredentialError,
     );
-  });
-});
-
-describe("zscaler provider with credentials (not wired)", () => {
-  it("healthCheck reports not_wired and runProbes throws", async () => {
-    const provider = createZscalerAiRedTeamingProvider({
-      apiKey: "test-key-not-for-live-use",
-    });
-    const health = await provider.healthCheck();
-    expect(health.ok).toBe(false);
-    expect(health.mode).toBe("not_wired");
-
-    await expect(provider.runProbes(target, frameworks)).rejects.toMatchObject({
-      name: "ZscalerAiRedTeamNotWiredError",
-      code: ZSCALER_NOT_WIRED_CODE,
-    });
-    await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
-      ZscalerAiRedTeamNotWiredError,
-    );
-  });
-
-  it("reads the local template without echoing secrets or calling out", async () => {
-    const secret = "local-placeholder-not-a-real-key";
-    const endpoint = "https://example.zscaler.com/api/v1/ai-red-team";
-    const env = {
-      NODE_ENV: "test",
-      ZSCALER_AI_RED_TEAM_API_KEY: secret,
-      ZSCALER_AI_RED_TEAM_ENDPOINT: endpoint,
-      ZSCALER_AI_RED_TEAM_SCAN_SCOPE: "prompts, models",
-      ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING: "report-only",
-    } as NodeJS.ProcessEnv;
-
-    expect(resolveZscalerLocalConfig(env)).toEqual({
-      credentialEnvKey: "ZSCALER_AI_RED_TEAM_API_KEY",
-      endpointConfigured: true,
-      scanScope: ["prompts", "models"],
-      findingsRouting: "report-only",
-    });
-
-    const provider = createZscalerAiRedTeamingProvider({ env });
-    const health = await provider.healthCheck();
-    expect(health.mode).toBe("not_wired");
-    expect(health.message).toContain("findingsRouting=report-only");
-    expect(health.message).toContain("endpointConfigured=true");
-    expect(health.message).not.toContain(secret);
-    expect(health.message).not.toContain(endpoint);
-    await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
-      ZscalerAiRedTeamNotWiredError,
-    );
-  });
-
-  it("ignores an unknown findings routing value", () => {
-    const config = resolveZscalerLocalConfig({
-      NODE_ENV: "test",
-      ZSCALER_AI_RED_TEAM_FINDINGS_ROUTING: "auto-merge",
-    } as NodeJS.ProcessEnv);
-    expect(config.findingsRouting).toBeUndefined();
-    expect(config.credentialEnvKey).toBeUndefined();
   });
 });
 
@@ -200,8 +143,8 @@ describe("collapsed gate + side-queue remediation + iteration approval", () => {
       nowIso,
       createSideQueueId: () => "sideq_test_1",
       context: {
-        provider: "zscaler",
-        mcpContext: "zscaler-mcp-red-team",
+        provider: "grok-guardrails",
+        mcpContext: "grok-guardrails",
         findingsRouting: "block",
       },
       preReleaseFindings: [blockingFinding],
@@ -219,7 +162,7 @@ describe("collapsed gate + side-queue remediation + iteration approval", () => {
     expect(result.stage).toBe("collapsed_gate");
     expect(result.phases.pre_release.phase).toBe("pre_release");
     expect(result.phases.post_remediation.phase).toBe("post_remediation");
-    expect(result.context.mcpContext).toBe("zscaler-mcp-red-team");
+    expect(result.context.mcpContext).toBe("grok-guardrails");
     expect(result.remediationSideQueue).toHaveLength(1);
     expect(result.remediationSideQueue[0]?.nonBlocking).toBe(true);
     expect(isNonBlockingRemediation(result.remediationSideQueue[0]!)).toBe(true);
@@ -233,7 +176,7 @@ describe("collapsed gate + side-queue remediation + iteration approval", () => {
       nowIso,
       createSideQueueId: () => "sideq_test_2",
       context: {
-        provider: "zscaler",
+        provider: "grok-guardrails",
         findingsRouting: "warn",
       },
       preReleaseFindings: [blockingFinding],
