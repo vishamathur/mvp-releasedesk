@@ -45,9 +45,8 @@ There is no mock mode. The Desk does not launch Cursor agents or open pull reque
 apps/releasedesk/
   src/app/           # Next.js pages + API routes
   src/components/    # Desk UI
-  src/lib/           # Orchestrator wiring + scenarios
-  fixtures/demos/    # Recorded run-context JSON
-  scripts/           # generate-demos.ts
+  src/lib/           # Handoff log, bots, release intel
+  scripts/           # desk-once.sh, setup-nhi-keys.sh
 ```
 
 API surface:

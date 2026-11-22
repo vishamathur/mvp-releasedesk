@@ -49,7 +49,7 @@ Constraint implied by the whole brief: slides are **short framing only** — not
 **Business requirements:** agility, security, token optimization.
 
 **Say (≤45s):** portfolio SDLC problem → three requirements → KYC as example → eng + risk keep merge authority. Then: “Slide two is the map — then we live in the bots.”  
-**Canonical deck:** [spacexai-demo-slides.md](./spacexai-demo-slides.md)
+**Canonical deck:** [Slide 1 — problem](./spacexai-slide-1-problem.md) and [Slide 2 — architecture](./spacexai-slide-2-architecture.md)
 
 ### Slide 2 — Architecture / workflow
 **Title:** Release Desk — Grok Bot → Cursor → Grok API  
