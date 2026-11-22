@@ -1,8 +1,6 @@
-# Release Desk UI (Milestone 7)
+# Release Desk UI
 
-Delivery-manager surface for **Northwind Bank KYC** release readiness. The UI drives the Lead orchestrator (`@releasedesk/lead`) — specialist results, checkpoints, cloud-agent handoffs, PR metadata, audit trail, **feature sign-off checklists** (AI-produced code), and human merge/release gates.
-
-Voice is optional and **MOCK**-labeled only.
+Bots run the process; Release Desk Log records it; Desk shows it.
 
 ## Run locally
 
@@ -33,8 +31,6 @@ KYC demo remains on port 3000 (`npm run dev`).
 | `/desk` | Challenge trigger + bot navigation |
 | `/handoff` | PID-ER and PID-NC bot-to-bot handover (mock clients) |
 
-Room runbook (commands + clicks + MOCK vs live): monorepo `docs/spacexai-room-runbook.md`.
-
 ```bash
 npm run sdlc:mvp   # CLI portfolio check
 ```
@@ -54,12 +50,8 @@ npm run sdlc:mvp   # CLI portfolio check
 5. **Blocked on security**
    - Run **Blocked on security** → security blockers persist after remediation; reject the release gate → `not_ready`.
 6. **Pending approval**
-   - Run **Pending approval** (or load fixture) — clean check waiting on DM decisions.
-7. **On-demand check**
-   - Use **Start release check** to call Lead `startOnDemandCheck` with MOCK specialists + MOCK GitHub.
-8. **MOCK voice**
-   - In Lead interface, send **MOCK voice** — reply is labeled `MOCK:`; no fabricated agent transcripts.
-9. **Fixtures**
+   - Run **Pending approval** (or load fixture) — clean check waiting on a human decision.
+7. **Fixtures**
    - **Load fixture** uses `fixtures/demos/*.json` recorded from real orchestrator runs (regenerate with `generate:demos`).
 
 ## MOCK integrations (labeled in UI)
@@ -84,15 +76,10 @@ apps/releasedesk/
 
 API surface:
 
-- `POST /api/checks` — on-demand Lead check
 - `GET /api/runs` · `GET /api/runs/:id`
 - `POST /api/runs/:id/approvals` — merge/release gates (never auto-merges)
 - `POST /api/runs/:id/feature-signoffs` — per-item or full feature checklist sign-off (never auto-signed)
-- `POST /api/demos` — live or fixture scenarios
-- `POST /api/dm` — text or MOCK voice
-- `GET /api/handoff` · `POST /api/handoff` — open a PID-ER or PID-NC request and run to the next human gate
-- `GET /api/handoff/:requestId` — stage, messages, and trace
-- `POST /api/handoff/:requestId/decision` — human approve/reject (a bot id is refused)
-- `POST /api/handoff/:requestId/message` — validate one teammate message
+- `GET /api/handoff` — list requests from `RELEASEDESK_LOG_DIR`, or Replay (MOCK) fixtures
+- `GET /api/handoff/:requestId` — the Log trace for one request
 
 Handover specs are `grok-bots/processes/pid-er.v1.json`, `grok-bots/processes/pid-nc.v1.json`, and `grok-bots/protocols/handoff.v1.json`. The desk runs them with mock teammates. It does not set `RELEASEDESK_CLOUD_CLIENT=real` and it does not call Cursor. `apps/intake` is not part of this app.

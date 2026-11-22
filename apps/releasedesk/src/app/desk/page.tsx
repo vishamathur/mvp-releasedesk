@@ -28,11 +28,7 @@ export default async function DeskPage() {
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
             Open Lead · CA · Standards · Security · Builder (persona / skills / routines). Trigger
-            the workflow, then the red-team|security gate and Grok API intel. Full enterprise path:{" "}
-            <a href="/control" className="text-rd-canopy underline-offset-4 hover:underline">
-              /control
-            </a>
-            .
+            the workflow, then the red-team|security gate and Grok API intel.
           </p>
         </div>
 

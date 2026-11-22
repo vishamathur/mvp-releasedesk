@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { startOnDemandCheck, applyIterationGateDecision } from "@/lib/desk";
+import { startOnDemandCheck } from "@/lib/desk";
 import {
   describeGrokIntelKeyStatus,
   runGrokReleaseIntel,
@@ -10,15 +10,12 @@ export const runtime = "nodejs";
 
 /**
  * Challenge trigger: Lead-style on-demand check + Grok API release intel.
- * Mirrors Grok Bot Lead routine `on-demand-release` for Desk live walkthrough.
  * Returns SpaceXAI LIVE/MOCK chips + trustCheck evidence (never secret values).
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     goal?: string;
     repository?: string;
-    /** When true, also exercise security iteration sign-off (demo). */
-    autoOpenIterationGate?: boolean;
   };
 
   const started = await startOnDemandCheck({
@@ -46,18 +43,7 @@ export async function POST(request: Request) {
   });
   const keyStatus = describeGrokIntelKeyStatus();
 
-  let iterationGate = started.iterationGate ?? null;
-
-  if (body.autoOpenIterationGate !== false && started.desk.iterationGate) {
-    const opened = await applyIterationGateDecision({
-      runId: started.view.runId,
-      decision: "approved",
-      kind: "security",
-      decidedBy: "challenge-trigger",
-      note: "Challenge path: security sign-off so merge/release can be exercised",
-    });
-    iterationGate = opened.iterationGate;
-  }
+  const iterationGate = started.iterationGate ?? null;
 
   const compliance = buildSpaceXaiComplianceSnapshot(process.env, { intel });
 

@@ -5,7 +5,6 @@ import { AuditTrail } from "@/components/AuditTrail";
 import { CheckpointTrail } from "@/components/CheckpointTrail";
 import { CloudHandoffs } from "@/components/CloudHandoffs";
 import { DeskHeader } from "@/components/DeskHeader";
-import { DmPanel } from "@/components/DmPanel";
 import { FeatureSignOffPanel } from "@/components/FeatureSignOffPanel";
 import { GrokBotsPanel } from "@/components/GrokBotsPanel";
 import { GrokReleaseIntelPanel } from "@/components/GrokReleaseIntelPanel";
@@ -99,7 +98,6 @@ export default async function RunPage({ params }: Props) {
             />
             <ApprovalGates runId={view.runId} gates={view.approvals.gates} />
             <AuditTrail events={view.run.auditTrail} />
-            <DmPanel runId={view.runId} initialMessages={desk.dmSession.messages} />
           </div>
         </div>
       </main>

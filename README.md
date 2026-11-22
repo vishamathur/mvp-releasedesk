@@ -1,6 +1,8 @@
 # mvp-releasedesk
 
-**Release Desk** will orchestrate release checks for the **Northwind Bank KYC** application.
+**Release Desk** is Northwind Bank's release process for the **KYC** demo app. Six Grok Bot teammates run it in chat: Lead, Change Analyst, Standards, Security, and Builder, plus Release Desk Log. Lead is the only writer of `pid.state`. Each human gate is raised by the bot that owns that work. The Desk at `/handoff` is a read-only trace of the Log (`RELEASEDESK_LOG_DIR`), with Replay (MOCK) over fixtures. Builder launches the Cursor cloud agent. The release-intel workflow calls the Grok API and stays MOCK without `RELEASEDESK_GROK_API_KEY_LEAD`. KYC (`apps/kyc`) is the demo customer app.
+
+Read [the SDLC overview](./docs/sdlc/overview.md), [the demo script](./docs/sdlc/demo-script.md), and [the bot pack](./grok-bots/README.md).
 
 This repository currently includes:
 
@@ -34,12 +36,12 @@ npm run generate:demos
 npm run desk
 ```
 
-Open [http://localhost:3001](http://localhost:3001).
+Open [http://localhost:3002](http://localhost:3002).
 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the KYC app (Next.js) on port 3000 |
-| `npm run desk` | Start Release Desk UI on port **3001** |
+| `npm run desk` | Start Release Desk UI on port **3002** |
 | `npm run seed` | Load sample applications into the local JSON store |
 | `npm test` | Run KYC + core + lead + specialists + desk unit tests |
 | `npm run test:kyc` / `npm run test:core` / `npm run test:lead` / `npm run test:specialists` / `npm run test:desk` | Workspace-scoped tests |
@@ -52,12 +54,10 @@ Open [http://localhost:3001](http://localhost:3001).
 
 ## What you can do
 
-1. Open the landing page and start **Customer KYC**.
-2. Enter identity details → create a draft.
-3. Add **document placeholders** (filename + type; no real file upload).
-4. Submit → local risk score + status `submitted`.
-5. Use analyst actions: start review → approve / needs info / reject.
-6. Or **Load sample data** on `/applications` for pre-built cases.
+1. Open Release Desk on port **3002** and read a handover at `/handoff` (set `RELEASEDESK_LOG_DIR`, import a `.jsonl` file, or turn on Replay (MOCK)).
+2. Follow one PID-ER request in [the demo script](./docs/sdlc/demo-script.md). Change Analyst raises finance, Security raises the iteration gate, and Builder raises release. Vishal decides in that bot's chat.
+3. See the release-intel comment on a pull request. It is MOCK until the `RELEASEDESK_GROK_API_KEY_LEAD` Actions secret is set.
+4. Open the KYC demo on port 3000: draft an application, add document placeholders, submit, and use the analyst actions. **Load sample data** on `/applications` for pre-built cases.
 
 ## Mocked integrations (labeled in UI/API)
 
@@ -81,6 +81,8 @@ packages/
 ```
 
 Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/runtime packages out of `apps/kyc` so release-check tooling can land beside the demo app without a rewrite.
+
+Legacy in-process engine (MOCK); bots now run the process.
 
 ## Milestone 2 — shared context & contracts
 
