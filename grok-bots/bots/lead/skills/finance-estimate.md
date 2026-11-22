@@ -7,7 +7,7 @@ Call (from your computer, secret "intake-site-hmac" from your vault; never print
   curl -sS https://intake.vishalmathur.org/api/finance-estimate.php -H 'Content-Type: application/json' -H "X-Intake-Timestamp: $TS" -H "X-Intake-Signature: $SIG" --data "$BODY"
 Pass "lines":[{"serviceId":"SVC-…","qty":n}] to price an agreed scope exactly (skips Grok mapping).
 
-Response assessment: estimate{lines[serviceId,name,qty,unitPriceInr,riskMultiplier,lineTotalInr,effortDays], subtotalInr, urgencyMultiplier, contingencyPct, totalInr, effortDays, budgetBandsInr{low,expected,high}}, recommendation approve-recommended|review|reject-suggested, policyReasons, rationale, risks, openQuestions, source grok|deterministic-fallback|explicit-lines, artifactRef finance:<id>@<time>.
+Response assessment: estimate{lines[serviceId,name,qty,unitPriceInr,riskMultiplier,lineTotalInr,effortDays], subtotalInr, urgencyMultiplier, contingencyPct, totalInr, effortDays, budgetBandsInr{low,expected,high}}, recommendation approve-recommended|review|reject-suggested, policyReasons, rationale, risks, openQuestions, source grok|explicit-lines, artifactRef finance:<id>@<time>.
 
 Model rules (deterministic, Grok can only make it stricter):
 - line = unit price x qty x risk multiplier; x urgency (1.00 / 1.15 / 1.30); + contingency 10% (+5% any risk >= 1.3, +5% critical, +5% low mapping confidence). Bands 85% / 100% / 125%.
