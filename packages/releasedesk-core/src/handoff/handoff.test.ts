@@ -1,102 +1,15 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { HandoffEngine, type RequestView } from "./engine.js";
 import {
   NC_PREFIX_STAGE_IDS,
   SHARED_STAGE_IDS,
-  SUB_AGENT_IDS,
-  TEAMMATE_IDS,
   assertSharedSpine,
   loadProcessDefinitionsSync,
 } from "./processes.js";
 import { validateHandoffMessage } from "./schema.js";
-import { FileHandoffStore, MemoryHandoffStore } from "./store.js";
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-
-const HUMANS = {
-  proposal: { decidedBy: "Jordan Hale", note: "Customer sponsor approves the proposal." },
-  "finance-approval": { decidedBy: "Priya Shah", note: "Finance partner approves the envelope." },
-  "security-compliance-approval": {
-    decidedBy: "Avery Chen",
-    note: "Security officer signs. Iteration gate red_team|security.",
-  },
-  "release-gate": { decidedBy: "Morgan Lee", note: "Release manager go. No auto-merge." },
-} as const;
-
-function clock() {
-  let t = Date.parse("2026-11-22T09:00:00.000Z");
-  return () => {
-    t += 1000;
-    return new Date(t).toISOString();
-  };
-}
-
-function engine(plan?: boolean[]) {
-  const eng = new HandoffEngine({
-    workspaceRoot,
-    store: new MemoryHandoffStore(),
-    now: clock(),
-  });
-  if (plan) eng.setBuildPlan(plan);
-  return eng;
-}
-
-function drive(eng: HandoffEngine, requestId: string): RequestView {
-  for (let i = 0; i < 16; i += 1) {
-    const step = eng.runUntilWait(requestId);
-    if (!step.ok) throw new Error(`${step.code}: ${step.errors.join("; ")}`);
-    if (step.request.state.status === "done" || step.request.state.status === "blocked") {
-      return step.request;
-    }
-    const gate = step.request.pendingGate;
-    if (!gate) throw new Error(`open on ${step.request.state.currentStage} without a human gate`);
-    const human = HUMANS[gate.gate];
-    const decided = eng.recordHumanDecision({
-      requestId,
-      gate: gate.gate,
-      decision: "approved",
-      decidedBy: human.decidedBy,
-      note: human.note,
-    });
-    if (!decided.ok) throw new Error(`${decided.code}: ${decided.errors.join("; ")}`);
-  }
-  throw new Error("handoff did not finish");
-}
-
-function consulted(view: RequestView, stage: string, from: string, to: string): boolean {
-  return view.messages.some(
-    (item) =>
-      item.message.kind === "consult" &&
-      item.message.action === "consult" &&
-      item.message.stage === stage &&
-      item.message.from === from &&
-      item.message.to === to,
-  );
-}
-
-function baseMessage(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    v: 1,
-    kind: "consult",
-    pid: "PID-ER",
-    pidVersion: "1.1.0",
-    requestId: "REQ-2026-0001",
-    thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
-    from: "lead",
-    to: "standards",
-    stage: "estimation",
-    action: "consult",
-    summary: "MOCK: consult",
-    artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
-    memoryKey: "pid.state.REQ-2026-0001",
-    humanGate: null,
-    ...overrides,
-  };
-}
 
 describe("PID specs", () => {
   it("loads the SDLC stage sequences, gates, and owners from the process files", () => {
@@ -156,192 +69,7 @@ describe("PID specs", () => {
   });
 });
 
-describe("handoff happy path", () => {
-  it("runs every PID-ER stage across the five teammates and the three sub-agents", () => {
-    try {
-      const eng = engine();
-      const opened = eng.openRequest({
-        pid: "PID-ER",
-        customerLabel: "NORTHWIND-014",
-        summary: "KYC address refresh for an existing customer.",
-      });
-      expect(opened.ok).toBe(true);
-      if (!opened.ok) return;
-      const view = drive(eng, opened.request.state.requestId);
-
-      expect(view.state.status).toBe("done");
-      expect(view.state.pid).toBe("PID-ER");
-      expect(view.state.version).toBe("1.1.0");
-      expect(view.state.thread.channel).toBe("lead-chat");
-      expect(view.kickoff).toBeNull();
-      expect(view.transitions.map((item) => `${item.fromStage ?? "null"}→${item.toStage}`)).toEqual([
-        "null→intake",
-        "intake→estimation",
-        "estimation→finance-approval",
-        "finance-approval→security-compliance-approval",
-        "security-compliance-approval→build",
-        "build→test-gate",
-        "test-gate→release-gate",
-      ]);
-      expect(view.decisions.map((item) => `${item.gate}:${item.decidedBy}`)).toEqual([
-        "finance-approval:Priya Shah",
-        "security-compliance-approval:Avery Chen",
-        "release-gate:Morgan Lee",
-      ]);
-      expect(view.stages.every((stage) => stage.reached)).toBe(true);
-      expect(consulted(view, "estimation", "change-analyst", "standards")).toBe(true);
-      expect(consulted(view, "security-compliance-approval", "security", "standards")).toBe(true);
-      expect(consulted(view, "security-compliance-approval", "security", "change-analyst")).toBe(true);
-      expect(consulted(view, "build", "builder", "security")).toBe(true);
-      expect(consulted(view, "release-gate", "builder", "security")).toBe(true);
-      expect(consulted(view, "release-gate", "builder", "standards")).toBe(true);
-      expect(view.subAgents.map((item) => item.agent)).toEqual(["coding", "testing", "review"]);
-      expect(view.subAgents.every((item) => item.cloudClient === "mock" && item.mock)).toBe(true);
-      expect(view.lastBuild?.testsPassed).toBe(true);
-      expect(view.cloudClient).toBe("mock");
-
-      const seen = new Set<string>();
-      const approvals = view.messages.filter((item) => item.message.humanGate?.status === "approved");
-      expect(approvals.map((item) => `${item.message.stage}:${item.message.from}`)).toEqual([
-        "finance-approval:change-analyst",
-        "security-compliance-approval:security",
-        "release-gate:builder",
-      ]);
-      for (const item of approvals) {
-        expect(item.message.kind).toBe("stage-return");
-        expect(item.message.to).toBe("lead");
-        expect(item.message.humanGate?.note).toMatch(/\| verbatim: /);
-        expect(item.message.humanGate?.decidedBy).not.toMatch(/^(lead|change-analyst|standards|security|builder)$/);
-      }
-      for (const item of view.messages) {
-        seen.add(item.message.from);
-        seen.add(item.message.to);
-        if (!approvals.includes(item)) {
-          expect(item.message.humanGate?.status ?? "pending").not.toBe("approved");
-          expect(item.message.humanGate?.status ?? "pending").not.toBe("rejected");
-        }
-      }
-      for (const id of TEAMMATE_IDS) expect(seen.has(id)).toBe(true);
-      for (const id of SUB_AGENT_IDS) expect(view.subAgents.some((item) => item.agent === id)).toBe(true);
-      expect(view.stateWrites.every((item) => item.actor === "lead")).toBe(true);
-      expect(view.posts.some((item) => item.channel === "#release-desk")).toBe(false);
-      expect(view.posts.every((item) => item.channel === "lead-chat")).toBe(true);
-      expect(view.log.some((item) => item.event === "gate-ask" && item.gateOwner === "change-analyst")).toBe(true);
-      expect(view.log.some((item) => item.event === "gate-decision" && item.decidedBy === "Priya Shah")).toBe(true);
-      expect(view.log.some((item) => item.event === "transition")).toBe(true);
-      expect(view.trace.some((item) => item.type === "message" && item.text.includes("build-result"))).toBe(true);
-    } finally {
-      /* protocol simulation does not call Cursor */
-    }
-  });
-
-  it("runs every PID-NC stage, including proposal, kickoff, and the heavy estimate", () => {
-    const eng = engine();
-    const opened = eng.openRequest({
-      pid: "PID-NC",
-      customerLabel: "Harbor & Co",
-      summary: "New customer asking for a KYC product Northwind does not yet run.",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    const view = drive(eng, opened.request.state.requestId);
-
-    expect(view.state.status).toBe("done");
-    expect(view.state.version).toBe("1.1.0");
-    expect(view.state.thread.channel).toBe("lead-chat");
-    expect(view.transitions.map((item) => item.toStage)).toEqual([
-      "intake",
-      "customer-onboarding",
-      "discovery",
-      "scope",
-      "proposal",
-      "estimation",
-      "finance-approval",
-      "security-compliance-approval",
-      "build",
-      "test-gate",
-      "release-gate",
-    ]);
-    expect(view.kickoff?.namedBy).toBe("lead");
-    expect(view.kickoff?.sprint).toBe("future-sprint");
-    const buildAt = view.transitions.find((item) => item.toStage === "build")!.at;
-    expect(view.kickoff!.at <= buildAt).toBe(true);
-    expect(view.decisions.map((item) => item.gate)).toEqual([
-      "proposal",
-      "finance-approval",
-      "security-compliance-approval",
-      "release-gate",
-    ]);
-    expect(consulted(view, "discovery", "change-analyst", "security")).toBe(true);
-    expect(consulted(view, "scope", "change-analyst", "standards")).toBe(true);
-    expect(consulted(view, "estimation", "change-analyst", "builder")).toBe(true);
-    expect(consulted(view, "proposal", "change-analyst", "standards")).toBe(true);
-    expect(view.messages.filter((item) => item.message.humanGate?.status === "approved").map((item) => `${item.message.stage}:${item.message.from}`)).toEqual([
-      "proposal:change-analyst",
-      "finance-approval:change-analyst",
-      "security-compliance-approval:security",
-      "release-gate:builder",
-    ]);
-    expect(view.messages.some((item) => item.message.summary.includes("40–60 engineer-days"))).toBe(true);
-    expect(view.subAgents.map((item) => item.agent)).toEqual(["coding", "testing", "review"]);
-    expect(view.artifacts[`pid.onboarding.${view.state.requestId}`]).toMatchObject({ mock: true });
-  });
-
-  it("returns a failed test gate to Builder and accepts the next passing build", () => {
-    const eng = engine([false, true]);
-    const opened = eng.openRequest({
-      pid: "PID-ER",
-      customerLabel: "NORTHWIND-014",
-      summary: "Defect fix that fails the first test gate.",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    const view = drive(eng, opened.request.state.requestId);
-    expect(view.state.status).toBe("done");
-    expect(view.lastBuild?.testsPassed).toBe(true);
-    expect(view.lastBuild?.attempt).toBe(2);
-    expect(view.subAgents.filter((item) => item.agent === "coding")).toHaveLength(2);
-    expect(
-      view.messages.some(
-        (item) => item.message.kind === "stage-handoff" && item.message.action === "remediate" && item.message.to === "builder",
-      ),
-    ).toBe(true);
-    expect(view.transitions.map((item) => `${item.fromStage}→${item.toStage}`)).toContain("test-gate→build");
-  });
-
-  it("blocks the release when the release manager rejects the gate", () => {
-    const eng = engine();
-    const opened = eng.openRequest({
-      pid: "PID-ER",
-      customerLabel: "NORTHWIND-014",
-      summary: "Enhancement that will be rejected at release.",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    const requestId = opened.request.state.requestId;
-    for (let i = 0; i < 8; i += 1) {
-      const step = eng.runUntilWait(requestId);
-      if (!step.ok) throw new Error(step.errors.join("; "));
-      const gate = step.request.pendingGate;
-      if (!gate) break;
-      const decision = gate.gate === "release-gate" ? "rejected" : "approved";
-      const human = HUMANS[gate.gate];
-      const decided = eng.recordHumanDecision({
-        requestId,
-        gate: gate.gate,
-        decision,
-        decidedBy: human.decidedBy,
-        note: decision === "rejected" ? "Release manager no-go." : human.note,
-      });
-      if (!decided.ok) throw new Error(decided.errors.join("; "));
-      if (decision === "rejected") {
-        expect(decided.request.state.status).toBe("blocked");
-        expect(decided.request.state.currentStage).toBe("release-gate");
-        return;
-      }
-    }
-    throw new Error("release gate was not rejected");
-  });
-});
-
-describe("handoff rejections", () => {
+describe("validateHandoffMessage", () => {
   const processes = loadProcessDefinitionsSync(workspaceRoot);
 
   it("rejects an invalid schema", () => {
@@ -350,246 +78,342 @@ describe("handoff rejections", () => {
     if (!result.ok) expect(result.code).toBe("invalid_schema");
   });
 
-  it("rejects a non-Lead write of pid.state and leaves the stage unchanged", () => {
-    const eng = engine();
-    const opened = eng.openRequest({
-      pid: "PID-ER",
-      customerLabel: "NORTHWIND-014",
-      summary: "State write attempt.",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    const requestId = opened.request.state.requestId;
-    const before = opened.request.state.currentStage;
-    const write = eng.writePidState("security", requestId, { currentStage: "release-gate" });
-    expect(write.ok).toBe(false);
-    if (!write.ok) expect(write.code).toBe("only_lead_writes_pid_state");
-    const message = eng.submitMessage({
-      ...baseMessage({ requestId, memoryKey: `pid.state.${requestId}`, from: "security", to: "lead" }),
-      pidState: { currentStage: "release-gate" },
-    });
-    expect(message.ok).toBe(false);
-    if (!message.ok) expect(message.code).toBe("only_lead_writes_pid_state");
-    expect(eng.getRequest(requestId)?.state.currentStage).toBe(before);
-  });
-
-  it("rejects a bot setting humanGate approved", () => {
-    const eng = engine();
-    const opened = eng.openRequest({
-      pid: "PID-ER",
-      customerLabel: "NORTHWIND-014",
-      summary: "Bot approval attempt.",
-      requestId: "REQ-2026-0001",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    const before = eng.getRequest("REQ-2026-0001")!.messages.length;
-    const result = eng.submitMessage(
-      baseMessage({
-        kind: "stage-return",
-        action: "return",
-        from: "security",
-        to: "lead",
-        stage: "security-compliance-approval",
-        humanGate: {
-          gate: "security-compliance-approval",
-          status: "approved",
-          decidedBy: "security",
-          note: "bot signed",
-        },
-      }),
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("bot_cannot_approve");
-    expect(eng.getRequest("REQ-2026-0001")!.messages).toHaveLength(before);
-    const human = eng.recordHumanDecision({
-      requestId: "REQ-2026-0001",
-      gate: "finance-approval",
-      decision: "approved",
-      decidedBy: "security",
-      note: "bot name",
-    });
-    expect(human.ok).toBe(false);
-    if (!human.ok) expect(human.code).toBe("bot_cannot_approve");
-  });
-
   it("rejects an unknown sender and an unknown recipient", () => {
-    const sender = validateHandoffMessage(baseMessage({ from: "finance-partner" }), processes);
+    const sender = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "finance-partner",
+        to: "standards",
+        stage: "estimation",
+        action: "consult",
+        summary: "Consult standards on the estimate.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
     expect(sender.ok).toBe(false);
     if (!sender.ok) expect(sender.code).toBe("unknown_sender");
 
-    const recipient = validateHandoffMessage(baseMessage({ to: "coding" }), processes);
+    const recipient = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "lead",
+        to: "coding",
+        stage: "estimation",
+        action: "consult",
+        summary: "Consult standards on the estimate.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
     expect(recipient.ok).toBe(false);
     if (!recipient.ok) expect(recipient.code).toBe("unknown_recipient");
 
     const ownerReturn = validateHandoffMessage(
-      baseMessage({
+      {
+        v: 1,
         kind: "stage-return",
-        action: "return",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
         from: "change-analyst",
         to: "lead",
         stage: "finance-approval",
+        action: "return",
         summary: "Finance partner approved the sprint envelope.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
         humanGate: {
           gate: "finance-approval",
           status: "approved",
           decidedBy: "Priya Shah",
           note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE finance-approval REQ-2026-0001 as Finance partner - ok",
         },
-      }),
+      },
       processes,
     );
     expect(ownerReturn.ok).toBe(true);
 
     const mismatch = validateHandoffMessage(
-      baseMessage({
+      {
+        v: 1,
         kind: "stage-return",
-        action: "return",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
         from: "security",
         to: "lead",
         stage: "finance-approval",
+        action: "return",
+        summary: "Security tried to record the finance decision.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
         humanGate: {
           gate: "finance-approval",
           status: "approved",
           decidedBy: "Priya Shah",
           note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE finance-approval",
         },
-      }),
+      },
       processes,
     );
     expect(mismatch.ok).toBe(false);
     if (!mismatch.ok) expect(mismatch.code).toBe("gate_owner_mismatch");
 
     const botName = validateHandoffMessage(
-      baseMessage({
+      {
+        v: 1,
         kind: "stage-return",
-        action: "return",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
         from: "change-analyst",
         to: "lead",
         stage: "finance-approval",
+        action: "return",
+        summary: "A bot name cannot decide the finance gate.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
         humanGate: {
           gate: "finance-approval",
           status: "approved",
           decidedBy: "security",
           note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE",
         },
-      }),
+      },
       processes,
     );
     expect(botName.ok).toBe(false);
     if (!botName.ok) expect(botName.code).toBe("bot_cannot_approve");
 
     const missingVerbatim = validateHandoffMessage(
-      baseMessage({
+      {
+        v: 1,
         kind: "stage-return",
-        action: "return",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
         from: "change-analyst",
         to: "lead",
         stage: "finance-approval",
+        action: "return",
+        summary: "The finance note is missing the verbatim reply.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
         humanGate: {
           gate: "finance-approval",
           status: "approved",
           decidedBy: "Priya Shah",
           note: "approved",
         },
-      }),
+      },
       processes,
     );
     expect(missingVerbatim.ok).toBe(false);
     if (!missingVerbatim.ok) expect(missingVerbatim.code).toBe("bot_cannot_approve");
 
     const leadApproves = validateHandoffMessage(
-      baseMessage({
+      {
+        v: 1,
         kind: "stage-return",
-        action: "return",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
         from: "lead",
         to: "lead",
         stage: "finance-approval",
+        action: "return",
+        summary: "Lead cannot approve a human gate.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
         humanGate: {
           gate: "finance-approval",
           status: "approved",
           decidedBy: "Priya Shah",
           note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE",
         },
-      }),
+      },
       processes,
     );
     expect(leadApproves.ok).toBe(false);
     if (!leadApproves.ok) expect(leadApproves.code).toBe("bot_cannot_approve");
 
     const otherChannel = validateHandoffMessage(
-      baseMessage({ thread: { channel: "#er-intake", threadId: "thr_2026-0001" } }),
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "#er-intake", threadId: "thr_2026-0001" },
+        from: "lead",
+        to: "standards",
+        stage: "estimation",
+        action: "consult",
+        summary: "Chat is the only channel.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
       processes,
     );
     expect(otherChannel.ok).toBe(false);
     if (!otherChannel.ok) expect(otherChannel.code).toBe("invalid_schema");
 
-    const logSender = validateHandoffMessage(baseMessage({ from: "log" }), processes);
+    const logSender = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "log",
+        to: "standards",
+        stage: "estimation",
+        action: "consult",
+        summary: "The log is not a sender.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
     expect(logSender.ok).toBe(false);
     if (!logSender.ok) expect(logSender.code).toBe("unknown_sender");
 
-    const logRecipient = validateHandoffMessage(baseMessage({ to: "log" }), processes);
+    const logRecipient = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "lead",
+        to: "log",
+        stage: "estimation",
+        action: "consult",
+        summary: "The log is not a recipient.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
     expect(logRecipient.ok).toBe(false);
     if (!logRecipient.ok) expect(logRecipient.code).toBe("unknown_recipient");
 
     const returned = validateHandoffMessage(
-      baseMessage({
+      {
+        v: 1,
         kind: "stage-return",
-        action: "return",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
         from: "change-analyst",
         to: "builder",
         stage: "estimation",
-      }),
+        action: "return",
+        summary: "A stage return comes back to Lead.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
       processes,
     );
     expect(returned.ok).toBe(false);
     if (!returned.ok) expect(returned.code).toBe("return_must_go_to_lead");
   });
 
-  it("refuses to launch Builder without a human security approval", () => {
-    const eng = engine();
-    const opened = eng.openRequest({
-      pid: "PID-ER",
-      customerLabel: "NORTHWIND-014",
-      summary: "Skip ahead to build.",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    const requestId = opened.request.state.requestId;
-    const jumped = eng.writePidState("lead", requestId, { currentStage: "build", status: "open" });
-    expect(jumped.ok).toBe(true);
-    const ran = eng.runUntilWait(requestId);
-    expect(ran.ok).toBe(true);
-    if (!ran.ok) return;
-    expect(ran.request.state.status).toBe("blocked");
-    expect(ran.request.subAgents).toHaveLength(0);
-    expect(ran.request.messages.some((item) => item.message.action === "block" && item.message.from === "builder")).toBe(
-      true,
+  it("rejects pidState, writesPidState, and statePatch from a non-lead sender", () => {
+    const pidState = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "security",
+        to: "lead",
+        stage: "security-compliance-approval",
+        action: "return",
+        summary: "Security tried to write pid.state.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+        pidState: { currentStage: "release-gate" },
+      },
+      processes,
     );
-  });
-});
+    expect(pidState.ok).toBe(false);
+    if (!pidState.ok) expect(pidState.code).toBe("only_lead_writes_pid_state");
 
-describe("handoff file store", () => {
-  it("reloads a finished request from disk", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "handoff-"));
-    const file = path.join(dir, "handoff.json");
-    const first = new HandoffEngine({
-      workspaceRoot,
-      store: new FileHandoffStore(file),
-      now: clock(),
-    });
-    const opened = first.openRequest({
-      pid: "PID-ER",
-      customerLabel: "NORTHWIND-014",
-      summary: "Persisted enhancement.",
-    });
-    if (!opened.ok) throw new Error(opened.errors.join("; "));
-    drive(first, opened.request.state.requestId);
+    const writesPidState = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "builder",
+        to: "lead",
+        stage: "build",
+        action: "return",
+        summary: "Builder tried to write pid.state.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+        writesPidState: true,
+      },
+      processes,
+    );
+    expect(writesPidState.ok).toBe(false);
+    if (!writesPidState.ok) expect(writesPidState.code).toBe("only_lead_writes_pid_state");
 
-    const second = new HandoffEngine({
-      workspaceRoot,
-      store: new FileHandoffStore(file),
-      now: clock(),
-    });
-    const loaded = second.getRequest(opened.request.state.requestId);
-    expect(loaded?.state.status).toBe("done");
-    expect(loaded?.subAgents.map((item) => item.agent)).toEqual(["coding", "testing", "review"]);
+    const statePatch = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "standards",
+        to: "lead",
+        stage: "estimation",
+        action: "return",
+        summary: "Standards tried to patch pid.state.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+        statePatch: { currentStage: "release-gate" },
+      },
+      processes,
+    );
+    expect(statePatch.ok).toBe(false);
+    if (!statePatch.ok) expect(statePatch.code).toBe("only_lead_writes_pid_state");
   });
 });

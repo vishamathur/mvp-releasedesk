@@ -56,7 +56,7 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | --- | --- |
 | **Change Analyst** | Local `git diff` / `git log` for `base...head`; impact heuristics; release-notes draft. An empty git range throws. |
 | **Standards** | Loads in-repo Northwind policy markdown; evaluates deviations with evidence (`policy_ref`). |
-| **Security** | Loads sample advisory JSON; discovers npm components from workspace `package.json`s; correlates + release-blocking flags. Advisory API labeled `MOCK:` when live NVD/OSV unavailable. |
+| **Security** | Discovers npm components from workspace `package.json`s; correlates + release-blocking flags. A live advisory API is required when advisory hints are present. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
 Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). A Grok call without that key throws. `skipGrok: true` keeps local analysis and does not call Grok.
@@ -92,7 +92,6 @@ Tracked fields on Builder output:
 ```
 fixtures/
   policies/           # Northwind KYC / retention / auth standards
-  security/           # sample-advisories.json
   release-notes/      # fallback notes when git range is empty
 ```
 

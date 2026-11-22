@@ -198,11 +198,6 @@ export {
   isSubAgentId,
   isHumanActor,
   validateHandoffMessage,
-  HandoffEngine,
-  MemoryHandoffStore,
-  FileHandoffStore,
-  SDLC_ROSTER,
-  traceOf,
   readLogDir,
   buildTrace,
   parseJsonl,
@@ -216,9 +211,6 @@ export {
   type HumanGateId,
   type HandoffMessage,
   type HandoffCode,
-  type RequestView,
-  type HandoffResult,
-  type OpenRequestInput,
 } from "./handoff/index.js";
 
 export {

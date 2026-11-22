@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryStore, MANDATORY_SECURITY_ROLE, MissingCredentialError } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createSecurityRunner } from "./security.js";
-import { correlateAdvisories, loadAdvisoryCorpus } from "./advisories.js";
-import { defaultWorkspaceRoot, sampleAdvisoriesPath } from "./paths.js";
+import { correlateAdvisories, type SampleAdvisory } from "./advisories.js";
+import { defaultWorkspaceRoot } from "./paths.js";
 import { createSpecialistRunners, DEFAULT_SPECIALIST_ROLES } from "./runners.js";
 
 async function invocation(
@@ -53,16 +53,24 @@ describe("SecurityRunner", () => {
     await expect(runner(inv)).rejects.toBeInstanceOf(MissingCredentialError);
   });
 
-  it("correlateAdvisories respects version ranges", async () => {
-    const corpus = await loadAdvisoryCorpus(sampleAdvisoriesPath());
-    const hits = correlateAdvisories(corpus.advisories, [
-      { name: "evil-lib", version: "9.9.9" },
-    ]);
+  it("correlateAdvisories respects version ranges", () => {
+    const advisory: SampleAdvisory = {
+      id: "RD-ADV-2024-0001",
+      advisoryId: "CVE-2024-99991",
+      title: "Prototype pollution in fictional evil-lib",
+      summary: "evil-lib versions below 9.9.9 allow prototype pollution via merge().",
+      severity: "critical",
+      packageName: "evil-lib",
+      ecosystem: "npm",
+      vulnerableVersions: "<9.9.9",
+      fixedVersion: "9.9.9",
+      releaseBlocking: true,
+      references: ["https://example.invalid/advisories/CVE-2024-99991"],
+    };
+    const hits = correlateAdvisories([advisory], [{ name: "evil-lib", version: "9.9.9" }]);
     expect(hits.some((h) => h.packageName === "evil-lib")).toBe(false);
 
-    const vulnerable = correlateAdvisories(corpus.advisories, [
-      { name: "evil-lib", version: "1.2.3" },
-    ]);
+    const vulnerable = correlateAdvisories([advisory], [{ name: "evil-lib", version: "1.2.3" }]);
     expect(vulnerable.some((h) => h.packageName === "evil-lib")).toBe(true);
   });
 });
