@@ -9,7 +9,6 @@ From the monorepo root (Node 20+):
 ```bash
 npm install
 npm run build:core && npm run build:lead
-npm run generate:demos -w @releasedesk/ui   # recorded run-context fixtures
 npm run desk                                # http://localhost:3002
 ```
 
@@ -17,8 +16,7 @@ npm run desk                                # http://localhost:3002
 | --- | --- |
 | `npm run desk` | Start Release Desk UI on port **3002** |
 | `npm run build:desk` / `npm run start:desk` | Production build + serve UI |
-| `npm run test:desk` | UI + scenario unit tests |
-| `npm run generate:demos -w @releasedesk/ui` | Re-record demo fixtures via live orchestrator |
+| `npm run test:desk` | Desk unit tests |
 
 KYC demo remains on port 3000 (`npm run dev`).
 
@@ -26,33 +24,16 @@ KYC demo remains on port 3000 (`npm run dev`).
 
 | Route | Purpose |
 | --- | --- |
-| `/mvp` | Portfolio agility · mandatory Security · token efficiency · gate · Grok intel |
-| `/agents` | Full Grok Bot + Cursor Cloud Agent roster |
-| `/desk` | Challenge trigger + bot navigation |
-| `/handoff` | PID-ER and PID-NC bot-to-bot handover (mock clients) |
-
-```bash
-npm run sdlc:mvp   # CLI portfolio check
-```
+| `/agents` | Grok Bot roster from `GET /api/bots` |
+| `/desk` | Bot navigation and the handover trace |
+| `/handoff` | PID-ER and PID-NC trace (Log directory or Replay MOCK) |
 
 ## Demo script
 
-1. Open [http://localhost:3002](http://localhost:3002) — hero brands **Release Desk**.
-2. Click **Open control plane** (`/mvp`) or **Challenge desk**.
-3. **Happy path**
-   - Under Demo scenarios → **Happy path** → **Run live**.
-   - Confirm readiness `needs_human`, specialists completed, pending merge + release gates.
-   - Approve both gates → readiness becomes `ready`. Auto-merge stays false.
-4. **Remediation loop**
-   - Run **Remediation loop** live.
-   - Confirm first security wave blocked, Builder + Reverify tasks exist, checkpoints include remediation stages, then a **feature sign-off checklist** plus pending merge/release gates.
-   - Sign off checklist items (or entire checklist), then approve merge + release → `ready`.
-5. **Blocked on security**
-   - Run **Blocked on security** → security blockers persist after remediation; reject the release gate → `not_ready`.
-6. **Pending approval**
-   - Run **Pending approval** (or load fixture) — clean check waiting on a human decision.
-7. **Fixtures**
-   - **Load fixture** uses `fixtures/demos/*.json` recorded from real orchestrator runs (regenerate with `generate:demos`).
+1. Open [http://localhost:3002/handoff](http://localhost:3002/handoff).
+2. Turn on Replay (MOCK), or set `RELEASEDESK_LOG_DIR`, or import a `.jsonl` file in the browser.
+3. Open a request and read the lanes, gate decisions, and anomalies.
+4. Open `/agents` for each bot's persona, skills, and routines.
 
 ## MOCK integrations (labeled in UI)
 
@@ -76,9 +57,9 @@ apps/releasedesk/
 
 API surface:
 
-- `GET /api/runs` · `GET /api/runs/:id`
-- `POST /api/runs/:id/approvals` — merge/release gates (never auto-merges)
-- `POST /api/runs/:id/feature-signoffs` — per-item or full feature checklist sign-off (never auto-signed)
+- `GET /api/bots` — Grok Bot roster
+- `GET /api/grok/release-intel` — key presence only
+- `POST /api/grok/release-intel` — stateless classify/summarize (no run id)
 - `GET /api/handoff` — list requests from `RELEASEDESK_LOG_DIR`, or Replay (MOCK) fixtures
 - `GET /api/handoff/:requestId` — the Log trace for one request
 

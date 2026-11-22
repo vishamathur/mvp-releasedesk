@@ -32,7 +32,6 @@ Open [http://localhost:3000](http://localhost:3000) for KYC.
 
 ```bash
 npm run build:core && npm run build:lead
-npm run generate:demos
 npm run desk
 ```
 
@@ -48,7 +47,6 @@ Open [http://localhost:3002](http://localhost:3002).
 | `npm run build` / `npm start` | Production build and serve KYC |
 | `npm run build:desk` / `npm run start:desk` | Production build and serve Release Desk UI |
 | `npm run build:core` / `npm run build:lead` / `npm run build:specialists` | Compile packages to `dist/` |
-| `npm run generate:demos` | Record demo run-context fixtures via Lead orchestrator |
 | `npm run check:release -- --repo owner/name` | On-demand Lead + specialists release check (CLI) |
 | `npm run check:release:stubs -- --repo owner/name` | Same flow with M3 MOCK stub runners |
 
@@ -151,22 +149,6 @@ npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --js
 ```
 
 See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.md).
-
-## Milestone 7 — Release Desk UI + demo scenarios
-
-App: [`apps/releasedesk`](./apps/releasedesk/) (`@releasedesk/ui`).
-
-- Delivery-manager surface for consolidated release readiness from Lead runs
-- Start on-demand checks; inspect specialists, checkpoints, cloud handoffs, PRs, audit trail
-- Human approve/reject for merge + release (never auto-merges)
-- Demo scenarios: happy path, remediation loop, blocked-on-security, pending approval
-- UI driven by real orchestrator outputs / recorded `fixtures/demos/*.json` — not fake agent chat
-- MOCK integrations clearly labeled (stubs, GitHub PR client, voice)
-
-```bash
-npm run desk
-# Demo script: apps/releasedesk/README.md
-```
 
 ## KYC domain snapshot
 

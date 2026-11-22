@@ -1,20 +1,10 @@
-import { ChallengeTrigger } from "@/components/ChallengeTrigger";
 import { DeskHeader } from "@/components/DeskHeader";
 import { GrokBotsPanel } from "@/components/GrokBotsPanel";
 import { HandoffBoard } from "@/components/HandoffBoard";
-import { RunList } from "@/components/RunList";
-import { listRuns } from "@/lib/desk";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Optimized Wednesday desk — brief spine only:
- * agent navigation · challenge trigger · recent runs.
- * Intake / demo gallery demoted (not deleted) off this surface.
- */
-export default async function DeskPage() {
-  const runs = await listRuns();
-
+export default function DeskPage() {
   return (
     <div className="min-h-screen">
       <DeskHeader />
@@ -27,8 +17,8 @@ export default async function DeskPage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            Open Lead · CA · Standards · Security · Builder (persona / skills / routines). Trigger
-            the workflow, then the red-team|security gate and Grok API intel.
+            Open Lead, Change Analyst, Standards, Security, and Builder. The iteration gate is
+            Security's security-compliance-approval, asked in Security's chat.
           </p>
         </div>
 
@@ -43,16 +33,6 @@ export default async function DeskPage() {
             </div>
           </section>
           <GrokBotsPanel deepDiveId="security" />
-          <ChallengeTrigger />
-          <section>
-            <h2 className="font-display text-2xl text-rd-ink">Recent runs</h2>
-            <p className="mt-2 text-sm text-rd-forest/65">
-              Open a run for iteration gate (approve/reject) + Grok API panel + cloud handoffs.
-            </p>
-            <div className="mt-6">
-              <RunList runs={runs} />
-            </div>
-          </section>
         </div>
       </main>
     </div>

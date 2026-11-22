@@ -22,9 +22,6 @@ export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
         </span>
       </Link>
       <nav className="flex items-center gap-2">
-        <Link href="/mvp" className={navLink}>
-          MVP
-        </Link>
         <Link href="/agents" className={navLink}>
           Agents
         </Link>

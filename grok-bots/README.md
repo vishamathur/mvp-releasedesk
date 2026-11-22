@@ -27,7 +27,7 @@ The five bots were created in the **Grok Bot app** on 2026-11-18 as teammates. T
 | Security | Security | `c325bdd3-28df-419e-9824-4ede1338afc9` |
 | Builder | Builder | `c932bf04-d05e-4809-a5cc-64afa9fb0894` |
 
-Desk (`/agents`, `/mvp`, the Grok Bots panel, and `GET /api/bots`) reads this registry and shows the bots as **created**. Nothing in Desk calls `api.x.ai` with these ids. App bots do not take API keys.
+Desk (`/agents`, the Grok Bots panel, and `GET /api/bots`) reads this registry and shows the bots as **created**. Nothing in Desk calls `api.x.ai` with these ids. App bots do not take API keys.
 
 ## API keys (application code, not the Grok Bot app)
 

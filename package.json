@@ -28,8 +28,6 @@
     "check:release:stubs": "npm run check -w @releasedesk/lead --",
     "lint": "npm run lint -w @northwind/kyc",
     "seed": "npm run seed -w @northwind/kyc",
-    "generate:demos": "npm run generate:demos -w @releasedesk/ui",
-    "sdlc:mvp": "npm exec -w @releasedesk/ui -- tsx scripts/run-sdlc-mvp.ts",
     "dev:desk": "npm run desk"
   },
   "engines": {
