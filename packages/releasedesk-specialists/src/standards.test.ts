@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createInMemoryStore } from "@releasedesk/core";
+import { createInMemoryStore, MissingCredentialError } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createStandardsRunner } from "./standards.js";
 import { defaultWorkspaceRoot, policiesDir } from "./paths.js";
-import { loadPolicyCorpus } from "./policy-corpus.js";
+import { evaluatePolicyDeviations, loadPolicyCorpus } from "./policy-corpus.js";
 
 async function invocation(
   input: Record<string, unknown>,
@@ -42,40 +42,22 @@ describe("StandardsRunner", () => {
 
     const runner = createStandardsRunner({
       workspaceRoot: defaultWorkspaceRoot(),
-      skipGrok: true,
       assumeLeadHumanGates: true,
     });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",
       policyRefs: ["northwind-kyc-baseline", "northwind-auth-standards"],
     });
-
-    const result = await runner(inv);
-    expect(result.status).toBe("completed");
-    expect(result.payload.agentRole).toBe("standards");
-    expect(result.payload.compliant).toBe(true);
-    expect(result.payload.policiesChecked).toEqual(
-      expect.arrayContaining(["northwind-kyc-baseline", "northwind-auth-standards"]),
-    );
-    expect(result.evidence?.some((e) => e.kind === "policy_ref")).toBe(true);
+    await expect(runner(inv)).rejects.toBeInstanceOf(MissingCredentialError);
   });
 
-  it("reports deviations with evidence when change summary violates policy", async () => {
-    const runner = createStandardsRunner({
-      workspaceRoot: defaultWorkspaceRoot(),
-      skipGrok: true,
-      assumeLeadHumanGates: true,
-    });
-    const inv = await invocation({
-      repository: "vishamathur/mvp-releasedesk",
-      policyRefs: ["northwind-kyc-baseline"],
+  it("reports a critical deviation when the change text says KYC auto-approve", async () => {
+    const policies = await loadPolicyCorpus(policiesDir());
+    const deviations = evaluatePolicyDeviations({
+      policies,
       changeSummary: "Enable silent KYC auto-approve for all applicants",
+      repoSignals: { hasHumanApprovalGates: true },
     });
-
-    const result = await runner(inv);
-    expect(result.payload.compliant).toBe(false);
-    const deviations = result.payload.deviations as Array<{ severity: string }>;
     expect(deviations.some((d) => d.severity === "critical")).toBe(true);
-    expect(result.evidence?.some((e) => e.kind === "finding")).toBe(true);
   });
 });

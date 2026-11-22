@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { MissingCredentialError } from "../config-error.js";
 import {
   AI_RED_TEAM_PROVIDER_ENV,
-  createCustomAiRedTeamingProvider,
   createGrokGuardrailsProvider,
   DEFAULT_AI_RED_TEAM_PROVIDER,
   evaluateIterationProceedGate,
@@ -20,27 +19,24 @@ const target = {
 const frameworks = ["atlas", "owasp_llm_top_10"] as const;
 
 describe("parseAiRedTeamProviderName", () => {
-  it("defaults to custom when unset/empty/unknown", () => {
-    expect(parseAiRedTeamProviderName(undefined)).toBe("custom");
-    expect(parseAiRedTeamProviderName("")).toBe("custom");
-    expect(parseAiRedTeamProviderName("splx")).toBe("custom");
-    expect(DEFAULT_AI_RED_TEAM_PROVIDER).toBe("custom");
-  });
-
-  it("accepts custom and grok-guardrails", () => {
-    expect(parseAiRedTeamProviderName("custom")).toBe("custom");
+  it("defaults to grok-guardrails when unset or empty", () => {
+    expect(parseAiRedTeamProviderName(undefined)).toBe("grok-guardrails");
+    expect(parseAiRedTeamProviderName("")).toBe("grok-guardrails");
     expect(parseAiRedTeamProviderName("GROK-GUARDRAILS")).toBe("grok-guardrails");
+    expect(DEFAULT_AI_RED_TEAM_PROVIDER).toBe("grok-guardrails");
   });
 
-  it("rejects zscaler instead of selecting a removed provider", () => {
-    expect(() => parseAiRedTeamProviderName("zscaler")).toThrow(/Zscaler AI red-team provider was removed/);
+  it("rejects any other provider name", () => {
+    expect(() => parseAiRedTeamProviderName("custom")).toThrow(/only provider is grok-guardrails/);
+    expect(() => parseAiRedTeamProviderName("zscaler")).toThrow(/only provider is grok-guardrails/);
+    expect(() => parseAiRedTeamProviderName("splx")).toThrow(/only provider is grok-guardrails/);
   });
 });
 
 describe("resolveAiRedTeamingProvider factory", () => {
-  it("selects custom by default (off / unset env)", () => {
+  it("selects grok-guardrails when unset", () => {
     const provider = resolveAiRedTeamingProvider({ env: {} });
-    expect(provider.name).toBe("custom");
+    expect(provider.name).toBe("grok-guardrails");
   });
 
   it(`selects grok-guardrails when ${AI_RED_TEAM_PROVIDER_ENV}=grok-guardrails`, () => {
@@ -50,27 +46,12 @@ describe("resolveAiRedTeamingProvider factory", () => {
     expect(provider.name).toBe("grok-guardrails");
   });
 
-  it("honors explicit provider override over env", () => {
-    const provider = resolveAiRedTeamingProvider({
-      provider: "custom",
-      env: { [AI_RED_TEAM_PROVIDER_ENV]: "grok-guardrails" },
-    });
-    expect(provider.name).toBe("custom");
-  });
-
-  it("returns injected client when provided", () => {
-    const client = createCustomAiRedTeamingProvider();
-    expect(resolveAiRedTeamingProvider({ client }).name).toBe("custom");
-  });
-});
-
-describe("custom provider", () => {
-  it("refuses sample probes when no live engine is attached", async () => {
-    const provider = createCustomAiRedTeamingProvider();
-    await expect(provider.healthCheck()).rejects.toBeInstanceOf(MissingCredentialError);
-    await expect(provider.runProbes(target, frameworks)).rejects.toBeInstanceOf(
-      MissingCredentialError,
-    );
+  it("throws when the env names another provider", () => {
+    expect(() =>
+      resolveAiRedTeamingProvider({
+        env: { [AI_RED_TEAM_PROVIDER_ENV]: "custom" },
+      }),
+    ).toThrow(/only provider is grok-guardrails/);
   });
 });
 
@@ -194,7 +175,7 @@ describe("collapsed gate + side-queue remediation + iteration approval", () => {
     const result = runCollapsedAiRedTeamGate({
       iterationId: "iter_5",
       nowIso,
-      context: { provider: "custom", findingsRouting: "report-only" },
+      context: { provider: "grok-guardrails", findingsRouting: "report-only" },
       preReleaseFindings: [blockingFinding],
       postRemediationFindings: [],
       approvals: [

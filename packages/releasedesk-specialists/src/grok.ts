@@ -48,7 +48,7 @@ export function resolveGrokApiKey(_env: NodeJS.ProcessEnv = process.env): string
 
 export async function grokComplete(
   prompt: string,
-  opts: GrokClientOptions & { fallback?: string } = {},
+  opts: GrokClientOptions = {},
 ): Promise<GrokCompleteResult> {
   const env = opts.env ?? process.env;
   const apiKey =

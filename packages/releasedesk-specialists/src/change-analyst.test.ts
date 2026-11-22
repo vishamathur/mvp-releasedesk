@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createInMemoryStore } from "@releasedesk/core";
+import { createInMemoryStore, MissingCredentialError } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createChangeAnalystRunner } from "./change-analyst.js";
 
@@ -54,7 +54,6 @@ describe("ChangeAnalystRunner", () => {
     const range = gitRange();
     const runner = createChangeAnalystRunner({
       workspaceRoot: range.root,
-      skipGrok: true,
     });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",
@@ -63,20 +62,12 @@ describe("ChangeAnalystRunner", () => {
       focusPaths: [],
     });
 
-    const result = await runner(inv);
-    expect(result.status).toBe("completed");
-    expect(result.payload.agentRole).toBe("change_analyst");
-    expect(typeof result.payload.releaseNotesDraft).toBe("string");
-    expect(Array.isArray(result.payload.findings)).toBe(true);
-    expect((result.payload.findings as unknown[]).length).toBeGreaterThan(0);
-    expect(result.evidence?.length).toBeGreaterThan(0);
-    expect(["low", "medium", "high", "unknown"]).toContain(result.payload.overallImpact);
+    await expect(runner(inv)).rejects.toBeInstanceOf(MissingCredentialError);
   });
 
   it("refuses to invent a change set when git yields nothing", async () => {
     const runner = createChangeAnalystRunner({
       workspaceRoot: "/tmp/nonexistent-releasedesk-workspace",
-      skipGrok: true,
     });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",

@@ -4,15 +4,14 @@ import { MockMetaSchema } from "../mock.js";
 /**
  * Pluggable AI Red Teaming providers.
  *
- * Select via `RELEASEDESK_AI_RED_TEAM_PROVIDER`:
- * - `custom` (default) — no live probe engine; calls throw a configuration error
- * - `grok-guardrails` — fixed adversarial prompts against the guarded Grok config
+ * The only provider is `grok-guardrails`. Unset uses that provider.
+ * Any other name is a configuration error.
  */
 
-export const AiRedTeamProviderNameSchema = z.enum(["custom", "grok-guardrails"]);
+export const AiRedTeamProviderNameSchema = z.enum(["grok-guardrails"]);
 export type AiRedTeamProviderName = z.infer<typeof AiRedTeamProviderNameSchema>;
 
-export const DEFAULT_AI_RED_TEAM_PROVIDER: AiRedTeamProviderName = "custom";
+export const DEFAULT_AI_RED_TEAM_PROVIDER: AiRedTeamProviderName = "grok-guardrails";
 
 /** Frameworks findings must map into for hard-block semantics. */
 export const AiRedTeamFrameworkSchema = z.enum(["atlas", "owasp_llm_top_10"]);

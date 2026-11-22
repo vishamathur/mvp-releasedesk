@@ -98,45 +98,11 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       }
     }
 
-    const advisoriesPath = options.advisoriesPath ?? sampleAdvisoriesPath();
-    const corpus = await loadAdvisoryCorpus(advisoriesPath);
-
-    // Live NVD/OSV not wired — fixture corpus is intentional MOCK for external advisory APIs.
-    const advisoryMock = createMockMeta(
-      "advisory-api",
-      "NVD/OSV credentials unavailable; using in-repo sample advisory fixtures",
-    );
-    mocksUsed.push(advisoryMock);
-
-    evidence.push({
-      kind: "advisory",
-      title: "Advisory corpus loaded",
-      summary: formatMockNote(
-        `Loaded ${corpus.advisories.length} sample advisory record(s) from fixtures`,
-      ),
-      source: "security",
-      uri: advisoriesPath,
-      mock: advisoryMock,
-      data: { source: corpus.source, count: corpus.advisories.length },
-    });
-
-    const matched = correlateAdvisories(corpus.advisories, components, advisoryHints);
-
-    const advisoryFindings: SecurityFinding[] = matched.map((m) =>
-      enforceFrameworkHardFail({
-        id: m.id,
-        severity: m.severity,
-        title: m.title,
-        summary: `${m.summary} Correlated to component ${m.matchedComponent.name}${
-          m.matchedComponent.version ? `@${m.matchedComponent.version}` : ""
-        }.`,
-        component: m.matchedComponent.name,
-        advisoryId: m.advisoryId,
-        releaseBlocking: m.releaseBlocking,
-        hardFail: m.releaseBlocking,
-        frameworkMappings: [],
-      }),
-    );
+    if (advisoryHints.length > 0 && !options.advisoriesPath) {
+      throw new Error(
+        "Live advisory API is not configured. Refusing to use sample advisories.",
+      );
+    }
 
     // MITRE ATLAS + OWASP LLM Top 10 hard guardrails for AI surfaces.
     const aiFindings = reviewAiSurfaceAgainstFrameworks({
@@ -169,7 +135,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       },
     });
 
-    const findings = [...advisoryFindings, ...aiFindings].map(enforceFrameworkHardFail);
+    const findings = aiFindings.map(enforceFrameworkHardFail);
 
     for (const f of findings) {
       evidence.push({
@@ -177,7 +143,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
         title: f.title,
         summary: formatMockNote(f.summary),
         source: "security",
-        mock: f.frameworkMappings.length ? frameworkMock : advisoryMock,
+        mock: frameworkMock,
         data: {
           id: f.id,
           advisoryId: f.advisoryId,
@@ -195,28 +161,20 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
     const securityCheckFailed = frameworkHardFailCount > 0 || releaseBlockingCount > 0;
     const riskLevel = riskLevelFromFindings(findings);
 
-    if (!options.skipGrok) {
-      const grok = await grokComplete(
-        `Security risk narrative for ${repository} using MITRE ATLAS and OWASP LLM Top 10. Findings: ${JSON.stringify(findings)}`,
-        {
-          ...options.grok,
-          agentRole: options.grok?.agentRole ?? "security",
-          fallback:
-            findings.length === 0
-              ? "No correlated advisories or ATLAS/OWASP findings."
-              : `${releaseBlockingCount} release-blocking; ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s); risk ${riskLevel}.`,
-        },
-      );
-      if (grok.mocked && grok.mock) mocksUsed.push(grok.mock);
-      if (!grok.mocked) {
-        evidence.push({
-          kind: "finding",
-          title: "Grok security narrative",
-          summary: grok.text.slice(0, 2000),
-          source: "security",
-        });
-      }
-    }
+    const grok = await grokComplete(
+      `Security risk narrative for ${repository} using MITRE ATLAS and OWASP LLM Top 10. Findings: ${JSON.stringify(findings)}`,
+      {
+        ...options.grok,
+        agentRole: options.grok?.agentRole ?? "security",
+        safetySource: inv.runId,
+      },
+    );
+    evidence.push({
+      kind: "finding",
+      title: "Grok security narrative",
+      summary: grok.text.slice(0, 2000),
+      source: "security",
+    });
 
     const summary =
       findings.length === 0

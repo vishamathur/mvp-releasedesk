@@ -31,7 +31,7 @@ npm run typecheck -w @releasedesk/core
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 | Mandatory gates | `gates` | Security always required on every change (`MANDATORY_ANALYSIS_ROLES`, `evaluateSecurityParticipation`) |
 | AI Security frameworks | `ai-security-frameworks` | MITRE ATLAS + OWASP LLM Top 10 hard fails; open-for-review PR merge block (drafts exempt); human waivers |
-| AI Red Teaming providers | `ai-red-teaming` | `custom` (no live engine; throws) or `grok-guardrails` (fixed probes through the guarded Grok config). Collapsed gate still requires a human `red_team` or `security` sign-off. |
+| AI Red Teaming | `ai-red-teaming` | Only `grok-guardrails`. Collapsed gate still requires a human `red_team` or `security` sign-off. |
 
 ## Per-agent API keys (no shared fallback)
 

@@ -132,7 +132,6 @@ async function main(): Promise<void> {
 
   const runners = createSpecialistRunners({
     workspaceRoot: args.workspace,
-    skipGrok: true,
   });
 
   const lead = new LeadOrchestrator({ store, runners });
