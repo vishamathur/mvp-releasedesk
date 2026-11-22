@@ -1,0 +1,27 @@
+# intake.vishalmathur.org document root
+Options -Indexes
+DirectoryIndex index.html
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+  RewriteRule (^|/)\. - [F]
+  RewriteRule (^|/)(data|intake-private|config)(/|$) - [F,NC]
+  RewriteRule \.(ini|log|json|bak|sql|sh|example|dist|md)$ - [F,NC]
+  # Only these scripts may run under api/
+  RewriteCond %{REQUEST_URI} ^/api/
+  RewriteCond %{REQUEST_URI} !^/api/(intake|chat|catalogue|status|lead-update|finance-estimate)\.php$
+  RewriteRule ^ - [F]
+</IfModule>
+<FilesMatch "(^\.|config|\.(ini|log|bak|sql|example|md)$)">
+  Require all denied
+</FilesMatch>
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>
+LimitRequestBody 65536

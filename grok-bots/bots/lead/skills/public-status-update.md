@@ -1,0 +1,5 @@
+Skill: public-status-update (Release Desk Lead only)
+Posts what the visitor sees at intake.vishalmathur.org (status page keyed by reference + private key the visitor holds).
+POST https://intake.vishalmathur.org/api/lead-update.php, signed like finance-estimate (X-Intake-Timestamp, X-Intake-Signature = HMAC-SHA256(secret, ts + "." + body)).
+Body: {"requestId":"REQ-…","updateId":"<unique, e.g. lead-<requestId>-<n>>","from":"lead","stage":"<pid stage>" or "publicStatus":"<status>","message":"<= 1000 chars, plain","nextGate":{"gate":"finance-approval|proposal|security-compliance-approval|release-gate|none","owner":"change-analyst|security|builder|null"},"quote":{"totalInr":…, "budgetBandsInr":{"low":…,"expected":…,"high":…},"lines":[{"serviceId","name","qty","lineTotalInr"}]}}
+Rules: status only moves forward (build <-> security allowed for remediation; rejected any time; done/rejected final). Same updateId = ignored (safe to retry). "approved" in a message must name the human ("approved by Vishal"). Record each updateId in pid.public.{id}; cc Release Desk Log.

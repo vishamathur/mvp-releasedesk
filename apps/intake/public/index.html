@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Release Desk · Start or track a request</title>
+  <meta name="description" content="Start a new customer engagement or an enhancement request with Release Desk." />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <strong>Release Desk</strong>
+    <nav><a href="#start">Start a request</a><a href="#catalogue">Services</a><a href="#track">Track a request</a></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>How can we help?</h1>
+    <p>Pick an option. Our assistant helps you fill in the details, and Release Desk Lead takes it from there. People make every approval.</p>
+    <div class="options" role="radiogroup" aria-label="Request type">
+      <button type="button" class="option" data-route="new_customer" role="radio" aria-checked="false">
+        <span class="tag">New customer</span>
+        <strong>Start something new</strong>
+        <small>New customer or a new product. Goes to discovery and a proposal.</small>
+      </button>
+      <button type="button" class="option" data-route="er" role="radio" aria-checked="false">
+        <span class="tag">Existing customer</span>
+        <strong>Enhancement request</strong>
+        <small>Change to an existing project: enhancement, defect or regulatory tweak.</small>
+      </button>
+    </div>
+  </section>
+
+  <section id="start" class="grid2" hidden>
+    <div class="card chat">
+      <h2>Assistant</h2>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="chat-input">
+        <input id="chat-text" maxlength="1500" placeholder="Describe what you need…" autocomplete="off" />
+        <button type="submit">Send</button>
+      </form>
+      <p class="hint">The assistant fills in the form for you. Prices it mentions are EXAMPLE list prices, not a quote.</p>
+    </div>
+
+    <div class="card">
+      <h2 id="form-title">Your request</h2>
+      <form id="intake-form" novalidate>
+        <div class="grid">
+          <label>Your name<input name="contactName" required minlength="2" maxlength="100" autocomplete="name" /></label>
+          <label>Work email<input name="email" type="email" required maxlength="254" autocomplete="email" /></label>
+          <label>Company<input name="company" required maxlength="120" autocomplete="organization" /></label>
+          <label>Urgency
+            <select name="urgency"><option value="standard">Standard</option><option value="expedited">Expedited</option><option value="critical">Critical</option></select>
+          </label>
+        </div>
+        <div class="grid route-er">
+          <label>Customer ID<input name="customerId" maxlength="40" placeholder="e.g. CUST-1042" /></label>
+          <label>Project reference<input name="projectRef" maxlength="40" placeholder="e.g. PRJ-ONB-7" /></label>
+          <label>Change type
+            <select name="changeType"><option value="enhancement">Enhancement</option><option value="defect">Defect</option><option value="regulatory">Regulatory tweak</option></select>
+          </label>
+          <label>Needed by (optional)<input name="desiredBy" type="date" /></label>
+        </div>
+        <div class="grid route-nc">
+          <label>Legal entity name<input name="legalName" maxlength="150" /></label>
+          <label>Jurisdiction<input name="jurisdiction" maxlength="80" placeholder="e.g. India" /></label>
+          <label>Intended product<input name="intendedProduct" maxlength="120" /></label>
+          <label>Sponsor (name and role)<input name="sponsor" maxlength="120" /></label>
+        </div>
+        <label>Title<input name="title" required minlength="5" maxlength="150" /></label>
+        <label>Description<textarea name="description" required minlength="20" maxlength="4000" rows="6"></textarea></label>
+        <div class="grid">
+          <label>Budget in INR (optional)<input name="customerBudgetInr" inputmode="numeric" pattern="[0-9]*" maxlength="10" /></label>
+          <label>Links (optional, https, one per line)<textarea name="artifactLinks" rows="2" maxlength="2600"></textarea></label>
+        </div>
+        <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off" /></label></div>
+        <label class="consent"><input type="checkbox" name="consent" required />
+          <span>I agree that these details are stored for 30 days and processed, including by an AI model, so Release Desk can review and respond. I won't include passwords or confidential data.</span></label>
+        <button type="submit" id="submit">Submit to Release Desk Lead</button>
+        <p id="form-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="catalogue" class="card">
+    <h2>Services <span class="badge">EXAMPLE DATA</span></h2>
+    <p class="hint" id="cat-label"></p>
+    <div class="table-wrap"><table id="cat-table"><thead><tr><th>Service</th><th>Unit</th><th class="num">List price (INR)</th><th class="num">Typical effort</th><th class="num">Risk factor</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="track" class="card">
+    <h2>Track a request</h2>
+    <form id="track-form" class="grid">
+      <label>Reference<input name="ref" placeholder="REQ-20261122-123456" pattern="REQ-\d{8}-\d{6}" required /></label>
+      <label>Status key<input name="token" placeholder="from your confirmation" pattern="[a-f0-9]{32}" required /></label>
+      <button type="submit">Show status</button>
+    </form>
+    <div id="status-view" hidden>
+      <p class="status-line"><strong id="st-label"></strong> <span id="st-gate" class="hint"></span></p>
+      <ol id="st-steps" class="steps"></ol>
+      <div id="st-quote" hidden>
+        <h3>Indicative estimate from Release Desk Lead</h3>
+        <table><tbody id="st-quote-lines"></tbody></table>
+        <p class="hint" id="st-quote-note"></p>
+      </div>
+      <h3>Updates</h3>
+      <ul id="st-messages" class="messages"></ul>
+      <form id="reply-form" class="chat-input">
+        <input name="message" maxlength="2000" placeholder="Send a message to Release Desk Lead" required />
+        <button type="submit">Send</button>
+      </form>
+      <p id="reply-status" role="status"></p>
+    </div>
+  </section>
+</main>
+<footer class="wrap hint">Service names and prices on this page are EXAMPLE data for demonstration. Nothing here is an offer or an approval.</footer>
+</body>
+</html>

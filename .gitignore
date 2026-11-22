@@ -17,3 +17,5 @@ packages/releasedesk-core/data/
 .releasedesk/
 .turbo
 *.tsbuildinfo
+apps/intake/private/intake-config.php
+apps/intake/private/data/
