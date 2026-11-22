@@ -9,6 +9,27 @@ $R = [];
 function t(string $n, callable $f) { global $R; try { $f(); $R[] = "PASS  $n"; } catch (Throwable $e) { $R[] = "FAIL  $n  " . $e->getMessage(); } }
 function ok($c, string $m = 'assert') { if (!$c) throw new Exception($m); }
 
+t('grok body: guidelines, hashed safety id, no stop or n', function () {
+    $body = grok_chat_body(
+        ['GROK_MODEL' => 'grok-4.20-0309-non-reasoning'],
+        'system',
+        'visitor text',
+        'intake_chat',
+        ['type' => 'object', 'required' => []],
+        'REQ-20261122-000123'
+    );
+    ok($body['guidelines'] === grok_guidelines(), json_encode($body['guidelines']));
+    ok($body['safety_identifier'] === hash('sha256', 'REQ-20261122-000123'), 'hash');
+    ok(!isset($body['stop']) && !isset($body['n']), 'no stop or n');
+    ok(!str_contains($body['safety_identifier'], 'REQ-'), 'opaque');
+    $threw = false;
+    try { grok_chat_body(['GROK_MODEL' => 'grok-4.20-multi-agent'], 's', 'u', 'n', ['type' => 'object'], 'REQ-1'); }
+    catch (RuntimeException $e) { $threw = str_contains($e->getMessage(), 'guidelines'); }
+    ok($threw, 'multi-agent');
+    $empty = false;
+    try { grok_safety_identifier('   '); } catch (RuntimeException $e) { $empty = true; }
+    ok($empty, 'empty id');
+});
 t('catalogue: 11 EXAMPLE services load and validate', function () use ($cfg) {
     $c = catalogue_load($cfg); ok(count($c['byId']) === 11, 'count'); ok(str_contains($c['label'], 'EXAMPLE'), 'label');
 });

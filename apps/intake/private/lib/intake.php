@@ -162,7 +162,7 @@ function api_intake(array $cfg): void {
     for ($i = 0; $i < 5 && is_file($cfg['DATA_DIR'] . "/submissions/$requestId.json"); $i++) $requestId = app_request_id();
     $submittedAt = gmdate('Y-m-d\TH:i:s\Z');
     try {
-        $fin = finance_assess($cfg, ['pid' => intake_pid($d['route']), 'text' => $d['title'] . "\n" . $d['description'], 'urgency' => $d['urgency'], 'customerBudgetInr' => $d['customerBudgetInr']]);
+        $fin = finance_assess($cfg, ['pid' => intake_pid($d['route']), 'text' => $d['title'] . "\n" . $d['description'], 'urgency' => $d['urgency'], 'customerBudgetInr' => $d['customerBudgetInr'], 'requestId' => $requestId]);
     } catch (RuntimeException $e) {
         app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
         return;

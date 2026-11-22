@@ -52,7 +52,9 @@ function api_chat(array $cfg): void {
         if (trim((string)($cfg['GROK_API_KEY'] ?? '')) === '') {
             throw new RuntimeException('GROK_API_KEY is not set. Refusing to invent a chat reply.');
         }
-        $out = grok_json($cfg, chat_system_prompt($cat), "Selected option: $route\n<visitor_input>\n" . implode("\n", $msgs) . "\n</visitor_input>", 'intake_chat', chat_schema(array_keys($cat['byId'])), 900);
+        $session = app_clean($body['sessionId'] ?? '', 80);
+        if (!preg_match('/^[A-Za-z0-9_.:-]{8,80}$/', $session)) $session = 'intake-chat';
+        $out = grok_json($cfg, chat_system_prompt($cat), "Selected option: $route\n<visitor_input>\n" . implode("\n", $msgs) . "\n</visitor_input>", 'intake_chat', chat_schema(array_keys($cat['byId'])), $session, 900);
     } catch (Throwable $e) {
         $why = $e->getMessage();
         if (!str_contains($why, 'Refusing to invent')) {

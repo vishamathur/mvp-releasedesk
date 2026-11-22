@@ -113,7 +113,9 @@ function finance_assess(array $cfg, array $req): array {
                 . "Recommendation: approve-recommended only for small, clear, low-risk enhancements; review when scope, risk, cost or customer is uncertain; reject-suggested when out of catalogue scope or clearly unviable.\n"
                 . GROK_UNTRUSTED_RULES;
             $user = "<visitor_input>\n" . json_encode(['pid' => $pid, 'urgency' => $urgency, 'statedBudgetInr' => $budget, 'request' => app_substr((string)$req['text'], 4000)], JSON_UNESCAPED_UNICODE) . "\n</visitor_input>";
-            $grok = grok_json($cfg, $system, $user, 'finance_assessment', finance_schema(array_keys($cat['byId'])));
+            $safety = trim((string)($req['requestId'] ?? ''));
+            if ($safety === '') $safety = 'finance-estimate';
+            $grok = grok_json($cfg, $system, $user, 'finance_assessment', finance_schema(array_keys($cat['byId'])), $safety);
             $lines = array_values(array_filter($grok['lines'], fn($l) => isset($cat['byId'][$l['serviceId'] ?? ''])));
             $confidence = $grok['mappingConfidence'];
             if (!$lines) throw new RuntimeException('grok_no_valid_lines');
@@ -162,14 +164,14 @@ function api_finance_estimate(array $cfg): void {
     if (!$pid || ($text === '' && empty($body['lines']))) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['pid', 'text']]); return; }
     $lines = [];
     foreach (array_slice((array)($body['lines'] ?? []), 0, 8) as $l) if (is_array($l)) $lines[] = ['serviceId' => app_clean($l['serviceId'] ?? '', 20), 'qty' => (int)($l['qty'] ?? 1)];
+    $rid = app_clean($body['requestId'] ?? '', 40);
     try {
         $res = finance_assess($cfg, ['pid' => $pid, 'text' => $text, 'urgency' => app_clean($body['urgency'] ?? 'standard', 20),
-            'customerBudgetInr' => $body['customerBudgetInr'] ?? null, 'lines' => $lines]);
+            'customerBudgetInr' => $body['customerBudgetInr'] ?? null, 'lines' => $lines, 'requestId' => $rid]);
     } catch (RuntimeException $e) {
         app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
         return;
     }
-    $rid = app_clean($body['requestId'] ?? '', 40);
     if (app_valid_request_id($rid)) {
         app_write_json($cfg['DATA_DIR'] . "/submissions/$rid.finance-" . gmdate('YmdHis') . '.json', $res);
         $res['artifactRef'] = "finance:$rid@" . gmdate('Y-m-d\TH:i:s\Z');
