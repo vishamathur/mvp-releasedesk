@@ -417,3 +417,133 @@ describe("validateHandoffMessage", () => {
     if (!statePatch.ok) expect(statePatch.code).toBe("only_lead_writes_pid_state");
   });
 });
+
+describe("intake front door", () => {
+  const processes = loadProcessDefinitionsSync(workspaceRoot);
+  const card = "intake:REQ-2026-0001@2026-11-22T15:40:00+05:30";
+
+  it("accepts an intake-request from intake to lead", () => {
+    const result = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "intake-request",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        referenceId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "intake",
+        to: "lead",
+        stage: "intake",
+        action: "request",
+        summary: "Public PID-ER card for an address change.",
+        artifactRefs: [card],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects an intake-request that is not addressed to lead", () => {
+    const result = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "intake-request",
+        pid: "PID-NC",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        referenceId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "intake",
+        to: "change-analyst",
+        stage: "intake",
+        action: "request",
+        summary: "Intake tried to skip Lead.",
+        artifactRefs: [card],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("intake_only_to_lead");
+  });
+
+  it("rejects pid.state writes from intake", () => {
+    const result = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "intake-request",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        referenceId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "intake",
+        to: "lead",
+        stage: "intake",
+        action: "request",
+        summary: "Intake tried to write pid.state.",
+        artifactRefs: [card],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+        pidState: { currentStage: "estimation" },
+      },
+      processes,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("only_lead_writes_pid_state");
+  });
+
+  it("rejects any intake message to a specialist", () => {
+    for (const to of ["change-analyst", "standards", "security", "builder"] as const) {
+      const result = validateHandoffMessage(
+        {
+          v: 1,
+          kind: "consult",
+          pid: "PID-ER",
+          pidVersion: "1.1.0",
+          requestId: "REQ-2026-0001",
+          thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+          from: "intake",
+          to,
+          stage: "estimation",
+          action: "consult",
+          summary: `Intake tried to message ${to}.`,
+          artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+          memoryKey: "pid.state.REQ-2026-0001",
+          humanGate: null,
+        },
+        processes,
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.code).toBe("intake_only_to_lead");
+    }
+  });
+
+  it("accepts public-status from lead to intake", () => {
+    const result = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "public-status",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        referenceId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "lead",
+        to: "intake",
+        stage: "estimation",
+        action: "status",
+        summary: "Public status: estimating. Next gate is finance-approval, held by Change Analyst.",
+        artifactRefs: [card],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+      },
+      processes,
+    );
+    expect(result.ok).toBe(true);
+  });
+});

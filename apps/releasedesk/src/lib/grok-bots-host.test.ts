@@ -5,13 +5,20 @@ describe("listGrokBotPacks", () => {
   it("shows every roster bot as created in the Grok Bot app", async () => {
     const packs = await listGrokBotPacks();
     expect(packs.map((p) => p.id)).toEqual([
+      "intake",
       "lead",
       "change-analyst",
       "standards",
       "security",
       "builder",
     ]);
-    for (const pack of packs) {
+    const intake = packs.find((p) => p.id === "intake");
+    expect(intake?.displayName).toBe("Intake");
+    expect(intake?.apiKeyEnv).toBe("");
+    expect(intake?.keyPresent).toBe(false);
+    expect(intake?.grokBotAppAgentId).toBe("ce1f6670-8b51-4478-8f61-42911ea3be41");
+    expect(intake?.teammates).toEqual(["lead", "log"]);
+    for (const pack of packs.filter((p) => p.id !== "intake")) {
       expect(pack.created).toBe(true);
       expect(pack.provisionLabel).toBe("created");
       expect(pack.provisionStatus).toBe("created_in_grok_bot_app");

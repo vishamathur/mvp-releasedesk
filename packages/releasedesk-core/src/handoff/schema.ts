@@ -1,21 +1,32 @@
 import { z } from "zod";
 import {
+  HANDOFF_ACTOR_IDS,
   HUMAN_GATE_IDS,
+  isHandoffActor,
   isHumanActor,
-  isTeammateId,
   stageOwner,
   type ProcessDefinition,
   type TeammateId,
 } from "./process-defs.js";
 
-export const HANDOFF_KINDS = ["stage-handoff", "consult", "stage-return", "build-result"] as const;
-export const HANDOFF_ACTIONS = ["start", "consult", "return", "remediate", "block"] as const;
+export const HANDOFF_KINDS = [
+  "stage-handoff",
+  "consult",
+  "stage-return",
+  "build-result",
+  "intake-request",
+  "public-status",
+] as const;
+export const HANDOFF_ACTIONS = ["start", "consult", "return", "remediate", "block", "request", "status"] as const;
 export const THREAD_CHANNELS = ["lead-chat"] as const;
 
 /** Owner stage-return note: ISO-8601 time, then the human's verbatim reply. */
 export const VERBATIM_NOTE = /^\d{4}-\d{2}-\d{2}T[^|]+\| verbatim: .+/;
 
 const STATE_WRITE_KEYS = ["pidState", "writesPidState", "statePatch"] as const;
+
+/** Public card reference copied onto an intake-request. */
+export const INTAKE_ARTIFACT = /^intake:[^@\s]+@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export const HumanGateSchema = z
   .object({
@@ -39,14 +50,15 @@ export const HandoffMessageSchema = z
         threadId: z.string().min(1),
       })
       .strict(),
-    from: z.enum(["lead", "change-analyst", "standards", "security", "builder"]),
-    to: z.enum(["lead", "change-analyst", "standards", "security", "builder"]),
+    from: z.enum(HANDOFF_ACTOR_IDS),
+    to: z.enum(HANDOFF_ACTOR_IDS),
     stage: z.string().min(1),
     action: z.enum(HANDOFF_ACTIONS),
     summary: z.string().min(1),
     artifactRefs: z.array(z.string().min(1)),
     memoryKey: z.string().min(1),
     humanGate: HumanGateSchema.nullable(),
+    referenceId: z.string().min(1).optional(),
     proposedBranch: z.string().min(1).optional(),
     prUrl: z.string().min(1).optional(),
     testsPassed: z.boolean().optional(),
@@ -66,6 +78,7 @@ export type HandoffCode =
   | "gate_owner_mismatch"
   | "return_must_go_to_lead"
   | "only_lead_hands_off_stage"
+  | "intake_only_to_lead"
   | "unknown_request"
   | "unknown_stage"
   | "not_waiting_for_human"
@@ -110,14 +123,14 @@ export function validateHandoffMessage(
     };
   }
 
-  if (typeof from === "string" && !isTeammateId(from)) {
+  if (typeof from === "string" && !isHandoffActor(from)) {
     return {
       ok: false,
       code: "unknown_sender",
-      errors: [`Unknown sender "${from}". Teammates are ${["lead", "change-analyst", "standards", "security", "builder"].join(", ")}.`],
+      errors: [`Unknown sender "${from}". Handoff actors are ${HANDOFF_ACTOR_IDS.join(", ")}.`],
     };
   }
-  if (typeof raw.to === "string" && !isTeammateId(raw.to)) {
+  if (typeof raw.to === "string" && !isHandoffActor(raw.to)) {
     return {
       ok: false,
       code: "unknown_recipient",
@@ -198,6 +211,39 @@ export function validateHandoffMessage(
   ) {
     setCode("return_must_go_to_lead");
     errors.push(`${message.kind} comes back to Lead.`);
+  }
+
+  if (message.from === "intake" && message.to !== "lead") {
+    setCode("intake_only_to_lead");
+    errors.push(
+      `Intake talks only to Lead. Refusing a message to ${message.to}.`,
+    );
+  }
+  if (message.kind === "intake-request" && (message.from !== "intake" || message.to !== "lead")) {
+    setCode("intake_only_to_lead");
+    errors.push("intake-request is sent by Intake to Lead only.");
+  }
+  if (message.from === "intake" && message.kind !== "intake-request") {
+    errors.push("Intake sends intake-request only.");
+  }
+  if (message.kind === "intake-request") {
+    if (message.action !== "request") errors.push("intake-request action must be request");
+    if (!message.referenceId) errors.push("intake-request carries referenceId");
+    if (
+      message.artifactRefs.length === 0 ||
+      message.artifactRefs.some((ref) => !INTAKE_ARTIFACT.test(ref))
+    ) {
+      errors.push("intake-request artifactRefs are intake:<ref>@<ISO-8601>");
+    }
+  }
+  if (message.kind === "public-status") {
+    if (message.from !== "lead" || message.to !== "intake") {
+      errors.push("public-status is sent by Lead to Intake.");
+    }
+    if (message.action !== "status") errors.push("public-status action must be status");
+    if (!message.referenceId) errors.push("public-status carries referenceId");
+  } else if (message.referenceId !== undefined && message.kind !== "intake-request") {
+    errors.push("referenceId belongs on intake-request and public-status");
   }
 
   if (message.kind === "stage-handoff" && message.from !== "lead") {

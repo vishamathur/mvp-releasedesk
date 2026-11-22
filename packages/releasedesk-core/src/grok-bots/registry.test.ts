@@ -41,12 +41,17 @@ const APP_AGENTS = {
     id: "3824a7e2-512f-4a5b-a0bd-5202fd8dffbd",
     name: "Release Desk Log",
   },
+  intake: {
+    id: "ce1f6670-8b51-4478-8f61-42911ea3be41",
+    name: "Intake",
+  },
 } as const;
 
 describe("grok-bots registry", () => {
   it("records each bot as a Grok Bot app teammate, not an xAI agent", async () => {
     const registry = await loadGrokBotRegistry(workspaceRoot);
     expect(registry.entries.map((e) => e.definitionId)).toEqual([
+      "intake",
       "lead",
       "change-analyst",
       "standards",

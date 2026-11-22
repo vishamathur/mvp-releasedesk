@@ -1,8 +1,8 @@
 # Slide 2 — Architecture / workflow
 
-**Title:** Release Desk — six Grok Bot teammates, chat only
+**Title:** Release Desk — seven Grok Bot teammates, chat only
 
-**One-liner:** Lead, Change Analyst, Standards, Security, and Builder hand work with handoff.v1. Release Desk Log records every copy. Builder launches Cursor. Shipped Desk code calls the Grok API. The iteration gate still needs red team or security before Vishal merges.
+**One-liner:** Intake sends public requests to Lead. Lead, Change Analyst, Standards, Security, and Builder hand work with handoff.v1. Lead sends public-status back to Intake. Release Desk Log records every copy. Builder launches Cursor. Shipped Desk code calls the Grok API. The iteration gate still needs red team or security before Vishal merges.
 
 ## Diagram
 
@@ -22,6 +22,7 @@ flowchart TB
   end
 
   subgraph Teammates["Grok Bot teammates"]
+    Intake["Intake · public front door"]
     Lead["Lead · sole pid.state writer"]
     CA["Change Analyst · finance and proposal gates"]
     Std["Standards · consult only"]
@@ -43,9 +44,11 @@ flowchart TB
   end
 
   Vishal --> Thread --> Lead
+  Intake -->|"intake-request"| Lead
+  Lead -->|"public-status"| Intake
   Lead --> CA & Std & Sec & Bld
   CA & Sec & Bld --> Vishal
-  Lead & CA & Std & Sec & Bld -.->|cc, priority false| Log
+  Intake & Lead & CA & Std & Sec & Bld -.->|cc, priority false| Log
   Log --> Desk
   Bld --> Rules --> Ship --> Intel --> Trust
   Trust --> Bld
@@ -54,7 +57,7 @@ flowchart TB
 
 ## Callouts
 
-1. **Six teammates.** Five move the work. Release Desk Log only records it and never routes or approves.
+1. **Seven teammates.** Intake is the public front door and talks only to Lead. Five move the SDLC work. Release Desk Log only records it and never routes or approves.
 2. **Gate owner asks.** Change Analyst raises proposal and finance. Security raises security-compliance, which is the `red_team|security` iteration gate. Builder raises release. Lead does not ask Vishal for a gate.
 3. **Chat only.** The request thread is Lead's chat (`lead-chat`). There is no other channel.
 4. **Why Cursor.** Builder launches a cloud agent under AGENTS.md, the Grok rule, and `ship-grok-release-intel`. The agent opens a pull request and does not merge.

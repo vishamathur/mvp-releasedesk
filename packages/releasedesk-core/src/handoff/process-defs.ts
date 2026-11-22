@@ -29,6 +29,11 @@ export const TEAMMATE_IDS = [
 
 export type TeammateId = (typeof TEAMMATE_IDS)[number];
 
+/** Handoff senders and recipients. Intake owns no stage and talks only to Lead. */
+export const HANDOFF_ACTOR_IDS = [...TEAMMATE_IDS, "intake"] as const;
+
+export type HandoffActorId = (typeof HANDOFF_ACTOR_IDS)[number];
+
 export const SUB_AGENT_IDS = ["coding", "testing", "review"] as const;
 
 export type SubAgentId = (typeof SUB_AGENT_IDS)[number];
@@ -110,6 +115,10 @@ export function assertSharedSpine(def: ProcessDefinition): void {
 
 export function isTeammateId(value: string): value is TeammateId {
   return (TEAMMATE_IDS as readonly string[]).includes(value);
+}
+
+export function isHandoffActor(value: string): value is HandoffActorId {
+  return (HANDOFF_ACTOR_IDS as readonly string[]).includes(value);
 }
 
 export function isSubAgentId(value: string): value is SubAgentId {

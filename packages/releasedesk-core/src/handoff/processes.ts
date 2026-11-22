@@ -7,6 +7,7 @@ export {
   SHARED_STAGE_IDS,
   NC_PREFIX_STAGE_IDS,
   TEAMMATE_IDS,
+  HANDOFF_ACTOR_IDS,
   SUB_AGENT_IDS,
   HUMAN_GATE_IDS,
   THREAD_CHANNEL,
@@ -14,6 +15,7 @@ export {
   ProcessDefinitionSchema,
   assertSharedSpine,
   isTeammateId,
+  isHandoffActor,
   isSubAgentId,
   isHumanActor,
   processById,
@@ -22,6 +24,7 @@ export {
   type ProcessDefinition,
   type ProcessId,
   type TeammateId,
+  type HandoffActorId,
   type SubAgentId,
   type HumanGateId,
 } from "./process-defs.js";

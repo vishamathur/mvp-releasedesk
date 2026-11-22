@@ -6,6 +6,7 @@ import { buildTrace, parseJsonl, type HandoffTrace, type LogLine, type ProcessDe
 const COPY = "Bots run the process; Release Desk Log records it; Desk shows it.";
 
 const LANES = [
+  { id: "intake", name: "Intake" },
   { id: "lead", name: "Lead" },
   { id: "change-analyst", name: "Change Analyst" },
   { id: "standards", name: "Standards" },
@@ -177,7 +178,7 @@ export function HandoffBoard() {
             </h2>
             <p className="text-sm text-rd-forest/70">Current stage: {trace.currentStage ?? "none yet"}</p>
           </div>
-          <div className="grid gap-3 lg:grid-cols-6">
+          <div className="grid gap-3 lg:grid-cols-7">
             {LANES.map((lane) => (
               <div key={lane.id} className="rounded-2xl border border-rd-fog bg-white p-3">
                 <h3 className="text-sm font-bold text-rd-ink">{lane.name}</h3>
