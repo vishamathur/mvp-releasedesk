@@ -7,6 +7,7 @@ declare(strict_types=1);
  * enhancements[] are existing applications. Each one's options[] is an open list.
  * newApplications[] are templates. addOns[] is the same option shape without targetServiceId.
  * An option is {id, name, description, billOfMaterials:[{serviceId, qty}], targetServiceId?}.
+ * Optional showcase fields: showcase45 (bool), grokApi (list of strings), demoScript (one line).
  * Adding a small option does not require a code change.
  */
 
@@ -78,6 +79,7 @@ function catalogue_index(array $c): array {
         foreach (CATALOGUE_NEW_APP_REQUIRED as $need) {
             if (!in_array($need, $have, true)) throw new RuntimeException('catalogue_new_app_missing:' . $app['id'] . ':' . $need);
         }
+        $extras = catalogue_extras($app);
         $addOns = [];
         $addOnsById = [];
         foreach ($app['addOns'] ?? [] as $add) {
@@ -85,7 +87,7 @@ function catalogue_index(array $c): array {
             $addOns[] = $parsed;
             $addOnsById[$parsed['id']] = $parsed;
         }
-        $optionById[$app['id']] = [
+        $optionById[$app['id']] = $extras + [
             'id' => $app['id'],
             'name' => $app['name'],
             'description' => $app['description'],
@@ -93,6 +95,7 @@ function catalogue_index(array $c): array {
             'billOfMaterials' => $bom,
             'addOnsById' => $addOnsById,
         ];
+        $app = $extras + $app;
         $app['billOfMaterials'] = $bom;
         $app['addOns'] = $addOns;
         $newApplications[] = $app;
@@ -136,7 +139,7 @@ function catalogue_option(array $opt, string $pid, array &$seen, array $services
         $target = (string)($opt['targetServiceId'] ?? '');
         if (!isset($services[$target])) throw new RuntimeException('catalogue_unknown_service:' . $target);
     }
-    return [
+    return catalogue_extras($opt) + [
         'id' => $opt['id'],
         'name' => $opt['name'],
         'description' => $opt['description'],
@@ -146,6 +149,29 @@ function catalogue_option(array $opt, string $pid, array &$seen, array $services
         'billOfMaterials' => catalogue_bom($opt['billOfMaterials'], $services, $opt['id']),
         'addOnsById' => [],
     ];
+}
+
+/** Optional showcase fields. Absent is fine. A present field must be the right type. */
+function catalogue_extras(array $row): array {
+    $out = [];
+    if (array_key_exists('showcase45', $row)) {
+        if (!is_bool($row['showcase45'])) throw new RuntimeException('catalogue_bad_showcase45');
+        $out['showcase45'] = $row['showcase45'];
+    }
+    if (array_key_exists('grokApi', $row)) {
+        $api = $row['grokApi'];
+        if (!is_array($api) || !array_is_list($api)) throw new RuntimeException('catalogue_bad_grokApi');
+        foreach ($api as $item) {
+            if (!is_string($item) || trim($item) === '') throw new RuntimeException('catalogue_bad_grokApi');
+        }
+        $out['grokApi'] = $api;
+    }
+    if (array_key_exists('demoScript', $row)) {
+        $script = $row['demoScript'];
+        if (!is_string($script) || trim($script) === '' || str_contains($script, "\n")) throw new RuntimeException('catalogue_bad_demoScript');
+        $out['demoScript'] = $script;
+    }
+    return $out;
 }
 
 function catalogue_require_option(array $cfg, string $optionId): array {
@@ -202,7 +228,7 @@ function catalogue_public(array $cfg): array {
         $options = [];
         foreach ($app['options'] as $opt) {
             $lines = catalogue_expand_lines($c['byId'], $opt['billOfMaterials']);
-            $options[] = [
+            $options[] = catalogue_extras($opt) + [
                 'id' => $opt['id'],
                 'name' => $opt['name'],
                 'description' => $opt['description'],
@@ -231,7 +257,7 @@ function catalogue_public(array $cfg): array {
                 'lines' => catalogue_expand_lines($c['byId'], $add['billOfMaterials']),
             ];
         }
-        $newApplications[] = [
+        $newApplications[] = catalogue_extras($app) + [
             'id' => $app['id'],
             'name' => $app['name'],
             'description' => $app['description'],

@@ -142,18 +142,26 @@
     box.hidden = false;
     box.textContent = `${catalogue.label}. Example estimate ${inr(priced.totalInr || priced.total)} (range ${inr(bands.low)}–${inr(bands.high)}, excl. GST). The submitted price is calculated on the server.`;
   };
+  const optionLabel = (o) => o.showcase45 ? `${o.name} (Showcase)` : o.name;
+  const paintOption = (box, opt) => {
+    box.replaceChildren();
+    if (!opt) return;
+    if (opt.showcase45) box.append(el("span", "Showcase", "badge showcase"), document.createTextNode(" "));
+    box.append(document.createTextNode(opt.description || ""));
+    if (opt.demoScript) box.append(el("div", opt.demoScript));
+  };
   const fillErOptions = () => {
     const appId = $("#er-app").value;
     const app = catalogue.enhancements.find((a) => a.id === appId) || catalogue.enhancements[0];
     const sel = $("#er-option");
-    sel.replaceChildren(...app.options.map((o) => { const opt = el("option", o.name); opt.value = o.id; return opt; }));
+    sel.replaceChildren(...app.options.map((o) => { const opt = el("option", optionLabel(o)); opt.value = o.id; return opt; }));
     const chosen = app.options.find((o) => o.id === sel.value) || app.options[0];
-    $("#er-option-desc").textContent = chosen ? chosen.description : "";
+    paintOption($("#er-option-desc"), chosen);
     renderEstimate();
   };
   const fillAddOns = () => {
     const app = catalogue.newApplications.find((a) => a.id === $("#nc-template").value) || catalogue.newApplications[0];
-    $("#nc-template-desc").textContent = app ? app.description : "";
+    paintOption($("#nc-template-desc"), app);
     const box = $("#nc-addons");
     box.replaceChildren(el("legend", "Add-ons"));
     for (const add of app?.addOns || []) {
@@ -182,18 +190,25 @@
       const list = $("#cat-options");
       for (const app of d.enhancements) {
         list.appendChild(el("h3", "Enhance: " + app.name));
-        for (const opt of app.options) list.appendChild(el("p", `${opt.name} — example ${inr(opt.exampleEstimate.totalInr)}`, "hint"));
+        for (const opt of app.options) {
+          const p = el("p", null, "hint");
+          if (opt.showcase45) p.append(el("span", "Showcase", "badge showcase"), document.createTextNode(" "));
+          p.append(document.createTextNode(`${opt.name} — example ${inr(opt.exampleEstimate.totalInr)}`));
+          list.appendChild(p);
+        }
       }
       for (const app of d.newApplications) {
         list.appendChild(el("h3", "New: " + app.name));
-        list.appendChild(el("p", `${app.description} Example ${inr(app.exampleEstimate.totalInr)}.`, "hint"));
+        const p = el("p", null, "hint");
+        if (app.showcase45) p.append(el("span", "Showcase", "badge showcase"), document.createTextNode(" "));
+        p.append(document.createTextNode(`${app.description} Example ${inr(app.exampleEstimate.totalInr)}.`));
+        list.appendChild(p);
       }
       $("#er-app").replaceChildren(...d.enhancements.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
-      $("#nc-template").replaceChildren(...d.newApplications.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
+      $("#nc-template").replaceChildren(...d.newApplications.map((a) => { const o = el("option", optionLabel(a)); o.value = a.id; return o; }));
       $("#er-app").addEventListener("change", fillErOptions);
       $("#er-option").addEventListener("change", () => {
-        const opt = selectedOption();
-        $("#er-option-desc").textContent = opt ? opt.description : "";
+        paintOption($("#er-option-desc"), selectedOption());
         renderEstimate();
       });
       $("#nc-template").addEventListener("change", fillAddOns);

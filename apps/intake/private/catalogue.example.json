@@ -14,7 +14,9 @@
     {"id": "SVC-REG", "name": "Regulatory change", "description": "Change driven by a regulator or compliance rule, with evidence pack.", "unit": "change", "unitPriceInr": 220000, "effortDays": 10, "riskMultiplier": 1.3},
     {"id": "SVC-SEC", "name": "Security review", "description": "Threat model, code and configuration review, findings report.", "unit": "review", "unitPriceInr": 200000, "effortDays": 8, "riskMultiplier": 1.0},
     {"id": "SVC-REL", "name": "Release support", "description": "Release planning, deployment window support and hypercare.", "unit": "release", "unitPriceInr": 80000, "effortDays": 3, "riskMultiplier": 1.0},
-    {"id": "SVC-RET", "name": "Monthly support retainer", "description": "Business-hours support and minor fixes, billed monthly.", "unit": "month", "unitPriceInr": 250000, "effortDays": 10, "riskMultiplier": 1.0}
+    {"id": "SVC-RET", "name": "Monthly support retainer", "description": "Business-hours support and minor fixes, billed monthly.", "unit": "month", "unitPriceInr": 250000, "effortDays": 10, "riskMultiplier": 1.0},
+    {"id": "SVC-WEB", "name": "Site or landing page", "description": "A site, microsite or landing-page build.", "unit": "site", "unitPriceInr": 300000, "effortDays": 12, "riskMultiplier": 1.1},
+    {"id": "SVC-AI", "name": "GenAI pilot", "description": "A chatbot or GenAI pilot on the Grok API.", "unit": "pilot", "unitPriceInr": 350000, "effortDays": 12, "riskMultiplier": 1.3}
   ],
   "enhancements": [
     {
@@ -136,6 +138,41 @@
           ]
         }
       ]
+    },
+    {
+      "id": "APP-SHOWCASE",
+      "name": "Showcase",
+      "description": "Short Grok demonstrations on an existing engagement.",
+      "options": [
+        {
+          "id": "SX-HELPDESK-BOT",
+          "name": "Helpdesk chatbot",
+          "description": "A helpdesk chatbot on an existing system, with one API connection, a security review and release support.",
+          "targetServiceId": "SVC-API",
+          "showcase45": true,
+          "grokApi": ["grok-4.7 chat with guidelines and safety_identifier"],
+          "demoScript": "Ask the helpdesk bot a policy question and show the grounded reply.",
+          "billOfMaterials": [
+            {"serviceId": "SVC-AI", "qty": 1},
+            {"serviceId": "SVC-API", "qty": 1},
+            {"serviceId": "SVC-SEC", "qty": 1},
+            {"serviceId": "SVC-REL", "qty": 1}
+          ]
+        },
+        {
+          "id": "SX-LIVE-REVIEW",
+          "name": "Live review report",
+          "description": "A live review of an existing change: discovery plus a security review, written up as a report.",
+          "targetServiceId": "SVC-SEC",
+          "showcase45": true,
+          "grokApi": ["grok-4.7 with web_search, code_execution and structured outputs"],
+          "demoScript": "Paste a change and show the review that searched the web and ran a check.",
+          "billOfMaterials": [
+            {"serviceId": "SVC-DISC", "qty": 1},
+            {"serviceId": "SVC-SEC", "qty": 1}
+          ]
+        }
+      ]
     }
   ],
   "newApplications": [
@@ -220,6 +257,20 @@
           "description": "Medium UI for reviewing the regulatory reports.",
           "billOfMaterials": [{"serviceId": "SVC-UI-M", "qty": 1}]
         }
+      ]
+    },
+    {
+      "id": "SX-LANDING-PAGE",
+      "name": "Marketing landing page",
+      "description": "A new marketing site: a landing page, a discovery workshop, a security review and release support.",
+      "showcase45": true,
+      "grokApi": ["grok-4.7 structured output for HTML", "optional grok-imagine-image-2.0 for a hero image"],
+      "demoScript": "Describe the product and show the HTML page with an optional hero image.",
+      "billOfMaterials": [
+        {"serviceId": "SVC-WEB", "qty": 1},
+        {"serviceId": "SVC-DISC", "qty": 1},
+        {"serviceId": "SVC-SEC", "qty": 1},
+        {"serviceId": "SVC-REL", "qty": 1}
       ]
     }
   ]

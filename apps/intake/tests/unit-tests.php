@@ -34,9 +34,9 @@ t('grok body: guidelines, hashed safety id, no stop or n', function () {
     catch (RuntimeException $e) { $noModel = str_contains($e->getMessage(), 'GROK_MODEL is not set'); }
     ok($noModel, 'model');
 });
-t('catalogue: 11 EXAMPLE services load and validate', function () use ($cfg) {
+t('catalogue: EXAMPLE services load and validate', function () use ($cfg) {
     $c = catalogue_load($cfg);
-    ok(count($c['byId']) === 11, 'count');
+    ok(count($c['byId']) === 13 && isset($c['byId']['SVC-WEB']) && isset($c['byId']['SVC-AI']), 'count');
     ok(str_contains($c['label'], 'EXAMPLE DATA - illustrative prices only'), 'label');
     ok(isset($c['optionById']['ER-KYC-LABELS']) && isset($c['optionById']['NC-KYC']), 'options');
     $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
@@ -55,11 +55,39 @@ t('catalogue: 11 EXAMPLE services load and validate', function () use ($cfg) {
     try { catalogue_index($raw); } catch (RuntimeException $e) { $dup = str_contains($e->getMessage(), 'catalogue_duplicate_id'); }
     ok($dup, 'duplicate');
     $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
-    $raw['services'][] = ['id' => 'SVC-WEB', 'name' => 'Web presence', 'description' => 'A small public site.', 'unit' => 'site', 'unitPriceInr' => 90000, 'effortDays' => 5, 'riskMultiplier' => 1.0];
-    $raw['enhancements'][0]['options'][] = ['id' => 'ER-KYC-WEB', 'name' => 'KYC landing page', 'description' => 'A landing page on the KYC app.', 'targetServiceId' => 'SVC-WEB', 'billOfMaterials' => [['serviceId' => 'SVC-WEB', 'qty' => 1], ['serviceId' => 'SVC-REL', 'qty' => 1]]];
+    $raw['services'][] = ['id' => 'SVC-CMS', 'name' => 'CMS setup', 'description' => 'A small content site.', 'unit' => 'site', 'unitPriceInr' => 90000, 'effortDays' => 5, 'riskMultiplier' => 1.0];
+    $raw['enhancements'][0]['options'][] = ['id' => 'ER-KYC-WEB', 'name' => 'KYC landing page', 'description' => 'A landing page on the KYC app.', 'targetServiceId' => 'SVC-CMS', 'billOfMaterials' => [['serviceId' => 'SVC-CMS', 'qty' => 1], ['serviceId' => 'SVC-REL', 'qty' => 1]]];
     $raw['enhancements'][] = ['id' => 'APP-LATER', 'name' => 'Reserved application', 'description' => 'A group that can gain options later.', 'options' => []];
     $idx = catalogue_index($raw);
-    ok(isset($idx['byId']['SVC-WEB']) && isset($idx['optionById']['ER-KYC-WEB']) && $idx['enhancements'][count($idx['enhancements']) - 1]['options'] === [], 'append');
+    ok(isset($idx['byId']['SVC-CMS']) && isset($idx['optionById']['ER-KYC-WEB']) && $idx['enhancements'][count($idx['enhancements']) - 1]['options'] === [], 'append');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['enhancements'][0]['options'][0]['showcase45'] = 'yes';
+    $badFlag = false;
+    try { catalogue_index($raw); } catch (RuntimeException $e) { $badFlag = $e->getMessage() === 'catalogue_bad_showcase45'; }
+    ok($badFlag, 'showcase flag');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['newApplications'][0]['grokApi'] = ['ok', 1];
+    $badApi = false;
+    try { catalogue_index($raw); } catch (RuntimeException $e) { $badApi = $e->getMessage() === 'catalogue_bad_grokApi'; }
+    ok($badApi, 'grokApi');
+    $raw = json_decode((string)file_get_contents($cfg['CATALOGUE_FILE']), true);
+    $raw['newApplications'][0]['demoScript'] = "two\nlines";
+    $badScript = false;
+    try { catalogue_index($raw); } catch (RuntimeException $e) { $badScript = $e->getMessage() === 'catalogue_bad_demoScript'; }
+    ok($badScript, 'demoScript');
+});
+t('catalogue: showcase options price from their bill of materials', function () use ($cfg) {
+    $expect = [
+        'SX-HELPDESK-BOT' => ['PID-ER', 1286850, ['grok-4.7 chat with guidelines and safety_identifier']],
+        'SX-LIVE-REVIEW' => ['PID-ER', 385000, ['grok-4.7 with web_search, code_execution and structured outputs']],
+        'SX-LANDING-PAGE' => ['PID-NC', 836000, ['grok-4.7 structured output for HTML', 'optional grok-imagine-image-2.0 for a hero image']],
+    ];
+    foreach ($expect as $id => [$pid, $total, $api]) {
+        $opt = catalogue_require_option($cfg, $id);
+        ok($opt['pid'] === $pid && $opt['showcase45'] === true && $opt['grokApi'] === $api && is_string($opt['demoScript']) && !str_contains($opt['demoScript'], "\n"), $id);
+        $est = finance_price_option($cfg, $id, [], $pid, 'standard');
+        ok($est['totalInr'] === $total && $est['urgency'] === 'standard', $id . ' ' . $est['totalInr']);
+    }
 });
 t('catalogue: BOM pricing, unknown option, pid mismatch', function () use ($cfg) {
     $est = finance_price_option($cfg, 'ER-KYC-LABELS', [], 'PID-ER', 'standard');

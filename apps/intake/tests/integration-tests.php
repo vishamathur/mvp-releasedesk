@@ -25,7 +25,7 @@ function ok($c, string $m = 'assert') { if (!$c) throw new Exception($m); }
 
 t('catalogue endpoint returns EXAMPLE services, enhancements and new applications', function () use ($base) {
     [$c, $j] = req('GET', "$base/api/catalogue.php");
-    ok($c === 200 && count($j['services']) === 11 && str_contains($j['label'], 'EXAMPLE DATA - illustrative prices only'), "c=$c");
+    ok($c === 200 && count($j['services']) === 13 && str_contains($j['label'], 'EXAMPLE DATA - illustrative prices only'), "c=$c");
     ok(isset($j['enhancements'][0]['options'][0]['billOfMaterials']) && isset($j['newApplications'][0]['billOfMaterials']), 'shape');
     $ids = [];
     foreach ($j['enhancements'] as $app) foreach ($app['options'] as $opt) $ids[] = $opt['id'];
@@ -46,6 +46,35 @@ t('intake with a valid catalogue option is priced from the bill of materials', f
     ok($card['finance']['source'] === 'catalogue-option' && $card['finance']['estimate']['totalInr'] === 187000, json_encode($card['finance']['source'] ?? $card['finance']));
     ok(in_array('catalogue:ER-KYC-LABELS@example-2026-11', $card['finance']['estimate']['artifactRefs'], true), json_encode($card['finance']['estimate']['artifactRefs'] ?? []));
     ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before + 1, 'card stored');
+});
+t('showcase options are priced and can be submitted', function () use ($base, $J, $er, $data) {
+    [$c, $j] = req('GET', "$base/api/catalogue.php");
+    $found = [];
+    foreach ($j['enhancements'] as $app) foreach ($app['options'] as $opt) $found[$opt['id']] = $opt;
+    foreach ($j['newApplications'] as $app) $found[$app['id']] = $app;
+    ok(($found['SX-HELPDESK-BOT']['exampleEstimate']['totalInr'] ?? 0) === 1286850, 'helpdesk');
+    ok(($found['SX-LIVE-REVIEW']['exampleEstimate']['totalInr'] ?? 0) === 385000, 'review');
+    ok(($found['SX-LANDING-PAGE']['exampleEstimate']['totalInr'] ?? 0) === 836000, 'landing');
+    ok($found['SX-HELPDESK-BOT']['showcase45'] === true && $found['SX-LIVE-REVIEW']['showcase45'] === true && $found['SX-LANDING-PAGE']['showcase45'] === true, 'badge');
+    $before = count(glob("$data/submissions/REQ-*.json") ?: []);
+    [$c, $j] = req('POST', "$base/api/intake.php", ['catalogueOptionId' => 'SX-HELPDESK-BOT'] + $er, $J);
+    ok($c === 200 && ($j['ok'] ?? false) === true, json_encode($j));
+    $card = json_decode((string)file_get_contents("$data/submissions/{$j['referenceId']}.json"), true);
+    ok($card['catalogueOptionId'] === 'SX-HELPDESK-BOT' && $card['finance']['estimate']['totalInr'] === 1286850, json_encode($card['finance']['estimate']['totalInr'] ?? null));
+    $nc = ['route' => 'new_customer', 'pid' => 'PID-NC', 'catalogueOptionId' => 'SX-LANDING-PAGE', 'addOns' => [],
+        'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'legalName' => 'Acme Pvt Ltd',
+        'jurisdiction' => 'India', 'intendedProduct' => 'Lending', 'sponsor' => 'R. Rao, CFO',
+        'title' => 'Marketing landing page', 'description' => 'A marketing landing page for a new product launch.',
+        'urgency' => 'standard', 'website' => '', 'consent' => true];
+    [$c, $j] = req('POST', "$base/api/intake.php", $nc, $J);
+    ok($c === 200 && ($j['ok'] ?? false) === true, json_encode($j));
+    $card = json_decode((string)file_get_contents("$data/submissions/{$j['referenceId']}.json"), true);
+    ok($card['pid'] === 'PID-NC' && $card['finance']['estimate']['totalInr'] === 836000, json_encode($card['finance']['estimate']['totalInr'] ?? null));
+    [$c, $j] = req('POST', "$base/api/intake.php", ['catalogueOptionId' => 'SX-LIVE-REVIEW'] + $er, $J);
+    ok($c === 200, json_encode($j));
+    $card = json_decode((string)file_get_contents("$data/submissions/{$j['referenceId']}.json"), true);
+    ok($card['finance']['source'] === 'catalogue-option' && $card['finance']['estimate']['totalInr'] === 385000, json_encode($card['finance']['estimate']['totalInr'] ?? null));
+    ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before + 3, 'three cards');
 });
 t('intake with an invalid catalogue option is rejected', function () use ($base, $J, $er, $data) {
     $before = count(glob("$data/submissions/REQ-*.json") ?: []);

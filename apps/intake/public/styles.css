@@ -18,6 +18,7 @@ button{font:inherit;font-weight:600;padding:10px 16px;border-radius:8px;border:0
 .msg{padding:9px 12px;border-radius:12px;max-width:88%;white-space:pre-wrap}.msg.user{align-self:flex-end;background:var(--accent);color:#fff}.msg.assistant{background:#eef1f5}.typing{opacity:.6}
 .chat-input{display:flex;gap:8px;margin-top:10px}.chat-input input{flex:1}
 .hint{color:var(--muted);font-size:.85rem;font-weight:400}.badge{background:#fff3cd;color:#7a5a00;font-size:.7rem;padding:3px 8px;border-radius:999px;vertical-align:middle;letter-spacing:.04em}
+.badge.showcase{background:#e7eefe;color:#1f3fbf;margin-right:6px}
 .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}.num{text-align:right;white-space:nowrap}
 .consent{display:flex;gap:10px;font-weight:400;color:var(--muted)}.consent input{width:auto;margin-top:4px}
 .addons{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:8px}
