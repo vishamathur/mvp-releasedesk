@@ -173,7 +173,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
 
     const summary =
       findings.length === 0
-        ? formatMockNote("Security check complete — no correlated advisories (fixture corpus)")
+        ? formatMockNote("Security check complete — no correlated advisories")
         : formatMockNote(
             `Security check ${securityCheckFailed ? "FAILED" : "complete"} — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s), risk ${riskLevel}`,
           );

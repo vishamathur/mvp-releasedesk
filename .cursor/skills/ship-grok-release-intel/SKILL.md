@@ -10,15 +10,15 @@ Ensure `apps/releasedesk` contains a **real workflow** path that calls `https://
 
 ## Steps
 1. Read `AGENTS.md` and `.cursor/rules/releasedesk-grok-api.mdc`.
-2. Implement/extend `src/lib/grok-release-intel.ts` + API route + UI panel + vitest.
-3. Wire run page / challenge trigger to call it.
-4. Use exclusive `RELEASEDESK_GROK_API_KEY_LEAD` only (MOCK when absent).
+2. Implement/extend `src/lib/grok-release-intel.ts` + `POST /api/grok/release-intel` + vitest.
+3. Keep that route as the ship path.
+4. Use exclusive `RELEASEDESK_GROK_API_KEY_LEAD` only. A missing key throws.
 5. Run `npm run test:desk`.
 6. Open a PR — never merge. Testing/Review Cloud Agents may verify/review afterward; they do not merge.
 
 ## Acceptance
 - Schema-valid JSON (`classify` + `summarize`)
 - Trust check (`humanGateStillRequired`, `noAutoApprove`)
-- MOCK fallback without exclusive Lead key
+- A missing exclusive Lead key throws. There is no stand-in result.
 - Human gates still required
 - Coding is the ship path; Testing verifies; Review reviews — never merge

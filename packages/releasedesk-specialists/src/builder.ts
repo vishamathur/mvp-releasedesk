@@ -1,6 +1,4 @@
 import {
-  createMockMeta,
-  formatMockNote,
   nowIso,
   BuilderAgentOutputSchema,
   type CreateEvidenceInput,
@@ -90,7 +88,7 @@ function planHandoffs(args: {
       acceptanceCriteria: [
         "Changes compile / typecheck",
         "Unit tests added or updated for the fix",
-        "Grok release-intel path present (MOCK without exclusive Lead key)",
+        "Grok release-intel path present; a missing exclusive Lead key fails the call",
         "No secrets introduced",
         "PR opened but not merged",
       ],
@@ -244,13 +242,6 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         title: "Cursor Cloud Agent client",
         summary: describeCloudClientMode(client),
         source: "builder",
-        mock:
-          client.mode === "mock"
-            ? createMockMeta(
-                "cursor-cloud-agents",
-                "Using MOCK Cloud Agent client — no live Cursor credentials required",
-              )
-            : undefined,
         data: { mode: client.mode, autoMerge: false },
       });
 
@@ -310,14 +301,6 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         },
       });
 
-      if (client.mode === "mock" && !mocksUsed.some((m) => m.mockLabel === "cursor-cloud-agents")) {
-        mocksUsed.push(
-          createMockMeta(
-            "cursor-cloud-agents",
-            "MOCK Cloud Agent client used for Coding/Testing/Review dispatch",
-          ),
-        );
-      }
     }
 
     const workItems = handoffs.map((h) => ({
@@ -327,7 +310,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       ...(h.metadata.prUrl ? { prUrl: h.metadata.prUrl } : {}),
       notes:
         h.status === "planned"
-          ? formatMockNote(`${h.agentKind} Cloud Agent handoff ${h.handoffId} planned`)
+          ? `${h.agentKind} Cloud Agent handoff ${h.handoffId} planned`
           : h.metadata.error
             ? `${h.agentKind} ${h.status}: ${h.metadata.error}`
             : `${h.agentKind} ${h.status} on ${h.metadata.branch ?? finalBranch}` +

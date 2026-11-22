@@ -17,7 +17,7 @@
 1. **Space 1** — software delivery & release readiness (portfolio SDLC; Northwind KYC as the worked example).
 2. **Humans keep authority** — bots advise; merge and release stay human.
 3. **Required stack** — Grok Bot (Lead + specialists) → Cursor cloud agent → Grok API in the shipped path.
-4. **MOCK only** without keys; live path rehearsed for the room.
+4. **Fail closed** without keys. A missing exclusive key is a configuration error. There is no stand-in result.
 
 **Business requirements:** agility, security, token optimization.
 

@@ -121,13 +121,11 @@ Typical plug-in shape for a future runner:
 3. Agent returns a typed `*AgentOutput` (evidence + optional `mocksUsed`).
 4. Orchestrator writes evidence / complete / fail on the store (audit trail updates automatically).
 
-## Mocked integrations
+## Credentials
 
-When credentials or APIs are unavailable:
+A missing exclusive key throws. Shared `XAI_API_KEY`, `GROK_API_KEY`, and `CURSOR_API_KEY` are not substitutes.
 
-- Set `mock: { mocked: true, mockLabel: "<integration>", note?: "MOCK: …" }` on evidence.
-- Include the same meta in agent `mocksUsed`.
-- Prefer the `MOCK:` prefix on any human-readable fabricated summary (same convention as the KYC app).
+`mock.ts` formats the `MOCK:` prefix used by the KYC demo notes. It does not stand in for a live API.
 
 ## Layout
 

@@ -6,8 +6,8 @@ export type CloudAgentKind = "coding" | "testing" | "review";
 export type CloudAgentClientMode = "mock" | "real";
 
 /**
- * Pluggable Cursor Cloud Agent client.
- * MOCK: client fabricates results; real client calls api.cursor.com when credentials exist.
+ * Cursor Cloud Agent client.
+ * The shipped client is real and calls api.cursor.com. A missing exclusive key throws.
  */
 export type CloudAgentClient = {
   readonly mode: CloudAgentClientMode;
