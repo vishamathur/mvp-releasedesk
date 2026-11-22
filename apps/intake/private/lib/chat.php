@@ -53,7 +53,9 @@ function api_chat(array $cfg): void {
             throw new RuntimeException('GROK_API_KEY is not set. Refusing to invent a chat reply.');
         }
         $session = app_clean($body['sessionId'] ?? '', 80);
-        if (!preg_match('/^[A-Za-z0-9_.:-]{8,80}$/', $session)) $session = 'intake-chat';
+        if (!preg_match('/^[A-Za-z0-9_.:-]{8,80}$/', $session)) {
+            throw new RuntimeException('sessionId is required for chat. Refusing to invent a safety identifier.');
+        }
         $out = grok_json($cfg, chat_system_prompt($cat), "Selected option: $route\n<visitor_input>\n" . implode("\n", $msgs) . "\n</visitor_input>", 'intake_chat', chat_schema(array_keys($cat['byId'])), $session, 900);
     } catch (Throwable $e) {
         $why = $e->getMessage();

@@ -59,5 +59,5 @@ function delivery_attempt(array $cfg, string $file): string {
     if ($ok) { @rename($file, $cfg['DATA_DIR'] . '/sent/' . basename($file)); return $detail; }
     $item['lastError'] = $detail;
     app_write_json($file, $item);
-    return 'queued:' . $detail;
+    throw new RuntimeException('Lead delivery failed (' . $detail . '). Refusing to report success.');
 }

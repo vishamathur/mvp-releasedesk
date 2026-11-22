@@ -30,7 +30,8 @@ function grok_chat_url(array $cfg): string {
 
 /** Request body only. Does not set stop or n, and does not call the network. */
 function grok_chat_body(array $cfg, string $system, string $user, string $schemaName, array $schema, string $safetySource, int $maxTokens = 1200): array {
-    $model = (string)($cfg['GROK_MODEL'] ?? 'grok-4.20-0309-non-reasoning');
+    $model = trim((string)($cfg['GROK_MODEL'] ?? ''));
+    if ($model === '') throw new RuntimeException('GROK_MODEL is not set. Refusing to guess a model.');
     if (str_contains(strtolower($model), 'multi-agent')) {
         throw new RuntimeException('model cannot be used with guidelines');
     }

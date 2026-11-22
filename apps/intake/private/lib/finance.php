@@ -114,7 +114,7 @@ function finance_assess(array $cfg, array $req): array {
                 . GROK_UNTRUSTED_RULES;
             $user = "<visitor_input>\n" . json_encode(['pid' => $pid, 'urgency' => $urgency, 'statedBudgetInr' => $budget, 'request' => app_substr((string)$req['text'], 4000)], JSON_UNESCAPED_UNICODE) . "\n</visitor_input>";
             $safety = trim((string)($req['requestId'] ?? ''));
-            if ($safety === '') $safety = 'finance-estimate';
+            if ($safety === '') throw new RuntimeException('requestId is required for a Grok finance assessment.');
             $grok = grok_json($cfg, $system, $user, 'finance_assessment', finance_schema(array_keys($cat['byId'])), $safety);
             $lines = array_values(array_filter($grok['lines'], fn($l) => isset($cat['byId'][$l['serviceId'] ?? ''])));
             $confidence = $grok['mappingConfidence'];

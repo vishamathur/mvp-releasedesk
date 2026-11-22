@@ -29,6 +29,10 @@ t('grok body: guidelines, hashed safety id, no stop or n', function () {
     $empty = false;
     try { grok_safety_identifier('   '); } catch (RuntimeException $e) { $empty = true; }
     ok($empty, 'empty id');
+    $noModel = false;
+    try { grok_chat_body([], 's', 'u', 'n', ['type' => 'object'], 'REQ-1'); }
+    catch (RuntimeException $e) { $noModel = str_contains($e->getMessage(), 'GROK_MODEL is not set'); }
+    ok($noModel, 'model');
 });
 t('catalogue: 11 EXAMPLE services load and validate', function () use ($cfg) {
     $c = catalogue_load($cfg); ok(count($c['byId']) === 11, 'count'); ok(str_contains($c['label'], 'EXAMPLE'), 'label');
