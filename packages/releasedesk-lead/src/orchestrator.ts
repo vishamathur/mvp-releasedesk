@@ -2,7 +2,6 @@ import {
   assertMandatoryAnalysisRoles,
   createAiFrameworkWaiver,
   evaluateSecurityParticipation,
-  formatMockNote,
   LeadAgentOutputSchema,
   listReadyTasks,
   MANDATORY_ANALYSIS_ROLES,
@@ -125,7 +124,7 @@ export type LeadOrchestratorOptions = {
   defaultMaxAttempts?: number;
   /** When false, never schedule builder even if findings recommend it (default true). */
   enableRemediation?: boolean;
-  /** PR workflow client options (MOCK when no GH token). */
+  /** PR workflow client options. A missing GH_TOKEN or GITHUB_TOKEN throws. */
   prClient?: ResolvePrClientOptions;
   /** When false, skip opening/tracking PRs (default true). */
   enablePrWorkflow?: boolean;
@@ -280,16 +279,6 @@ export class LeadOrchestrator {
         prClientMode: this.prClient.mode,
       },
     });
-
-    if (this.prClient.mode === "mock") {
-      await this.store.appendAudit({
-        runId: run.runId,
-        action: "mock.integration_used",
-        message: describePrClientMode(this.prClient),
-        actor: { kind: "system" },
-        details: { integration: "github-pr", mode: "mock" },
-      });
-    }
 
     // Wave 1: mandatory analysis specialists in parallel (Security always included).
     const delegations: LeadDelegation[] = [];
@@ -1240,7 +1229,6 @@ export class LeadOrchestrator {
             "**Never auto-merged.** Human merge + release approval gates required.",
             "",
             `Builder task: ${builderTaskId}`,
-            ...(this.prClient.mode === "mock" ? [formatMockNote("MOCK GitHub PR")] : []),
           ].join("\n"),
           head: proposedBranch,
           base: baseBranch,
@@ -1491,7 +1479,7 @@ export class LeadOrchestrator {
             const message = err instanceof Error ? err.message : String(err);
             result = {
               status: "failed",
-              summary: formatMockNote(`Runner threw: ${message}`),
+              summary: `Runner threw: ${message}`,
               payload: { agentRole: role },
               failure: {
                 code: "runner_exception",

@@ -120,8 +120,6 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
       source: "standards",
     });
 
-    // Fixture corpus itself is real in-repo content — not mocked.
-    // Only mark MOCK when we fabricated screening labels elsewhere.
     const compliant = deviations.length === 0;
     const summary = compliant
       ? `Standards check complete — compliant (${policies.map((p) => p.id).join(", ")})`

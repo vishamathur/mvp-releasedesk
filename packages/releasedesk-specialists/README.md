@@ -33,8 +33,7 @@ const lead = new LeadOrchestrator({
   store,
   runners: createSpecialistRunners({
     workspaceRoot: process.cwd(),
-    skipGrok: !process.env.RELEASEDESK_GROK_API_KEY_CHANGE_ANALYST,
-    // Cloud Agents: resolveCloudAgentClient() throws if an exclusive key is missing.
+    // A missing exclusive Grok or Cursor key throws.
   }),
 });
 
@@ -59,7 +58,7 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | **Security** | Discovers npm components from workspace `package.json`s; correlates + release-blocking flags. A live advisory API is required when advisory hints are present. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
-Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). A Grok call without that key throws. `skipGrok: true` keeps local analysis and does not call Grok.
+Optional Grok enrichment via exclusive `RELEASEDESK_GROK_API_KEY_*` per agent (shared `XAI_API_KEY` / `GROK_API_KEY` never used). A Grok call without that key throws.
 
 ## Cursor Cloud Agents (Milestone 5)
 
@@ -92,7 +91,7 @@ Tracked fields on Builder output:
 ```
 fixtures/
   policies/           # Northwind KYC / retention / auth standards
-  release-notes/      # fallback notes when git range is empty
+  release-notes/      # sample notes; an empty git range throws
 ```
 
 ## Layout

@@ -29,7 +29,7 @@ Constraint implied by the whole brief: slides are **short framing only** — not
 | Brief ask | Have today | Gap |
 | --- | --- | --- |
 | Slide 1 — Problem + assumptions | Partial narrative in `demo-recording-script.md` framing (B1) and Space 1 KYC story; **no dedicated problem/assumptions slide deck** | Need a one-pager slide |
-| Slide 2 — Architecture diagram | Strong: `demo-architecture-diagram.md` (Mermaid, PR #14 gate spine) + `architecture-mermaid.md` / PR #9 | Must **relabel** agents as **Grok Bots** + show **Grok API** + Cursor triad; current diagram still says “Ephemeral Cloud Agents — MOCK by default” and Lead as Desk runner |
+| Slide 2 — Architecture diagram | `docs/spacexai-slide-2-architecture.md` and `docs/sdlc/release-desk-handover-diagram.png` | Keep the six teammates, the Grok API ship path, and fail-closed keys |
 | Optional slide 3 — Trade-offs / next | Script mentions PR #15 gap; not a slide | Skip Wednesday unless asked |
 | Most time live | `demo-recording-script.md` is **20 min** and opens on architecture then gate; agents are segment H (~3:45) | Rebalance: **agent navigation first** (hiring-manager ask), then gate, then Grok API depth |
 
@@ -44,7 +44,7 @@ Constraint implied by the whole brief: slides are **short framing only** — not
 1. Space 1 — software delivery & release readiness (KYC = worked example).  
 2. Humans keep merge/release authority (bots advise; gates decide).  
 3. Required stack: Grok Bot → Cursor cloud agent → Grok API.  
-4. MOCK only without keys.  
+4. A missing exclusive key fails the call. There is no stand-in result.  
 
 **Business requirements:** agility, security, token optimization.
 
@@ -60,9 +60,9 @@ Constraint implied by the whole brief: slides are **short framing only** — not
 - `evaluateIterationProceedGate` (approve / reject)  
 - Human merge + release  
 
-**Source to adapt:** paste Mermaid from `demo-architecture-diagram.md`, but rename “Ephemeral Cloud Agents” → “Grok Bots + Cursor” and add a Grok API box on the shipped Desk path. Drop or shrink intake/checklist boxes for Wednesday clarity.
+**Source:** `docs/spacexai-slide-2-architecture.md` and the handover diagram. Missing keys fail the call.
 
-**Optional slide 3 (skip unless Q&A):** Trade-offs — MOCK without keys; live x.ai/bot import vs Desk pack browser; PR #15+ live Lead wiring.
+**Optional slide 3 (skip unless Q&A):** Trade-offs — a missing key fails the call; live x.ai/bot import vs Desk pack browser.
 
 ---
 
