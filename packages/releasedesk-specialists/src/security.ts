@@ -1,6 +1,5 @@
 import {
   createMockMeta,
-  formatMockNote,
   nowIso,
   SecurityAgentOutputSchema,
   type CreateEvidenceInput,
@@ -93,10 +92,8 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       }
     }
 
-    if (advisoryHints.length > 0 && !options.advisoriesPath) {
-      throw new Error(
-        "Live advisory API is not configured. Refusing to use sample advisories.",
-      );
+    if (advisoryHints.length > 0) {
+      throw new Error("Live advisory API is not configured.");
     }
 
     // MITRE ATLAS + OWASP LLM Top 10 hard guardrails for AI surfaces.
@@ -116,11 +113,10 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
     evidence.push({
       kind: "policy_ref",
       title: "MITRE ATLAS + OWASP LLM Top 10 review",
-      summary: formatMockNote(
+      summary:
         aiFindings.length === 0
           ? "No AI surface detected for ATLAS/OWASP hard-fail findings"
           : `${aiFindings.length} ATLAS/OWASP hard-fail finding(s) — Security check fails until resolved or human-waived`,
-      ),
       source: "security",
       mock: frameworkMock,
       data: {
@@ -136,7 +132,7 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
       evidence.push({
         kind: f.frameworkMappings.length ? "finding" : "advisory",
         title: f.title,
-        summary: formatMockNote(f.summary),
+        summary: f.summary,
         source: "security",
         mock: frameworkMock,
         data: {
@@ -173,10 +169,8 @@ export function createSecurityRunner(options: SpecialistRunnerOptions = {}): Age
 
     const summary =
       findings.length === 0
-        ? formatMockNote("Security check complete — no correlated advisories")
-        : formatMockNote(
-            `Security check ${securityCheckFailed ? "FAILED" : "complete"} — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s), risk ${riskLevel}`,
-          );
+        ? "Security check complete — no correlated advisories"
+        : `Security check ${securityCheckFailed ? "FAILED" : "complete"} — ${findings.length} finding(s), ${releaseBlockingCount} release-blocking, ${frameworkHardFailCount} ATLAS/OWASP hard-fail(s), risk ${riskLevel}`;
 
     const payload = SecurityAgentOutputSchema.parse({
       runId: inv.runId,

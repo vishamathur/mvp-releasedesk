@@ -9,8 +9,6 @@ export type SpecialistRunnerOptions = {
   workspaceRoot?: string;
   /** Override policies directory. */
   policiesDir?: string;
-  /** Advisory corpus path. Hints without a configured corpus throw. */
-  advisoriesPath?: string;
   /** Force Grok client options. A missing exclusive key throws. */
   grok?: GrokClientOptions;
   /** Extra components for security correlation (merged with discovered). */

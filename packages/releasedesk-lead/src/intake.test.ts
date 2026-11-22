@@ -29,7 +29,8 @@ describe("CustomerIntake → Lead gate", () => {
       cost: {
         amount: 9000,
         direction: "charge",
-        label: "MOCK estimate",
+        label: "Delivery estimate",
+        source: "billing_system",
       },
     });
 
@@ -78,7 +79,7 @@ describe("CustomerIntake → Lead gate", () => {
         summary: "Fairness neighbor",
         requestedBy: "cs",
       },
-      cost: { amount: 1000, direction: "spend" },
+      cost: { amount: 1000, direction: "spend", source: "billing_system" },
     });
 
     const view = await intake.view();

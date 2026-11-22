@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { sampleAdvisoriesPath } from "./paths.js";
 
 export type SampleAdvisory = {
   id: string;
@@ -27,9 +26,7 @@ export type ComponentRef = {
   ecosystem?: string;
 };
 
-export async function loadAdvisoryCorpus(
-  filePath = sampleAdvisoriesPath(),
-): Promise<AdvisoryCorpus> {
+export async function loadAdvisoryCorpus(filePath: string): Promise<AdvisoryCorpus> {
   const raw = await readFile(filePath, "utf8");
   const parsed = JSON.parse(raw) as AdvisoryCorpus;
   if (!Array.isArray(parsed.advisories)) {

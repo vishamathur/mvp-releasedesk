@@ -90,7 +90,6 @@ export {
   packageRoot,
   fixturesDir,
   policiesDir,
-  sampleAdvisoriesPath,
   releaseNotesFixturePath,
   defaultWorkspaceRoot,
 } from "./paths.js";

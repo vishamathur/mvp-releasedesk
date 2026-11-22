@@ -1,6 +1,4 @@
 import {
-  createMockMeta,
-  formatMockNote,
   nowIso,
   ChangeAnalystOutputSchema,
   type CreateEvidenceInput,
