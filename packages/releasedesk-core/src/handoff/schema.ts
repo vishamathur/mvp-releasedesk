@@ -59,6 +59,8 @@ export const HandoffMessageSchema = z
     memoryKey: z.string().min(1),
     humanGate: HumanGateSchema.nullable(),
     referenceId: z.string().min(1).optional(),
+    /** Catalogue option chosen by the visitor. Only on intake-request. */
+    catalogueOptionId: z.string().min(1).optional(),
     proposedBranch: z.string().min(1).optional(),
     prUrl: z.string().min(1).optional(),
     testsPassed: z.boolean().optional(),
@@ -244,6 +246,9 @@ export function validateHandoffMessage(
     if (!message.referenceId) errors.push("public-status carries referenceId");
   } else if (message.referenceId !== undefined && message.kind !== "intake-request") {
     errors.push("referenceId belongs on intake-request and public-status");
+  }
+  if (message.catalogueOptionId !== undefined && message.kind !== "intake-request") {
+    errors.push("catalogueOptionId belongs on intake-request");
   }
 
   if (message.kind === "stage-handoff" && message.from !== "lead") {

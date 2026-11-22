@@ -440,6 +440,7 @@ describe("intake front door", () => {
         artifactRefs: [card],
         memoryKey: "pid.state.REQ-2026-0001",
         humanGate: null,
+        catalogueOptionId: "ER-KYC-LABELS",
       },
       processes,
     );
@@ -545,5 +546,30 @@ describe("intake front door", () => {
       processes,
     );
     expect(result.ok).toBe(true);
+  });
+
+  it("rejects catalogueOptionId on a message that is not an intake-request", () => {
+    const result = validateHandoffMessage(
+      {
+        v: 1,
+        kind: "consult",
+        pid: "PID-ER",
+        pidVersion: "1.1.0",
+        requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+        from: "lead",
+        to: "standards",
+        stage: "estimation",
+        action: "consult",
+        summary: "Catalogue option does not belong on a consult.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"],
+        memoryKey: "pid.state.REQ-2026-0001",
+        humanGate: null,
+        catalogueOptionId: "ER-KYC-LABELS",
+      },
+      processes,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("invalid_schema");
   });
 });
