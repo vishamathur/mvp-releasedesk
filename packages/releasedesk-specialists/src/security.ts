@@ -8,12 +8,7 @@ import {
   type SecurityFinding,
 } from "@releasedesk/core";
 import type { AgentRunner, AgentRunInvocation, AgentRunResult } from "@releasedesk/lead";
-import {
-  correlateAdvisories,
-  loadAdvisoryCorpus,
-  riskLevelFromFindings,
-  type ComponentRef,
-} from "./advisories.js";
+import { riskLevelFromFindings, type ComponentRef } from "./advisories.js";
 import {
   enforceFrameworkHardFail,
   reviewAiSurfaceAgainstFrameworks,
@@ -21,7 +16,7 @@ import {
 import { discoverNpmComponents } from "./components.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
-import { defaultWorkspaceRoot, sampleAdvisoriesPath } from "./paths.js";
+import { defaultWorkspaceRoot } from "./paths.js";
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
