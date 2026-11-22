@@ -24,7 +24,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./node_modules/.bin/tsx scripts/release-intel-pr.ts > "$RUNNER_TEMP/release-intel.json"
+        run: |
+          if [ -z "$RELEASEDESK_GROK_API_KEY_LEAD" ]; then
+            echo "RELEASEDESK_GROK_API_KEY_LEAD is not set. Skipping classification. No stand-in result."
+            printf '%s\n' '{"heading":"release-intel v1","skipped":true,"reason":"RELEASEDESK_GROK_API_KEY_LEAD is not set. No stand-in result."}' > "$RUNNER_TEMP/release-intel.json"
+            exit 0
+          fi
+          ./node_modules/.bin/tsx scripts/release-intel-pr.ts > "$RUNNER_TEMP/release-intel.json"
       - name: Comment release-intel v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

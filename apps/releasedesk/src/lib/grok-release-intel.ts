@@ -9,7 +9,16 @@
  * (Builder exclusive key) — Cursor Coding agent hardens both.
  */
 
-import { GROK_API_KEY_ENV, MissingCredentialError, resolveAgentGrokApiKey } from "@releasedesk/core";
+import {
+  assertGrokChatStatus,
+  buildGrokChatCompletionBody,
+  GROK_API_KEY_ENV,
+  GROK_CHAT_COMPLETIONS_URL,
+  GROK_REQUEST_TIMEOUT_MS,
+  GrokGuidelineError,
+  MissingCredentialError,
+  resolveAgentGrokApiKey,
+} from "@releasedesk/core";
 
 export type GrokIntelMode = "live";
 
@@ -180,37 +189,42 @@ export async function runGrokReleaseIntel(
     "You are Release Desk Grok intel. Return ONLY JSON matching the schema: classify{category,confidence 0-1}, summarize, riskTier low|medium|high, blockers string[], extract string[], score{level,rationale}. Do not approve merges.";
 
   try {
-    const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
+    const res = await fetchImpl(GROK_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: MODEL,
-        temperature: 0.1,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "release_intel",
-            strict: true,
-            schema: RELEASE_INTEL_JSON_SCHEMA,
+      body: JSON.stringify(
+        buildGrokChatCompletionBody({
+          model: MODEL,
+          temperature: 0.1,
+          safetySource: `lead:${input.repository}`,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "release_intel",
+              strict: true,
+              schema: RELEASE_INTEL_JSON_SCHEMA,
+            },
           },
-        },
-        messages: [
-          { role: "system", content: system },
-          {
-            role: "user",
-            content: JSON.stringify({
-              repository: input.repository,
-              goal: input.goal,
-              findings: input.findings.slice(0, 40),
-            }),
-          },
-        ],
-      }),
+          messages: [
+            { role: "system", content: system },
+            {
+              role: "user",
+              content: JSON.stringify({
+                repository: input.repository,
+                goal: input.goal,
+                findings: input.findings.slice(0, 40),
+              }),
+            },
+          ],
+        }),
+      ),
+      signal: AbortSignal.timeout(GROK_REQUEST_TIMEOUT_MS),
     });
 
+    assertGrokChatStatus(res.status);
     if (!res.ok) {
       throw new Error(`Grok request failed (${res.status})`);
     }
@@ -266,7 +280,7 @@ export async function runGrokReleaseIntel(
       rawPreview: text.slice(0, 400),
     };
   } catch (err) {
-    if (err instanceof MissingCredentialError) throw err;
+    if (err instanceof MissingCredentialError || err instanceof GrokGuidelineError) throw err;
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Grok request failed: ${message}`);
   }

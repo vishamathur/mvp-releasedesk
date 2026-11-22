@@ -1,5 +1,11 @@
 import {
+  assertGrokChatEndpoint,
+  assertGrokChatStatus,
+  buildGrokChatCompletionBody,
   GROK_API_KEY_ENV,
+  GROK_CHAT_COMPLETIONS_URL,
+  GROK_REQUEST_TIMEOUT_MS,
+  GrokGuidelineError,
   MissingCredentialError,
   resolveAgentGrokApiKey,
   type GrokKeyedAgentRole,
@@ -24,6 +30,8 @@ export type GrokClientOptions = {
   endpoint?: string;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
+  /** Internal id hashed into safety_identifier. Defaults to the agent role. */
+  safetySource?: string;
 };
 
 export function resolveGrokApiKeyForAgent(
@@ -54,9 +62,23 @@ export async function grokComplete(
     throw new MissingCredentialError(envVar);
   }
 
-  const endpoint = opts.endpoint ?? "https://api.x.ai/v1/chat/completions";
+  const endpoint = opts.endpoint ?? GROK_CHAT_COMPLETIONS_URL;
+  assertGrokChatEndpoint(endpoint);
   const model = opts.model ?? (env.GROK_MODEL?.trim() || "grok-3");
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const body = buildGrokChatCompletionBody({
+    model,
+    safetySource: opts.safetySource ?? `bot:${opts.agentRole ?? "grok"}`,
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a Release Desk specialist. Reply with concise, evidence-oriented prose only.",
+      },
+      { role: "user", content: prompt },
+    ],
+  });
 
   try {
     const res = await fetchImpl(endpoint, {
@@ -65,34 +87,25 @@ export async function grokComplete(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a Release Desk specialist. Reply with concise, evidence-oriented prose only.",
-          },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.2,
-      }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(GROK_REQUEST_TIMEOUT_MS),
     });
 
+    assertGrokChatStatus(res.status);
     if (!res.ok) {
       throw new Error(`Grok request failed (${res.status})`);
     }
 
-    const body = (await res.json()) as {
+    const payload = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const text = body.choices?.[0]?.message?.content?.trim();
+    const text = payload.choices?.[0]?.message?.content?.trim();
     if (!text) {
       throw new Error("Empty Grok response");
     }
     return { text, mocked: false };
   } catch (err) {
-    if (err instanceof MissingCredentialError) throw err;
+    if (err instanceof MissingCredentialError || err instanceof GrokGuidelineError) throw err;
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Grok request failed: ${message}`);
   }

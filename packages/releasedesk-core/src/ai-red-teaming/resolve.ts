@@ -1,5 +1,5 @@
 import { createCustomAiRedTeamingProvider } from "./custom.js";
-import { createZscalerAiRedTeamingProvider } from "./zscaler.js";
+import { createGrokGuardrailsProvider } from "./grok-guardrails-provider.js";
 import {
   AiRedTeamProviderNameSchema,
   DEFAULT_AI_RED_TEAM_PROVIDER,
@@ -7,25 +7,25 @@ import {
   type AiRedTeamingProvider,
 } from "./types.js";
 
-/** Env var selecting AI Red Teaming provider. Default / unset → `custom`. */
+/** Env var selecting the AI Red Teaming provider. Default / unset → `custom`. */
 export const AI_RED_TEAM_PROVIDER_ENV = "RELEASEDESK_AI_RED_TEAM_PROVIDER" as const;
 
 export type ResolveAiRedTeamingProviderOptions = {
-  /**
-   * Force provider. When omitted, reads `RELEASEDESK_AI_RED_TEAM_PROVIDER`
-   * (`custom` | `zscaler`). Unset / empty / unknown → `custom`.
-   */
+  /** Force provider. When omitted, reads `RELEASEDESK_AI_RED_TEAM_PROVIDER`. */
   provider?: AiRedTeamProviderName;
   env?: NodeJS.ProcessEnv;
   /** Injected provider wins (tests). */
   client?: AiRedTeamingProvider;
-  /** Forwarded to Zscaler stub when selected. */
-  zscalerApiKey?: string | null;
 };
 
 export function parseAiRedTeamProviderName(
   raw: string | undefined | null,
 ): AiRedTeamProviderName {
+  if (raw != null && String(raw).trim().toLowerCase() === "zscaler") {
+    throw new Error(
+      "Zscaler AI red-team provider was removed. Set RELEASEDESK_AI_RED_TEAM_PROVIDER to grok-guardrails or custom. Refusing to continue.",
+    );
+  }
   if (raw == null || String(raw).trim() === "") {
     return DEFAULT_AI_RED_TEAM_PROVIDER;
   }
@@ -34,15 +34,8 @@ export function parseAiRedTeamProviderName(
 }
 
 /**
- * Select custom (default) vs optional Zscaler AI Red Teaming provider.
- *
- * ```bash
- * # default — custom agent contract
- * unset RELEASEDESK_AI_RED_TEAM_PROVIDER
- *
- * # optional Zscaler stub (MOCK without credentials)
- * export RELEASEDESK_AI_RED_TEAM_PROVIDER=zscaler
- * ```
+ * Select the custom provider (default) or the Grok guardrails probe provider.
+ * `zscaler` is a configuration error.
  */
 export function resolveAiRedTeamingProvider(
   options: ResolveAiRedTeamingProviderOptions = {},
@@ -54,20 +47,14 @@ export function resolveAiRedTeamingProvider(
     options.provider ??
     parseAiRedTeamProviderName(env[AI_RED_TEAM_PROVIDER_ENV]);
 
-  if (name === "zscaler") {
-    return createZscalerAiRedTeamingProvider({
-      env,
-      ...(options.zscalerApiKey !== undefined
-        ? { apiKey: options.zscalerApiKey }
-        : {}),
-    });
+  if (name === "grok-guardrails") {
+    return createGrokGuardrailsProvider({ env });
   }
-
   return createCustomAiRedTeamingProvider();
 }
 
 export function describeAiRedTeamingProvider(provider: AiRedTeamingProvider): string {
-  return provider.name === "zscaler"
-    ? "Zscaler AI Red Teaming provider (optional; MOCK without credentials)"
-    : "Custom AI Red Teaming provider (default)";
+  return provider.name === "grok-guardrails"
+    ? "Grok guardrails red-team provider (RELEASEDESK_GROK_API_KEY_SECURITY)"
+    : "Custom AI Red Teaming provider (no live probe engine)";
 }
