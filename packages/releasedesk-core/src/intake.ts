@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createMockMeta, MockMetaSchema, type MockMeta } from "./mock.js";
+import { MockMetaSchema, type MockMeta } from "./mock.js";
 import { nowIso } from "./ids.js";
 
 /**
@@ -100,7 +100,7 @@ export type CostApproval = z.infer<typeof CostApprovalSchema>;
 /**
  * Financial record for monies the company will charge / spend / credit
  * for a customer request. Always tied to customerId (cannot be orphaned).
- * MOCK-labeled when no real billing system.
+ * source is the explicit billing source "billing_system".
  */
 export const CostEstimateSchema = z
   .object({
@@ -113,7 +113,7 @@ export const CostEstimateSchema = z
     direction: CostDirectionSchema,
     label: z.string().min(1),
     approval: CostApprovalSchema,
-    source: z.enum(["mock", "billing_system"]).default("mock"),
+    source: z.literal("billing_system"),
     mock: MockMetaSchema.optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
@@ -432,7 +432,7 @@ export type CreateCostEstimateInput = {
   direction: CostDirection;
   label?: string;
   notes?: string;
-  source?: "mock" | "billing_system";
+  source: "billing_system";
   mock?: MockMeta;
   id?: string;
 };
@@ -441,16 +441,13 @@ export function createCostEstimate(input: CreateCostEstimateInput): CostEstimate
   if (!input.customerId) {
     throw new Error("Cost estimate cannot be orphaned from customerId");
   }
+  if (input.source !== "billing_system") {
+    throw new Error(
+      'Cost estimate requires an explicit billing source "billing_system". Refusing to invent a mock billing source.',
+    );
+  }
   const at = nowIso();
-  const source = input.source ?? "mock";
-  const mock =
-    source === "mock"
-      ? (input.mock ??
-        createMockMeta(
-          "billing",
-          "No real billing system — estimate is MOCK",
-        ))
-      : input.mock;
+  const mock = input.mock;
 
   return CostEstimateSchema.parse({
     id: input.id ?? createCostEstimateId(),
@@ -461,7 +458,7 @@ export function createCostEstimate(input: CreateCostEstimateInput): CostEstimate
     direction: input.direction,
     label: input.label ?? `Estimate for ${input.requestId}`,
     approval: { status: "pending" },
-    source,
+    source: input.source,
     ...(mock !== undefined ? { mock } : {}),
     createdAt: at,
     updatedAt: at,
@@ -785,9 +782,7 @@ export function enqueueCustomerRequest(
   });
   next = appendIntakeAudit(next, {
     action: "intake.cost_created",
-    message: `Cost estimate ${cost.amount} ${cost.currency} (${cost.direction}) for ${customer.customerId}${
-      cost.source === "mock" ? " [MOCK]" : ""
-    }`,
+    message: `Cost estimate ${cost.amount} ${cost.currency} (${cost.direction}) for ${customer.customerId}`,
     customerId: customer.customerId,
     requestId: request.id,
     costEstimateId: cost.id,

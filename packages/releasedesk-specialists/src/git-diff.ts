@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createMockMeta, formatMockNote, type MockMeta } from "@releasedesk/core";
+import type { MockMeta } from "@releasedesk/core";
 
 const execFileAsync = promisify(execFile);
 

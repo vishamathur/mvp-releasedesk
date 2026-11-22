@@ -20,12 +20,12 @@ npm run build:lead
 ## On-demand check (CLI)
 
 ```bash
-# Stubs (this package)
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
+# Lead package CLI (real clients; a missing key throws)
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --json
 
-# Demo human gates in-memory (no git merge)
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --json
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --reject --json
+# Record human gates in memory (no git merge)
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --approve --json
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --reject --json
 
 # Full specialists path (root alias → @releasedesk/specialists)
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
@@ -40,7 +40,7 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 File-backed store:
 
 ```bash
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --store file --store-path .releasedesk/runs.json
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --store file --store-path .releasedesk/runs.json
 ```
 
 ## PR workflow

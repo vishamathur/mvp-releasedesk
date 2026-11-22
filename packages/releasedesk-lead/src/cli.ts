@@ -3,7 +3,7 @@
  * On-demand release check CLI for the Lead Agent (M6: verification + PR gates).
  *
  * Usage:
- *   npm run check:release:stubs -- --repo owner/name [--base main] [--head HEAD]
+ *   npm run check:release:lead -- --repo owner/name [--base main] [--head HEAD]
  *   npx tsx packages/releasedesk-lead/src/cli.ts --repo owner/name --json
  */
 import { mkdir } from "node:fs/promises";

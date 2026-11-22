@@ -16,16 +16,8 @@ export function policiesDir(): string {
   return path.join(fixturesDir(), "policies");
 }
 
-export function securityFixturesDir(): string {
-  return path.join(fixturesDir(), "security");
-}
-
 export function releaseNotesFixturePath(): string {
   return path.join(fixturesDir(), "release-notes", "sample-release-notes.md");
-}
-
-export function sampleAdvisoriesPath(): string {
-  return path.join(securityFixturesDir(), "sample-advisories.json");
 }
 
 /** Best-effort monorepo root (workspace). */
