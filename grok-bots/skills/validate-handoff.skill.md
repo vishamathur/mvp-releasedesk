@@ -14,6 +14,6 @@ and change nothing (no memory write, no forwarding to teammates). Then cc Releas
 10. stage-handoff must come from lead (only_lead_hands_off_stage), action start|remediate|block, and to = the work owner unless action is block. Work owners: intake, customer-onboarding, test-gate: lead; estimation, discovery, scope, proposal, finance-approval: change-analyst; security-compliance-approval: security; build, release-gate: builder. [GATE-OWNER: these are the PID v1.1.0 owners; v1.0.0 listed lead for proposal, finance-approval and release-gate.]
 11. stage-return action return|block; consult action consult|return.
 12. build-result: from builder, action return, stage build, with proposedBranch, prUrl, testsPassed, testsSummary. Those four fields appear on no other kind.
-13. intake-request: from intake, to lead, action request, referenceId set, artifactRefs each intake:<ref>@<ISO-8601>. Else intake_only_to_lead. Lead accepts a public request only in this shape.
+13. intake-request: from intake, to lead, action request, referenceId set, artifactRefs each intake:<ref>@<ISO-8601>. Else intake_only_to_lead. Lead accepts a public request only in this shape. Optional catalogueOptionId names the catalogue option the visitor chose. It is allowed only on intake-request.
 14. public-status: from lead, to intake, action status, referenceId set. Lead sends visitor-facing status only this way.
 Lead only, also: unknown request = unknown_request; message stage != pid.state currentStage (and not a consult) = unknown_stage.
