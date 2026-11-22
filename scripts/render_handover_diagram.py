@@ -11,6 +11,7 @@ PNG = OUT / "release-desk-handover-diagram.png"
 BG, PAPER, INK, MUTED, LINE = "#F3F5F8", "#FFFFFF", "#0F172A", "#475569", "#CBD5E1"
 LANES = [
     ("vishal", "Vishal", "human approver", "#92400E", "#FEF3C7"),
+    ("intake", "Intake", "public front door · talks to Lead", "#0369A1", "#E0F2FE"),
     ("lead", "Release Desk Lead", "orchestrator · sole pid.state writer", "#1D4ED8", "#DBEAFE"),
     ("ca", "Change Analyst", "estimation · finance & proposal gates", "#0F766E", "#CCFBF1"),
     ("std", "Standards", "compliance consultant", "#6D28D9", "#EDE9FE"),
@@ -29,6 +30,8 @@ KIND = {  # color, dash, width
     "gate-decision": ("#B45309", "10,5", 4),
     "tool": ("#334155", "3,4", 2.5),
     "chat": ("#92400E", None, 2.5),
+    "intake-request": ("#0369A1", None, 3),
+    "public-status": ("#0369A1", "6,4", 2.5),
 }
 W = 2400
 LEFT = 40
@@ -38,6 +41,7 @@ ROW = 44
 
 # (from, to, label, kind) ; ("note", lane, text) ; ("sep", text)
 ER = [
+    ("intake", "lead", "0 · intake-request · public PID-ER card", "intake-request"),
     ("vishal", "lead", "1 · chat · start PID-ER (customer, product, ask)", "chat"),
     ("note", "lead", "writes pid.state · stage intake"),
     ("lead", "ca", "2 · consult · intake", "consult"),
@@ -86,10 +90,12 @@ ER = [
     ("vishal", "bld", "39 · decision · GO (verbatim, timestamped)", "gate-decision"),
     ("bld", "lead", "40 · stage-return · release-gate (approved)", "stage-return"),
     ("note", "lead", "pid.state → done"),
-    ("lead", "vishal", "41 · chat · status: done, PR ready (info only)", "chat"),
+    ("lead", "intake", "41 · public-status · done", "public-status"),
+    ("lead", "vishal", "41b · chat · status: done, PR ready (info only)", "chat"),
     ("vishal", "gh", "42 · Vishal merges the PR himself (no bot merges)", "chat"),
 ]
 NC = [
+    ("intake", "lead", "N0 · intake-request · public PID-NC card", "intake-request"),
     ("vishal", "lead", "N1 · chat · start PID-NC (legal name, jurisdiction, sponsor)", "chat"),
     ("lead", "ca", "N2 · consult · intake, then customer-onboarding (Lead owns)", "consult"),
     ("lead", "ca", "N3 · stage-handoff · discovery", "stage-handoff"),
@@ -182,7 +188,7 @@ def main():
     nc_top = er_end + 40
     nc_out, nc_end = draw_rows(NC, nc_top + 140, dashed_panel=True)
     legend_top = nc_end + 30
-    H = int(legend_top + 240)
+    H = int(legend_top + 280)
 
     defs = ['<defs>']
     for k, (c, _d, _w) in KIND.items():
@@ -192,13 +198,13 @@ def main():
 
     parts.append(f'<rect width="{W}" height="{H}" fill="{BG}"/>')
     parts.append(t(40, 58, "Release Desk on Grok Bot: every bot-to-bot handover (PID-ER, with PID-NC extras)", 32, 800, INK, "start"))
-    parts.append(t(40, 96, "Teammates message each other with handoff.v1 over SendToAgent. Lead is the only writer of pid.state.{requestId}; every stage-return and build-result goes to Lead.", 17, 500, MUTED, "start"))
+    parts.append(t(40, 96, "Intake sends intake-request to Lead. Lead is the only writer of pid.state.{requestId} and sends public-status back. Every stage-return and build-result goes to Lead.", 17, 500, MUTED, "start"))
     parts.append(t(40, 122, "Human gates are asked and answered between Vishal and the bot that owns that work. Lead never asks Vishal for an approval and never sets one.", 17, 700, "#92400E", "start"))
 
     # cc fan-in panel
     parts.append(f'<rect x="20" y="{fan_top}" width="{W - 40}" height="280" rx="14" fill="#F8FAFC" stroke="#475569" stroke-width="2" stroke-dasharray="10,6"/>')
     parts.append(t(40, fan_top + 32, "Audit trail: every bot copies Release Desk Log (SendToAgent, priority false) on each handoff.v1 sent or received, each REJECT, each gate ask and human decision; Lead also sends each stage transition", 17, 700, "#334155", "start"))
-    bots = [l for l in LANES if l[0] in ("lead", "ca", "std", "sec", "bld")]
+    bots = [l for l in LANES if l[0] in ("intake", "lead", "ca", "std", "sec", "bld")]
     bw, gap = 250, 40
     bx0 = 60
     by = fan_top + 60
@@ -243,7 +249,7 @@ def main():
 
     # legend
     ly = legend_top
-    parts.append(f'<rect x="20" y="{ly:.1f}" width="{W - 40}" height="210" rx="14" fill="#0F172A"/>')
+    parts.append(f'<rect x="20" y="{ly:.1f}" width="{W - 40}" height="250" rx="14" fill="#0F172A"/>')
     parts.append(t(40, ly + 34, "Message kinds (handoff.v1)", 18, 800, "#F8FAFC", "start"))
     items = [
         ("stage-handoff", "stage-handoff · Lead → work owner (start | remediate | block)"),
@@ -255,6 +261,8 @@ def main():
         ("tool", "tool call · CloudAgent / GitHub (not a teammate message)"),
         ("chat", "chat with Vishal · trigger, status, his own merge"),
         ("consult", "● cc · <tag> on the Log lane = line appended to {requestId}.jsonl"),
+        ("intake-request", "intake-request · Intake → Lead (public card, real-only)"),
+        ("public-status", "public-status · Lead → Intake (what the visitor may be told)"),
     ]
     for i, (k, s) in enumerate(items):
         col, row = i % 2, i // 2

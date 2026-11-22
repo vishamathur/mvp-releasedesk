@@ -54,8 +54,9 @@ export default function AgentsPage() {
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-rd-forest/50">Agents</p>
         <h1 className="mt-2 font-display text-4xl text-rd-ink">Full roster</h1>
         <p className="mt-3 max-w-2xl text-rd-forest/75">
-          Lead, Change Analyst, Standards, Security, and Builder. Personas, skills, routines, and
-          connectors. Release Desk Log records copies and does not route work.
+          Intake, Lead, Change Analyst, Standards, Security, and Builder. Personas, skills, routines,
+          and connectors. Intake is the public front door and talks only to Lead. Release Desk Log
+          records copies and does not route work.
         </p>
         <p className="mt-2 text-sm text-rd-forest/75">
           The handover trace is on{" "}

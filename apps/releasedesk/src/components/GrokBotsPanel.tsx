@@ -24,7 +24,7 @@ type BotPack = {
   memoryNotes: string[];
 };
 
-const ORDER = ["lead", "change-analyst", "standards", "security", "builder"];
+const ORDER = ["intake", "lead", "change-analyst", "standards", "security", "builder"];
 
 export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string }) {
   const [bots, setBots] = useState<BotPack[]>([]);
@@ -60,7 +60,7 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
         <div>
           <h2 className="font-display text-2xl text-rd-ink">Grok Bots</h2>
           <p className="mt-2 max-w-2xl text-sm text-rd-forest/70">
-            Lead · CA · Standards · Security · Builder — open persona, skills, routines, connectors.
+            Intake · Lead · CA · Standards · Security · Builder — open persona, skills, routines, connectors.
             {allCreatedInApp
               ? " Created in the Grok Bot app. Those agent ids are not sent to the xAI API."
               : ""}

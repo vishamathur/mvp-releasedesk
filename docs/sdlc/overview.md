@@ -1,8 +1,8 @@
 # Release Desk SDLC
 
-Northwind Bank runs two processes, PID-ER and PID-NC, both at version 1.1.0. Six Grok Bot teammates run them: Release Desk Lead, Change Analyst, Standards, Security, Builder, and Release Desk Log. The bots message each other. Desk does not move the work. Desk reads the Log.
+Northwind Bank runs two processes, PID-ER and PID-NC, both at version 1.1.0. Seven Grok Bot teammates run them: Intake, Release Desk Lead, Change Analyst, Standards, Security, Builder, and Release Desk Log. Intake is the public front door and sends `intake-request` to Lead. Lead is the only writer of `pid.state` and sends `public-status` back. Desk does not move the work. Desk reads the Log.
 
-Customers still start at `intake.vishalmathur.org` (`apps/intake`). That page can hand an intake card to Lead. It does not approve a gate. The request thread is Lead's chat.
+Visitors start at `intake.vishalmathur.org` (`apps/intake`). Intake checks the card and hands it to Lead. It does not approve a gate. The request thread is Lead's chat.
 
 Canonical specs:
 
@@ -18,7 +18,8 @@ Enhancement for a customer and product the bank already runs. Fixed two-week spr
 
 ```mermaid
 flowchart TD
-  intakeCard["Lead chat intake card"] --> intake["Intake · Lead"]
+  visitor["Visitor"] --> intakeBot["Intake"]
+  intakeBot -->|"intake-request"| intake["Intake stage · Lead"]
   intake --> estimate["Estimation · Change Analyst"]
   estimate --> finance["Finance approval · Change Analyst asks Finance partner"]
   finance --> security["Security and compliance · Security asks the officer or red-team lead"]
@@ -34,7 +35,8 @@ New customer, or a product the bank does not yet run for them. Kickoff first. Ex
 
 ```mermaid
 flowchart TD
-  intakeCard["Lead chat intake card"] --> intake["Intake · Lead"]
+  visitor["Visitor"] --> intakeBot["Intake"]
+  intakeBot -->|"intake-request"| intake["Intake stage · Lead"]
   intake --> onboard["Customer onboarding · Lead"]
   onboard --> discovery["Discovery · Change Analyst"]
   discovery --> scope["Scope · Change Analyst"]

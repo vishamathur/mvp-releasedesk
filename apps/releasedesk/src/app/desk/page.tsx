@@ -17,7 +17,7 @@ export default function DeskPage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            Open Lead, Change Analyst, Standards, Security, and Builder. The iteration gate is
+            Open Intake, Lead, Change Analyst, Standards, Security, and Builder. The iteration gate is
             Security's security-compliance-approval, asked in Security's chat.
           </p>
         </div>
