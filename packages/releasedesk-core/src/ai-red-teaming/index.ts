@@ -17,7 +17,6 @@ export {
   type AiRedTeamingProvider,
 } from "./types.js";
 
-export { createCustomAiRedTeamingProvider } from "./custom.js";
 export {
   createGrokGuardrailsProvider,
   buildGuardrailProbeBody,

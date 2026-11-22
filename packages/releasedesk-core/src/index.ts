@@ -256,7 +256,6 @@ export {
   AiRedTeamFindingSchema,
   AiRedTeamProbeResultSchema,
   AiRedTeamHealthCheckSchema,
-  createCustomAiRedTeamingProvider,
   createGrokGuardrailsProvider,
   AI_RED_TEAM_PROVIDER_ENV,
   parseAiRedTeamProviderName,

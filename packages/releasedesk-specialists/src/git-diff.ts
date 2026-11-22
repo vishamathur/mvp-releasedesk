@@ -94,48 +94,33 @@ function parseLog(raw: string): GitCommitSummary[] {
 
 /**
  * Inspect local git range `baseRef...headRef`.
- * On failure, returns an empty file list. The caller must not invent a change set.
+ * A failed git command throws. There is no fixture change set.
  */
 export async function collectLocalDiff(opts: {
   cwd: string;
   baseRef: string;
   headRef: string;
 }): Promise<LocalDiffResult> {
-  const mocksUsed: MockMeta[] = [];
   const range = `${opts.baseRef}...${opts.headRef}`;
 
   const nameStatus = await runGit(opts.cwd, ["diff", "--name-status", range]);
   const log = await runGit(opts.cwd, ["log", "--pretty=format:%h %s", range]);
 
   if (!nameStatus.ok) {
-    const mock = createMockMeta(
-      "git-diff",
-      `git diff failed (${nameStatus.error}); caller should use fixtures`,
-    );
-    mocksUsed.push(mock);
-    return {
-      commits: [],
-      files: [],
-      rawNameStatus: "",
-      mocked: true,
-      mocksUsed,
-      source: "fixture",
-    };
+    throw new Error(`git diff failed (${nameStatus.error}). Refusing to invent a change set.`);
+  }
+  if (!log.ok) {
+    throw new Error(`git log failed (${log.error}). Refusing to invent a commit list.`);
   }
 
-  const commits = log.ok ? parseLog(log.stdout) : [];
-  if (!log.ok) {
-    mocksUsed.push(
-      createMockMeta("git-log", formatMockNote(`git log failed: ${log.error}`)),
-    );
-  }
+  const commits = parseLog(log.stdout);
 
   return {
     commits,
     files: parseNameStatus(nameStatus.stdout),
     rawNameStatus: nameStatus.stdout,
-    mocked: mocksUsed.length > 0,
-    mocksUsed,
+    mocked: false,
+    mocksUsed: [],
     source: "git",
   };
 }

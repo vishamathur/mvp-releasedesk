@@ -29,9 +29,7 @@ Model output stays untrusted. Release intel and the intake finance and chat rout
 
 ## Red-team provider
 
-`RELEASEDESK_AI_RED_TEAM_PROVIDER=grok-guardrails` runs four fixed prompts (prompt injection, secret exfiltration, policy bypass, unsafe content) through this body. It needs `RELEASEDESK_GROK_API_KEY_SECURITY`. A missing key throws. CI does not call it.
-
-`custom` remains the default and throws until a live probe engine is attached. `zscaler` is no longer a provider; selecting it throws.
+`grok-guardrails` is the only red-team provider and the default. It runs four fixed prompts (prompt injection, secret exfiltration, policy bypass, unsafe content) through this body. It needs `RELEASEDESK_GROK_API_KEY_SECURITY`. A missing key throws. CI does not call it. Any other provider name, including `zscaler` and `custom`, is a configuration error.
 
 `evaluateIterationProceedGate` still requires a human `red_team` or `security` sign-off. Probe findings do not approve the gate.
 

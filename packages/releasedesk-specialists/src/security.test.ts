@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInMemoryStore, MANDATORY_SECURITY_ROLE } from "@releasedesk/core";
+import { createInMemoryStore, MANDATORY_SECURITY_ROLE, MissingCredentialError } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createSecurityRunner } from "./security.js";
 import { correlateAdvisories, loadAdvisoryCorpus } from "./advisories.js";
@@ -33,7 +33,7 @@ async function invocation(
 describe("default specialist set", () => {
   it("always includes Security runner (mandatory on every change)", () => {
     expect(DEFAULT_SPECIALIST_ROLES).toContain(MANDATORY_SECURITY_ROLE);
-    const runners = createSpecialistRunners({ skipGrok: true });
+    const runners = createSpecialistRunners();
     expect(typeof runners.security).toBe("function");
     expect(Object.keys(runners).sort()).toEqual(
       ["builder", "change_analyst", "security", "standards"].sort(),
@@ -42,45 +42,15 @@ describe("default specialist set", () => {
 });
 
 describe("SecurityRunner", () => {
-  it("loads sample advisories and correlates informational next advisory", async () => {
-    const corpus = await loadAdvisoryCorpus(sampleAdvisoriesPath());
-    expect(corpus.advisories.length).toBeGreaterThan(0);
-
+  it("fails clearly when the Security Grok key is missing", async () => {
     const runner = createSecurityRunner({
       workspaceRoot: defaultWorkspaceRoot(),
-      skipGrok: true,
     });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",
       components: [],
-      advisoryHints: [],
     });
-
-    const result = await runner(inv);
-    expect(result.status).toBe("completed");
-    expect(result.payload.agentRole).toBe("security");
-    expect(result.mocksUsed?.some((m) => m.mockLabel === "advisory-api")).toBe(true);
-    // next is present in apps/kyc — informational, not release-blocking
-    expect(result.payload.releaseBlockingCount).toBe(0);
-    const findings = result.payload.findings as Array<{ component?: string; releaseBlocking: boolean }>;
-    expect(findings.some((f) => f.component === "next")).toBe(true);
-    expect(findings.every((f) => !f.releaseBlocking)).toBe(true);
-  });
-
-  it("flags release-blocking risks when evil-lib is in components", async () => {
-    const runner = createSecurityRunner({
-      workspaceRoot: defaultWorkspaceRoot(),
-      skipGrok: true,
-      extraComponents: [{ name: "evil-lib", version: "1.0.0", ecosystem: "npm" }],
-    });
-    const inv = await invocation({
-      repository: "vishamathur/mvp-releasedesk",
-      components: [{ name: "evil-lib", version: "1.0.0" }],
-    });
-
-    const result = await runner(inv);
-    expect((result.payload.releaseBlockingCount as number) > 0).toBe(true);
-    expect(["high", "critical"]).toContain(result.payload.riskLevel);
+    await expect(runner(inv)).rejects.toBeInstanceOf(MissingCredentialError);
   });
 
   it("correlateAdvisories respects version ranges", async () => {
