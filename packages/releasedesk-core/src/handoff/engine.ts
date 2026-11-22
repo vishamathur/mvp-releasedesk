@@ -1,4 +1,4 @@
-import { runStageOwner, consultReply, SDLC_ROSTER } from "./bots.js";
+import { runStageOwner, consultReply, mockGateCard, SDLC_ROSTER } from "./bots.js";
 import {
   isHumanActor,
   loadProcessDefinitionsSync,
@@ -9,8 +9,10 @@ import {
   type ProcessStage,
   type TeammateId,
 } from "./processes.js";
+import { LogLineSchema, type LogLine } from "./log.js";
 import {
   validateHandoffMessage,
+  VERBATIM_NOTE,
   type HandoffCode,
   type HandoffMessage,
   type ValidationResult,
@@ -51,6 +53,7 @@ export type RequestView = {
   kickoff: RequestRecord["kickoff"];
   artifacts: RequestRecord["artifacts"];
   trace: TraceEvent[];
+  log: LogLine[];
   mock: true;
   cloudClient: "mock";
 };
@@ -156,6 +159,7 @@ export class HandoffEngine {
       buildAttempts: 0,
       remediate: false,
       kickoff: null,
+      logLines: [],
     };
     this.snapshot.requests.push(record);
     record.artifacts[`pid.customer.${requestId}`] = {
@@ -211,6 +215,26 @@ export class HandoffEngine {
     }
     const record = this.find(validated.message.requestId);
     if (!record) return this.fail("unknown_request", [`No request ${validated.message.requestId}`], validated.message.requestId, raw);
+    if (validated.message.kind !== "consult" && validated.message.stage !== record.state.currentStage) {
+      return this.fail(
+        "unknown_stage",
+        [`Message stage ${validated.message.stage} is not the open stage ${record.state.currentStage}`],
+        validated.message.requestId,
+        raw,
+      );
+    }
+    if (
+      validated.message.humanGate &&
+      validated.message.humanGate.status !== "pending" &&
+      (record.state.status !== "ready-for-human" || record.pendingGate?.gate !== validated.message.humanGate.gate)
+    ) {
+      return this.fail(
+        "not_waiting_for_human",
+        ["This request is not waiting on that human gate"],
+        validated.message.requestId,
+        raw,
+      );
+    }
     this.accept(record, validated.message);
     this.save();
     return { ok: true, request: this.view(record) };
@@ -285,64 +309,43 @@ export class HandoffEngine {
       );
     }
     const at = this.now();
-    const note = input.note?.trim() || record.pendingGate.note;
-    const decision: HumanDecision = {
-      seq: this.nextSeq(record),
-      at,
-      gate: input.gate,
-      decision: input.decision,
-      decidedBy,
-      note,
-    };
-    record.decisions.push(decision);
-    record.artifacts[`pid.decisions.${record.state.requestId}`] = record.decisions.map((item) => ({
-      gate: item.gate,
-      decision: item.decision,
-      decidedBy: item.decidedBy,
-      at: item.at,
-      note: item.note,
-    }));
-    record.pendingGate = null;
-    this.post(
-      record,
-      record.state.thread.channel,
-      decidedBy,
-      `${decidedBy} ${input.decision} ${input.gate}. ${note}`,
-    );
-    this.post(
-      record,
-      "#release-desk",
-      "lead",
-      `Mirrored human reply on ${record.state.requestId}: ${decidedBy} ${input.decision} ${input.gate}.`,
-    );
-
-    if (input.decision === "rejected") {
-      this.commitState(record, { status: "blocked" }, ["status"]);
-      this.save();
-      return { ok: true, request: this.view(record) };
+    const stage = this.stageOf(record);
+    if (stage.owner === "lead") {
+      return this.fail(
+        "bot_cannot_approve",
+        ["Lead does not raise this gate. The stage owner returns the human reply."],
+        input.requestId,
+        input,
+      );
     }
-
-    const process = processById(this.processes, record.state.pid);
-    const isLast = process.stages[process.stages.length - 1]?.id === record.state.currentStage;
-    if (isLast) {
-      this.commitState(record, { status: "done" }, ["status"]);
-      this.post(record, record.state.thread.channel, "lead", `MOCK: ${record.state.requestId} is done. Nothing was auto-merged.`);
-      this.save();
-      return { ok: true, request: this.view(record) };
-    }
-
-    this.enterNext(record, `${decidedBy} approved ${input.gate}.`, {
-      gate: input.gate,
-      decision: "approved",
-      decidedBy,
-      at,
+    const verbatim = input.note?.trim() || "MOCK human";
+    const stamped = VERBATIM_NOTE.test(verbatim) ? verbatim : `${at} | verbatim: ${verbatim}`;
+    const message = this.draft(record, {
+      from: stage.owner,
+      to: "lead",
+      kind: "stage-return",
+      action: "return",
+      stage: stage.id,
+      summary: `MOCK human ${input.decision} ${input.gate}.`,
+      humanGate: {
+        gate: input.gate,
+        status: input.decision,
+        decidedBy,
+        note: stamped,
+      },
+      artifactRefs: [`memory:pid.gate.${input.gate}.${record.state.requestId}`],
     });
+    this.accept(record, message);
     this.save();
     return { ok: true, request: this.view(record) };
   }
 
   private dispatchStage(record: RequestRecord): void {
     const stage = this.stageOf(record);
+    if (stage.humanApprover) {
+      this.openGate(record, stage);
+      return;
+    }
     if (stage.owner === "lead") {
       this.runLeadStage(record, stage);
       return;
@@ -395,10 +398,6 @@ export class HandoffEngine {
         dossier: "MOCK: Sponsor, jurisdiction, and data-processing addendum recorded. This stage does not approve the proposal.",
       };
     }
-    if (stage.humanApprover) {
-      this.postHumanGate(record, stage);
-      return;
-    }
     this.enterNext(record, `Lead finished ${stage.name}.`, null);
   }
 
@@ -409,9 +408,19 @@ export class HandoffEngine {
       return;
     }
     this.consultAs(record, "lead", stage);
-    if (!record.lastBuild.testsPassed) {
+    if (!record.lastBuild.testsPassed || /open blocker/i.test(record.lastBuild.testsSummary)) {
+      if (record.buildAttempts >= 3) {
+        this.commitState(record, { status: "blocked" }, ["status"]);
+        this.post(
+          record,
+          record.state.thread.channel,
+          "lead",
+          "Test gate failed after 3 build attempts. Lead will not waive a security finding.",
+        );
+        return;
+      }
       record.remediate = true;
-      this.enterStage(record, "build", "Tests failed. Lead returns the request to Builder and does not waive a security finding.", null);
+      this.enterStage(record, "build", "Tests failed or a Security blocker is open. Lead returns the request to Builder and does not waive a security finding.", null);
       return;
     }
     this.enterNext(record, `Test gate passed. ${record.lastBuild.testsSummary}`, null);
@@ -433,7 +442,7 @@ export class HandoffEngine {
     }
   }
 
-  private postHumanGate(record: RequestRecord, stage: ProcessStage): void {
+  private openGate(record: RequestRecord, stage: ProcessStage): void {
     const gate = stage.id as HumanGateId;
     const note = HUMAN_STAGE_NOTE[gate] ?? `Waiting for ${stage.humanApprover}.`;
     record.pendingGate = {
@@ -444,18 +453,36 @@ export class HandoffEngine {
       approver: stage.humanApprover ?? "human",
     };
     this.commitState(record, { status: "ready-for-human" }, ["status"]);
-    this.post(
+    const handoff = this.draft(record, {
+      from: "lead",
+      to: stage.owner,
+      kind: "stage-handoff",
+      action: "start",
+      stage: stage.id,
+      summary: `MOCK: Lead hands ${stage.name} to ${stage.owner}. The owner raises the human gate.`,
+      humanGate: null,
+    });
+    this.accept(record, handoff);
+    const produced = runStageOwner(stage.owner, {
+      inbound: handoff,
       record,
-      record.state.thread.channel,
-      "lead",
-      `Human gate ${gate} is pending for ${stage.humanApprover}. ${note}`,
-    );
-    this.post(
-      record,
-      "#release-desk",
-      "lead",
-      `Mirrored gate card ${record.state.requestId} ${gate} pending. Approver: ${stage.humanApprover}.`,
-    );
+      stage,
+      now: this.now(),
+      nextTestsPassed: () => this.takeBuildResult(record),
+      draft: (input) => this.draft(record, input),
+      noteSubAgent: () => undefined,
+    });
+    for (const message of produced) this.accept(record, message);
+    this.emitLog(record, {
+      event: "gate-ask",
+      from: stage.owner,
+      to: "vishal",
+      stage: stage.id,
+      summary: mockGateCard(stage),
+      gate,
+      gateOwner: stage.owner,
+      confirmations: [`sent:${stage.owner}`],
+    });
   }
 
   private enterNext(
@@ -500,39 +527,119 @@ export class HandoffEngine {
     if (!validated.ok) {
       throw new Error(`Engine drafted an invalid handoff (${validated.code}): ${validated.errors.join("; ")}`);
     }
-    record.messages.push({ seq: this.nextSeq(record), at: this.now(), message: validated.message });
+    const accepted = validated.message;
+    record.messages.push({ seq: this.nextSeq(record), at: this.now(), message: accepted });
     this.post(
       record,
       record.state.thread.channel,
-      validated.message.from,
-      `${validated.message.kind} ${validated.message.from} → ${validated.message.to} · ${validated.message.stage}: ${validated.message.summary}`,
+      accepted.from,
+      `${accepted.kind} ${accepted.from} → ${accepted.to} · ${accepted.stage}: ${accepted.summary}`,
     );
-    if (validated.message.kind === "build-result" && validated.message.testsPassed !== undefined && validated.message.testsSummary && validated.message.proposedBranch && validated.message.prUrl) {
+    this.emitLog(record, {
+      event: "sent",
+      from: accepted.from,
+      to: accepted.to,
+      kind: accepted.kind,
+      stage: accepted.stage,
+      action: accepted.action,
+      summary: accepted.summary,
+      ...(accepted.humanGate ? { gate: accepted.humanGate.gate, decidedBy: accepted.humanGate.decidedBy } : {}),
+      confirmations: [`sent:${accepted.from}`, `received:${accepted.to}`],
+      message: accepted as unknown as Record<string, unknown>,
+    });
+    if (accepted.kind === "build-result" && accepted.testsPassed !== undefined && accepted.testsSummary && accepted.proposedBranch && accepted.prUrl) {
       record.lastBuild = {
-        proposedBranch: validated.message.proposedBranch,
-        prUrl: validated.message.prUrl,
-        testsPassed: validated.message.testsPassed,
-        testsSummary: validated.message.testsSummary,
+        proposedBranch: accepted.proposedBranch,
+        prUrl: accepted.prUrl,
+        testsPassed: accepted.testsPassed,
+        testsSummary: accepted.testsSummary,
         attempt: record.buildAttempts,
       };
       record.artifacts[`pid.build.${record.state.requestId}`] = record.lastBuild;
       this.enterNext(record, "Builder returned the pull request and the test result.", null);
       return;
     }
-    if (validated.message.kind === "stage-return") {
-      record.artifacts[`pid.slice.${validated.message.from}.${validated.message.stage}`] = validated.message.summary;
-      if (validated.message.action === "block") {
+    if (accepted.kind === "stage-return") {
+      record.artifacts[`pid.slice.${accepted.from}.${accepted.stage}`] = accepted.summary;
+      if (accepted.action === "block") {
         this.commitState(record, { status: "blocked" }, ["status"]);
-        this.post(record, record.state.thread.channel, "lead", validated.message.summary);
+        this.post(record, record.state.thread.channel, "lead", accepted.summary);
+        return;
+      }
+      if (accepted.humanGate && accepted.humanGate.status !== "pending") {
+        this.copyHumanDecision(record, accepted);
         return;
       }
       const stage = this.stageOf(record);
       if (stage.humanApprover) {
-        this.postHumanGate(record, stage);
         return;
       }
-      this.enterNext(record, validated.message.summary, null);
+      this.enterNext(record, accepted.summary, null);
     }
+  }
+
+  private copyHumanDecision(record: RequestRecord, message: HandoffMessage): void {
+    const gate = message.humanGate;
+    if (!gate || gate.status === "pending" || !gate.decidedBy) return;
+    const at = this.now();
+    const verbatim = gate.note.split("verbatim:").slice(1).join("verbatim:").trim() || gate.note;
+    const decision: HumanDecision = {
+      seq: this.nextSeq(record),
+      at,
+      gate: gate.gate,
+      decision: gate.status,
+      decidedBy: gate.decidedBy,
+      note: gate.note,
+    };
+    record.decisions.push(decision);
+    record.artifacts[`pid.decisions.${record.state.requestId}`] = record.decisions.map((item) => ({
+      gate: item.gate,
+      decision: item.decision,
+      decidedBy: item.decidedBy,
+      at: item.at,
+      note: item.note,
+    }));
+    record.pendingGate = null;
+    this.emitLog(record, {
+      event: "gate-decision",
+      from: message.from,
+      to: "lead",
+      kind: message.kind,
+      stage: message.stage,
+      action: message.action,
+      summary: message.summary,
+      gate: gate.gate,
+      gateOwner: message.from,
+      decidedBy: gate.decidedBy,
+      verbatim,
+      confirmations: [`sent:${message.from}`],
+    });
+    const human = {
+      gate: gate.gate,
+      decision: gate.status,
+      decidedBy: gate.decidedBy,
+      at,
+    };
+    if (gate.status === "rejected") {
+      this.commitState(record, { status: "blocked" }, ["status"]);
+      this.post(record, record.state.thread.channel, "lead", `${gate.decidedBy} rejected ${gate.gate}. ${verbatim}`);
+      return;
+    }
+    const process = processById(this.processes, record.state.pid);
+    const isLast = process.stages[process.stages.length - 1]?.id === record.state.currentStage;
+    if (isLast) {
+      const arrival = [...record.transitions].reverse().find((item) => item.toStage === record.state.currentStage);
+      if (arrival) arrival.humanDecision = human;
+      this.commitState(record, { status: "done" }, ["status"]);
+      this.post(
+        record,
+        record.state.thread.channel,
+        "lead",
+        `MOCK: ${record.state.requestId} is done. The pull request is Vishal's to merge. Nothing was auto-merged.`,
+      );
+      return;
+    }
+    this.enterNext(record, message.summary, human);
   }
 
   private appendTransition(
@@ -554,6 +661,17 @@ export class HandoffEngine {
       actor: "lead",
       reason,
       humanDecision,
+    });
+    this.emitLog(record, {
+      event: "transition",
+      from: "lead",
+      to: "lead",
+      stage: toStage,
+      summary: `${fromStage ?? "opened"} → ${toStage}. ${reason}`,
+      ...(humanDecision
+        ? { gate: humanDecision.gate, decidedBy: humanDecision.decidedBy, verbatim: humanDecision.decision }
+        : {}),
+      confirmations: ["sent:lead"],
     });
     this.commitState(record, { currentStage: toStage, status: "open" }, ["currentStage", "status"]);
     this.post(record, record.state.thread.channel, "lead", `${fromStage ?? "opened"} → ${toStage}. ${reason}`);
@@ -656,9 +774,38 @@ export class HandoffEngine {
     const record = requestId ? this.find(requestId) : undefined;
     if (record) {
       record.rejections.push({ ...rejection, seq: this.nextSeq(record) });
+      const body =
+        typeof raw === "object" && raw !== null && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : {};
+      const from = typeof body.from === "string" ? body.from : "lead";
+      const to = typeof body.to === "string" ? body.to : "lead";
+      this.emitLog(record, {
+        event: "reject",
+        from,
+        to,
+        summary: errors.join(" "),
+        rejectCode: code,
+        ...(typeof body.stage === "string" ? { stage: body.stage } : {}),
+        ...(typeof body.kind === "string" ? { kind: body.kind } : {}),
+        anomalies: [`REJECT ${code}`],
+      });
     }
     this.save();
     return { ok: false, code, errors };
+  }
+
+  private emitLog(record: RequestRecord, fields: Omit<LogLine, "requestId" | "seq" | "at" | "pid" | "pidVersion">): void {
+    if (!record.logLines) record.logLines = [];
+    const line = LogLineSchema.parse({
+      requestId: record.state.requestId,
+      seq: this.nextSeq(record),
+      at: this.now(),
+      pid: record.state.pid,
+      pidVersion: record.state.version,
+      ...fields,
+    });
+    record.logLines.push(line);
   }
 
   private peekRequestId(raw: unknown): string | undefined {
@@ -695,6 +842,7 @@ export class HandoffEngine {
       kickoff: record.kickoff,
       artifacts: record.artifacts,
       trace: traceOf(record),
+      log: record.logLines ?? [],
       mock: true,
       cloudClient: "mock",
     };

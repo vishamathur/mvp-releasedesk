@@ -44,13 +44,13 @@ export const SDLC_ROSTER: Array<{
     id: "lead",
     name: "Release Desk Lead",
     kind: "teammate",
-    does: "Opens the request thread, writes pid.state, hands each stage to its owner, posts human gates, and runs the test gate. Never approves a gate and never merges.",
+    does: "Opens the request thread, writes pid.state, hands each stage to its owner, and runs the test gate. Never asks for a gate decision and never merges.",
   },
   {
     id: "change-analyst",
     name: "Change Analyst",
     kind: "teammate",
-    does: "Owns estimation, and on PID-NC owns discovery and scope. Consults the bots named on the stage and returns the slice to Lead.",
+    does: "Owns estimation, and on PID-NC owns discovery, scope, and proposal. Raises the finance and proposal gates and returns the human reply to Lead.",
   },
   {
     id: "standards",
@@ -62,13 +62,13 @@ export const SDLC_ROSTER: Array<{
     id: "security",
     name: "Security",
     kind: "teammate",
-    does: "Owns security and compliance on every change. Consults Standards and Change Analyst, returns findings, and leaves the human gate pending.",
+    does: "Owns security-compliance-approval on every change. Raises that human gate and returns the human reply to Lead. Iteration gate stays red_team|security.",
   },
   {
     id: "builder",
     name: "Builder",
     kind: "teammate",
-    does: "Owns build after a human security approval. Launches mock Coding, then Testing and Review together, and returns a build-result to Lead. Does not merge.",
+    does: "Owns build and the release gate. Launches mock Coding, then Testing and Review together, returns a build-result, and raises the release gate. Does not merge.",
   },
   {
     id: "coding",
@@ -164,9 +164,15 @@ function securityApproved(record: RequestRecord): boolean {
   );
 }
 
+export function mockGateCard(stage: ProcessStage): string {
+  return `MOCK human gate card · ${stage.id} · approver: ${stage.humanApprover ?? "human"}. Reply APPROVE or REJECT ${stage.id}.`;
+}
+
 function runChangeAnalyst(ctx: BotContext): HandoffMessage[] {
+  const consults = withConsults(ctx, "change-analyst");
+  if (ctx.stage.humanApprover) return consults;
   return [
-    ...withConsults(ctx, "change-analyst"),
+    ...consults,
     ctx.draft({
       from: "change-analyst",
       to: "lead",
@@ -181,28 +187,27 @@ function runChangeAnalyst(ctx: BotContext): HandoffMessage[] {
 }
 
 function runSecurity(ctx: BotContext): HandoffMessage[] {
+  const consults = withConsults(ctx, "security");
+  if (ctx.stage.humanApprover) return consults;
   return [
-    ...withConsults(ctx, "security"),
+    ...consults,
     ctx.draft({
       from: "security",
       to: "lead",
       kind: "stage-return",
       action: "return",
       stage: ctx.stage.id,
-      summary:
-        "MOCK: Security review is complete. No bot signature is recorded. One human of kind red_team or security must sign before build.",
-      humanGate: {
-        gate: "security-compliance-approval",
-        status: "pending",
-        decidedBy: null,
-        note: "Sign-off request. Findings are attached. A bot did not approve this gate.",
-      },
+      summary: "MOCK: Security review is complete. Findings are attached. A human signature is still required.",
+      humanGate: null,
       artifactRefs: [`memory:pid.security.${ctx.record.state.requestId}`],
     }),
   ];
 }
 
 function runBuilder(ctx: BotContext): HandoffMessage[] {
+  if (ctx.stage.id === "release-gate") {
+    return withConsults(ctx, "builder");
+  }
   if (!securityApproved(ctx.record)) {
     return [
       ctx.draft({
@@ -236,8 +241,8 @@ function runBuilder(ctx: BotContext): HandoffMessage[] {
     prUrl,
     testsPassed,
     testsSummary: testsPassed
-      ? "MOCK: Tests passed. Review did not merge. Cloud client is mock."
-      : "MOCK: Tests failed. Review did not merge. Cloud client is mock.",
+      ? "MOCK: release-intel riskTier low; blockers none. Tests passed. Review did not merge. Cloud client is mock."
+      : "MOCK: release-intel riskTier high; blockers: tests failed. Review did not merge. Cloud client is mock.",
     attempt,
   };
   ctx.record.lastBuild = slice;

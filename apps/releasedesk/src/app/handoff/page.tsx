@@ -15,9 +15,8 @@ export default function HandoffPage() {
           Bot to bot
         </h1>
         <p className="mt-3 max-w-2xl text-rd-forest/75">
-          PID-ER and PID-NC move by teammate message. Only Lead writes pid.state. Stage returns come
-          back to Lead. A bot never sets a human gate to approved. The customer intake site and the
-          leaderboard are not part of this desk.
+          Bots run the process; Release Desk Log records it; Desk shows it. PID-ER and PID-NC v1.1.0
+          move by teammate message in Lead&apos;s chat. The stage owner raises each human gate.
         </p>
         <div className="mt-12">
           <HandoffBoard />

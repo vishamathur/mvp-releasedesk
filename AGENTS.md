@@ -4,9 +4,9 @@
 Northwind Bank KYC release readiness. Desk on `:3002`, KYC on `:3000`.
 
 ## Required stack (do not skip)
-1. **Grok Bot host** packs in `grok-bots/bots/*` (Lead + Change Analyst + Standards + Security + Builder). The five bots are teammates in the **Grok Bot app** (created 2026-11-18). Ids are `grokBotAppAgentId` in `grok-bots/registry.json` with `host: "grok-bot-app"` and `status: "created_in_grok_bot_app"`. They are not xAI Agents API ids (`liveBotId` stays null). Do not call `api.x.ai` with them. App bots do not take API keys. See `grok-bots/README.md`.
+1. **Grok Bot host** packs in `grok-bots/bots/*` (Lead + Change Analyst + Standards + Security + Builder). The five bots are teammates in the **Grok Bot app** (created 2026-11-18). Ids are `grokBotAppAgentId` in `grok-bots/registry.json` with `host: "grok-bot-app"` and `status: "created_in_grok_bot_app"`. They are not xAI Agents API ids (`liveBotId` stays null). Do not call `api.x.ai` with them. App bots do not take API keys. See `grok-bots/README.md`. Release Desk Log is a sixth teammate (`definitionId` `log`) that only records handoff copies. It is not a handoff sender or recipient and it does not take an API key.
 2. **Cursor cloud agents** under Builder: **Coding** (ships code) → **Testing** ∥ **Review** (verify/review; never merge).
-3. **Grok API** called by shipped Desk module `apps/releasedesk/src/lib/grok-release-intel.ts` (**classify + summarize** + trustCheck) — Coding owns this ship path.
+3. **Grok API** called by shipped Desk module `apps/releasedesk/src/lib/grok-release-intel.ts` (**classify + summarize + riskTier + blockers** + trustCheck) — Coding owns this ship path. Builder copies that result into `build-result.testsSummary`. Security uses `riskTier` and `blockers` at the test gate; an open blocker sends the request back to build. The iteration gate stays `red_team|security`.
 
 ## Spine to preserve
 - Per-iteration gate: `evaluateIterationProceedGate` / `checkpoint-gate.ts` — needs `red_team` OR `security` sign-off (`IterationApprovalGate` in Desk).

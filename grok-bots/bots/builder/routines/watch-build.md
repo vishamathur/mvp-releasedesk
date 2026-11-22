@@ -1,0 +1,1 @@
+Routine: watch-build (every 10 min while pid.build has a running agent): check the agent and PR checks; when done, run steps 5–6 of launch-cursor-build. No PR after 45 min = stage-return block with the agent link.

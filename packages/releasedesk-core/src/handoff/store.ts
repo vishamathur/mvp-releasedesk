@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import type { LogLine } from "./log.js";
 import type { HandoffMessage, HumanGateCard } from "./schema.js";
 import type { ProcessId, SubAgentId, TeammateId } from "./processes.js";
 
@@ -11,7 +12,7 @@ export type PidState = {
   version: string;
   currentStage: string;
   status: PidStatus;
-  thread: { channel: "#er-intake" | "#new-customer"; threadId: string };
+  thread: { channel: "lead-chat"; threadId: string };
   customerLabel: string;
   summary: string;
   openedAt: string;
@@ -126,6 +127,8 @@ export type RequestRecord = {
   buildAttempts: number;
   remediate: boolean;
   kickoff: KickoffRecord | null;
+  /** Release Desk Log lines emitted by the simulation, in B5 JSONL shape. */
+  logLines: LogLine[];
 };
 
 export type HandoffSnapshot = {

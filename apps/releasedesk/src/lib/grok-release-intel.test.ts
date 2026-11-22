@@ -34,6 +34,8 @@ describe("runGrokReleaseIntel", () => {
     expect(result.trustCheck.keyEnvVar).toBe("RELEASEDESK_GROK_API_KEY_LEAD");
     expect(result.summarize).toMatch(/MOCK:/);
     expect(result.classify.category).toBe("security_or_compliance_hold");
+    expect(result.riskTier).toBe("high");
+    expect(result.blockers).toEqual(["TLS gap"]);
   });
 
   it("parses live classify+summarize when exclusive key + fetch succeed", async () => {
@@ -48,6 +50,8 @@ describe("runGrokReleaseIntel", () => {
                   extract: ["Confirm docs-only delta"],
                   score: { level: "low", rationale: "docs only" },
                   summarize: "Clean wave; human gates still required.",
+                  riskTier: "low",
+                  blockers: [],
                 }),
               },
             },
@@ -76,6 +80,8 @@ describe("runGrokReleaseIntel", () => {
     expect(result.extract).toContain("Confirm docs-only delta");
     expect(result.score.level).toBe("low");
     expect(result.summarize).toContain("human gates");
+    expect(result.riskTier).toBe("low");
+    expect(result.blockers).toEqual([]);
     expect(result.trustCheck.humanGateStillRequired).toBe(true);
     expect(result.trustCheck.noAutoApprove).toBe(true);
   });

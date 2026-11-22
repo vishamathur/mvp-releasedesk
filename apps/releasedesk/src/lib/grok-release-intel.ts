@@ -39,6 +39,8 @@ export type GrokReleaseIntelResult = {
   extract: string[];
   score: { level: "low" | "medium" | "high" | "critical"; rationale: string };
   summarize: string;
+  riskTier: "low" | "medium" | "high";
+  blockers: string[];
   trustCheck: GrokIntelTrustCheck;
   mocked: boolean;
   rawPreview?: string;
@@ -80,11 +82,45 @@ function trustNotes(extra: string[]): GrokIntelTrustCheck {
   };
 }
 
+export type ReleaseIntelRiskTier = "low" | "medium" | "high";
+
+export const RELEASE_INTEL_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["classify", "summarize", "riskTier", "blockers", "extract", "score"],
+  properties: {
+    classify: {
+      type: "object",
+      additionalProperties: false,
+      required: ["category", "confidence"],
+      properties: {
+        category: { type: "string" },
+        confidence: { type: "number" },
+      },
+    },
+    summarize: { type: "string" },
+    riskTier: { type: "string", enum: ["low", "medium", "high"] },
+    blockers: { type: "array", items: { type: "string" } },
+    extract: { type: "array", items: { type: "string" } },
+    score: {
+      type: "object",
+      additionalProperties: false,
+      required: ["level", "rationale"],
+      properties: {
+        level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        rationale: { type: "string" },
+      },
+    },
+  },
+} as const;
+
 export function trustCheckGrokIntelPayload(payload: {
   classify?: { category?: unknown; confidence?: unknown };
   extract?: unknown;
   score?: { level?: unknown; rationale?: unknown };
   summarize?: unknown;
+  riskTier?: unknown;
+  blockers?: unknown;
 }): { ok: true; confidence: number } | { ok: false; reason: string } {
   if (!payload.classify || payload.summarize == null) {
     return { ok: false, reason: "missing classify/summarize" };
@@ -108,6 +144,12 @@ export function trustCheckGrokIntelPayload(payload: {
   if (typeof payload.summarize !== "string" || !payload.summarize.trim()) {
     return { ok: false, reason: "summarize invalid" };
   }
+  if (payload.riskTier !== "low" && payload.riskTier !== "medium" && payload.riskTier !== "high") {
+    return { ok: false, reason: "riskTier invalid" };
+  }
+  if (!Array.isArray(payload.blockers) || payload.blockers.some((item) => typeof item !== "string")) {
+    return { ok: false, reason: "blockers must be string[]" };
+  }
   return { ok: true, confidence };
 }
 
@@ -118,6 +160,8 @@ function mockIntel(
   const severe = input.findings.filter((f) =>
     ["high", "critical"].includes((f.severity ?? "").toLowerCase()),
   );
+  const riskTier: ReleaseIntelRiskTier = severe.length ? "high" : input.findings.length ? "medium" : "low";
+  const blockers = severe.map((finding) => finding.text);
   const reasonNote =
     reason === "missing_key"
       ? `MOCK: no ${INTEL_KEY_ENV} — deterministic fallback`
@@ -139,6 +183,8 @@ function mockIntel(
         : "No high/critical findings in sample",
     },
     summarize: `MOCK: ${input.repository} — ${input.goal}. ${input.findings.length} finding(s); ${severe.length} high/critical. Human gates still required.`,
+    riskTier,
+    blockers,
     trustCheck: trustNotes([
       reasonNote,
       "Shared XAI_API_KEY / GROK_API_KEY never used",
@@ -178,7 +224,7 @@ export async function runGrokReleaseIntel(
     keyPresent: true,
   });
   const system =
-    "You are Release Desk Grok intel. Return ONLY JSON: classify{category,confidence 0-1}, extract(string[]), score{level:low|medium|high|critical,rationale}, summarize(string). Do not approve merges.";
+    "You are Release Desk Grok intel. Return ONLY JSON matching the schema: classify{category,confidence 0-1}, summarize, riskTier low|medium|high, blockers string[], extract string[], score{level,rationale}. Do not approve merges.";
 
   try {
     const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
@@ -190,6 +236,14 @@ export async function runGrokReleaseIntel(
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.1,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "release_intel",
+            strict: true,
+            schema: RELEASE_INTEL_JSON_SCHEMA,
+          },
+        },
         messages: [
           { role: "system", content: system },
           {
@@ -238,6 +292,10 @@ export async function runGrokReleaseIntel(
       (parsed.score as { rationale?: string } | undefined)?.rationale ?? "Grok score",
     );
 
+    const riskTier = parsed.riskTier as ReleaseIntelRiskTier;
+    const blockers = Array.isArray(parsed.blockers)
+      ? parsed.blockers.map((item) => String(item)).filter(Boolean)
+      : [];
     return {
       mode: "live",
       label: "LIVE",
@@ -250,6 +308,8 @@ export async function runGrokReleaseIntel(
       extract,
       score: { level: scoreLevel, rationale: scoreRationale },
       summarize: String(parsed.summarize),
+      riskTier,
+      blockers,
       trustCheck: trustNotes([
         `LIVE Grok API via exclusive ${INTEL_KEY_ENV}`,
         "Schema trust check passed",

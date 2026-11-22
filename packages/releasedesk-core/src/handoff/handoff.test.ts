@@ -83,9 +83,9 @@ function baseMessage(overrides: Record<string, unknown> = {}): Record<string, un
     v: 1,
     kind: "consult",
     pid: "PID-ER",
-    pidVersion: "1.0.0",
+    pidVersion: "1.1.0",
     requestId: "REQ-2026-0001",
-    thread: { channel: "#er-intake", threadId: "thr_2026-0001" },
+    thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
     from: "lead",
     to: "standards",
     stage: "estimation",
@@ -104,10 +104,13 @@ describe("PID specs", () => {
     expect(defs.map((item) => item.id)).toEqual(["PID-ER", "PID-NC"]);
     const er = defs[0]!;
     const nc = defs[1]!;
-    expect(er.version).toBe("1.0.0");
-    expect(nc.version).toBe("1.0.0");
-    expect(er.entry.channel).toBe("#er-intake");
-    expect(nc.entry.channel).toBe("#new-customer");
+    expect(er.version).toBe("1.1.0");
+    expect(nc.version).toBe("1.1.0");
+    expect(er.entry.channel).toBe("lead-chat");
+    expect(nc.entry.channel).toBe("lead-chat");
+    expect(er.gateRaisedBy).toBe("stage-owner");
+    expect(nc.auditLog.bot).toBe("log");
+    expect(er.auditLog.dirEnv).toBe("RELEASEDESK_LOG_DIR");
     expect(er.cadence.kind).toBe("fixed_sprint");
     expect(nc.cadence.kind).toBe("kickoff_first");
     assertSharedSpine(er);
@@ -136,6 +139,14 @@ describe("PID specs", () => {
       "standards",
     ]);
     expect(er.stages.find((stage) => stage.id === "security-compliance-approval")!.owner).toBe("security");
+    expect(er.stages.find((stage) => stage.id === "finance-approval")!.owner).toBe("change-analyst");
+    expect(er.stages.find((stage) => stage.id === "finance-approval")!.consulting).toEqual([]);
+    expect(er.stages.find((stage) => stage.id === "release-gate")!.owner).toBe("builder");
+    expect(er.stages.find((stage) => stage.id === "release-gate")!.consulting).toEqual(["security", "standards"]);
+    expect(er.stages.find((stage) => stage.id === "test-gate")!.owner).toBe("lead");
+    expect(er.stages.find((stage) => stage.id === "test-gate")!.humanApprover).toBeNull();
+    expect(nc.stages.find((stage) => stage.id === "proposal")!.owner).toBe("change-analyst");
+    expect(nc.stages.find((stage) => stage.id === "proposal")!.consulting).toEqual(["standards"]);
     expect(nc.stages.find((stage) => stage.id === "proposal")!.humanApprover).toBe("Customer sponsor");
     expect(er.humanGates).toEqual([
       "finance-approval",
@@ -162,6 +173,8 @@ describe("handoff happy path", () => {
 
       expect(view.state.status).toBe("done");
       expect(view.state.pid).toBe("PID-ER");
+      expect(view.state.version).toBe("1.1.0");
+      expect(view.state.thread.channel).toBe("lead-chat");
       expect(view.kickoff).toBeNull();
       expect(view.transitions.map((item) => `${item.fromStage ?? "null"}→${item.toStage}`)).toEqual([
         "null→intake",
@@ -182,23 +195,42 @@ describe("handoff happy path", () => {
       expect(consulted(view, "security-compliance-approval", "security", "standards")).toBe(true);
       expect(consulted(view, "security-compliance-approval", "security", "change-analyst")).toBe(true);
       expect(consulted(view, "build", "builder", "security")).toBe(true);
-      expect(consulted(view, "release-gate", "lead", "builder")).toBe(true);
+      expect(consulted(view, "release-gate", "builder", "security")).toBe(true);
+      expect(consulted(view, "release-gate", "builder", "standards")).toBe(true);
       expect(view.subAgents.map((item) => item.agent)).toEqual(["coding", "testing", "review"]);
       expect(view.subAgents.every((item) => item.cloudClient === "mock" && item.mock)).toBe(true);
       expect(view.lastBuild?.testsPassed).toBe(true);
       expect(view.cloudClient).toBe("mock");
 
       const seen = new Set<string>();
+      const approvals = view.messages.filter((item) => item.message.humanGate?.status === "approved");
+      expect(approvals.map((item) => `${item.message.stage}:${item.message.from}`)).toEqual([
+        "finance-approval:change-analyst",
+        "security-compliance-approval:security",
+        "release-gate:builder",
+      ]);
+      for (const item of approvals) {
+        expect(item.message.kind).toBe("stage-return");
+        expect(item.message.to).toBe("lead");
+        expect(item.message.humanGate?.note).toMatch(/\| verbatim: /);
+        expect(item.message.humanGate?.decidedBy).not.toMatch(/^(lead|change-analyst|standards|security|builder)$/);
+      }
       for (const item of view.messages) {
         seen.add(item.message.from);
         seen.add(item.message.to);
-        expect(item.message.humanGate?.status ?? "pending").not.toBe("approved");
-        expect(item.message.humanGate?.status ?? "pending").not.toBe("rejected");
+        if (!approvals.includes(item)) {
+          expect(item.message.humanGate?.status ?? "pending").not.toBe("approved");
+          expect(item.message.humanGate?.status ?? "pending").not.toBe("rejected");
+        }
       }
       for (const id of TEAMMATE_IDS) expect(seen.has(id)).toBe(true);
       for (const id of SUB_AGENT_IDS) expect(view.subAgents.some((item) => item.agent === id)).toBe(true);
       expect(view.stateWrites.every((item) => item.actor === "lead")).toBe(true);
-      expect(view.posts.some((item) => item.channel === "#release-desk")).toBe(true);
+      expect(view.posts.some((item) => item.channel === "#release-desk")).toBe(false);
+      expect(view.posts.every((item) => item.channel === "lead-chat")).toBe(true);
+      expect(view.log.some((item) => item.event === "gate-ask" && item.gateOwner === "change-analyst")).toBe(true);
+      expect(view.log.some((item) => item.event === "gate-decision" && item.decidedBy === "Priya Shah")).toBe(true);
+      expect(view.log.some((item) => item.event === "transition")).toBe(true);
       expect(view.trace.some((item) => item.type === "message" && item.text.includes("build-result"))).toBe(true);
     } finally {
       if (previous === undefined) delete process.env.RELEASEDESK_CLOUD_CLIENT;
@@ -217,7 +249,8 @@ describe("handoff happy path", () => {
     const view = drive(eng, opened.request.state.requestId);
 
     expect(view.state.status).toBe("done");
-    expect(view.state.thread.channel).toBe("#new-customer");
+    expect(view.state.version).toBe("1.1.0");
+    expect(view.state.thread.channel).toBe("lead-chat");
     expect(view.transitions.map((item) => item.toStage)).toEqual([
       "intake",
       "customer-onboarding",
@@ -244,7 +277,13 @@ describe("handoff happy path", () => {
     expect(consulted(view, "discovery", "change-analyst", "security")).toBe(true);
     expect(consulted(view, "scope", "change-analyst", "standards")).toBe(true);
     expect(consulted(view, "estimation", "change-analyst", "builder")).toBe(true);
-    expect(consulted(view, "proposal", "lead", "standards")).toBe(true);
+    expect(consulted(view, "proposal", "change-analyst", "standards")).toBe(true);
+    expect(view.messages.filter((item) => item.message.humanGate?.status === "approved").map((item) => `${item.message.stage}:${item.message.from}`)).toEqual([
+      "proposal:change-analyst",
+      "finance-approval:change-analyst",
+      "security-compliance-approval:security",
+      "release-gate:builder",
+    ]);
     expect(view.messages.some((item) => item.message.summary.includes("40–60 engineer-days"))).toBe(true);
     expect(view.subAgents.map((item) => item.agent)).toEqual(["coding", "testing", "review"]);
     expect(view.artifacts[`pid.onboarding.${view.state.requestId}`]).toMatchObject({ mock: true });
@@ -383,6 +422,116 @@ describe("handoff rejections", () => {
     const recipient = validateHandoffMessage(baseMessage({ to: "coding" }), processes);
     expect(recipient.ok).toBe(false);
     if (!recipient.ok) expect(recipient.code).toBe("unknown_recipient");
+
+    const ownerReturn = validateHandoffMessage(
+      baseMessage({
+        kind: "stage-return",
+        action: "return",
+        from: "change-analyst",
+        to: "lead",
+        stage: "finance-approval",
+        summary: "Finance partner approved the sprint envelope.",
+        humanGate: {
+          gate: "finance-approval",
+          status: "approved",
+          decidedBy: "Priya Shah",
+          note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE finance-approval REQ-2026-0001 as Finance partner - ok",
+        },
+      }),
+      processes,
+    );
+    expect(ownerReturn.ok).toBe(true);
+
+    const mismatch = validateHandoffMessage(
+      baseMessage({
+        kind: "stage-return",
+        action: "return",
+        from: "security",
+        to: "lead",
+        stage: "finance-approval",
+        humanGate: {
+          gate: "finance-approval",
+          status: "approved",
+          decidedBy: "Priya Shah",
+          note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE finance-approval",
+        },
+      }),
+      processes,
+    );
+    expect(mismatch.ok).toBe(false);
+    if (!mismatch.ok) expect(mismatch.code).toBe("gate_owner_mismatch");
+
+    const botName = validateHandoffMessage(
+      baseMessage({
+        kind: "stage-return",
+        action: "return",
+        from: "change-analyst",
+        to: "lead",
+        stage: "finance-approval",
+        humanGate: {
+          gate: "finance-approval",
+          status: "approved",
+          decidedBy: "security",
+          note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE",
+        },
+      }),
+      processes,
+    );
+    expect(botName.ok).toBe(false);
+    if (!botName.ok) expect(botName.code).toBe("bot_cannot_approve");
+
+    const missingVerbatim = validateHandoffMessage(
+      baseMessage({
+        kind: "stage-return",
+        action: "return",
+        from: "change-analyst",
+        to: "lead",
+        stage: "finance-approval",
+        humanGate: {
+          gate: "finance-approval",
+          status: "approved",
+          decidedBy: "Priya Shah",
+          note: "approved",
+        },
+      }),
+      processes,
+    );
+    expect(missingVerbatim.ok).toBe(false);
+    if (!missingVerbatim.ok) expect(missingVerbatim.code).toBe("bot_cannot_approve");
+
+    const leadApproves = validateHandoffMessage(
+      baseMessage({
+        kind: "stage-return",
+        action: "return",
+        from: "lead",
+        to: "lead",
+        stage: "finance-approval",
+        humanGate: {
+          gate: "finance-approval",
+          status: "approved",
+          decidedBy: "Priya Shah",
+          note: "2026-11-22T15:40:00+05:30 | verbatim: APPROVE",
+        },
+      }),
+      processes,
+    );
+    expect(leadApproves.ok).toBe(false);
+    if (!leadApproves.ok) expect(leadApproves.code).toBe("bot_cannot_approve");
+
+    const otherChannel = validateHandoffMessage(
+      baseMessage({ thread: { channel: "#er-intake", threadId: "thr_2026-0001" } }),
+      processes,
+    );
+    expect(otherChannel.ok).toBe(false);
+    if (!otherChannel.ok) expect(otherChannel.code).toBe("invalid_schema");
+
+    const logSender = validateHandoffMessage(baseMessage({ from: "log" }), processes);
+    expect(logSender.ok).toBe(false);
+    if (!logSender.ok) expect(logSender.code).toBe("unknown_sender");
+
+    const logRecipient = validateHandoffMessage(baseMessage({ to: "log" }), processes);
+    expect(logRecipient.ok).toBe(false);
+    if (!logRecipient.ok) expect(logRecipient.code).toBe("unknown_recipient");
 
     const returned = validateHandoffMessage(
       baseMessage({

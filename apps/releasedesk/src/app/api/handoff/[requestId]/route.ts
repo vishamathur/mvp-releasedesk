@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server";
-import { getHandoffEngine } from "@/lib/handoff-desk";
+import { traceHandoffLog } from "@/lib/handoff-desk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ requestId: string }> },
-) {
+type RouteContext = { params: Promise<{ requestId: string }> };
+
+export async function GET(request: Request, context: RouteContext) {
   const { requestId } = await context.params;
-  const request = getHandoffEngine().getRequest(requestId);
-  if (!request) {
-    return NextResponse.json(
-      { ok: false, code: "unknown_request", errors: [`No request ${requestId}`] },
-      { status: 404 },
-    );
-  }
-  return NextResponse.json({ ok: true, request });
+  const replay = new URL(request.url).searchParams.get("replay") === "1";
+  const result = traceHandoffLog(requestId, { replay });
+  return NextResponse.json(result, { status: result.ok ? 200 : 404 });
 }

@@ -1,0 +1,46 @@
+name: release-intel
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  intel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:core
+      - name: Classify the pull request
+        env:
+          RELEASEDESK_GROK_API_KEY_LEAD: ${{ secrets.RELEASEDESK_GROK_API_KEY_LEAD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./node_modules/.bin/tsx scripts/release-intel-pr.ts > "$RUNNER_TEMP/release-intel.json"
+      - name: Comment release-intel v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo '## release-intel v1'
+            echo
+            echo '```json'
+            cat "$RUNNER_TEMP/release-intel.json"
+            echo '```'
+          } > "$RUNNER_TEMP/release-intel-comment.md"
+          existing="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | startswith("## release-intel v1")) | .id' | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${existing}" -f body="$(cat "$RUNNER_TEMP/release-intel-comment.md")"
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$(cat "$RUNNER_TEMP/release-intel-comment.md")"
+          fi

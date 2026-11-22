@@ -1,12 +1,12 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "message": {
     "v": 1,
     "kind": "stage-handoff | consult | stage-return | build-result",
     "pid": "PID-ER | PID-NC",
-    "pidVersion": "1.0.0",
+    "pidVersion": "1.1.0",
     "requestId": "REQ-…",
-    "thread": { "channel": "#er-intake | #new-customer", "threadId": "thr_…" },
+    "thread": { "channel": "lead-chat", "threadId": "thr_…" },
     "from": "lead | change-analyst | standards | security | builder",
     "to": "teammate id",
     "stage": "stage id from the PID",
@@ -20,13 +20,14 @@
     "gate": "proposal | finance-approval | security-compliance-approval | release-gate",
     "status": "pending | approved | rejected",
     "decidedBy": "human name, never a bot id",
-    "note": "short"
+    "note": "<ISO-8601 time> | verbatim: <reply>"
   },
   "rules": [
-    "Teammate messages use this object. The channel thread gets a short reading of the same facts.",
+    "Teammate messages use this object. The request thread is Lead's chat.",
     "Only Lead writes pid.state.{requestId}.",
     "stage-return and build-result come back to Lead. Lead appends a stage-transition record and then messages the next owner.",
-    "humanGate.status may be pending when a bot posts the card. approved or rejected is copied from a human reply. A bot never sets approved.",
-    "build-result carries proposedBranch, prUrl, testsPassed, and testsSummary. Lead uses it for the test gate."
+    "A bot never decides a gate. The stage owner of a gate stage may send stage-return with humanGate.status approved|rejected only when copying a human reply: decidedBy is a human name, and note is '<ISO-8601 time> | verbatim: <reply>'. Lead rejects anything else.",
+    "Every bot copies Release Desk Log (priority false) on each message sent or received, each REJECT, and each gate ask/decision; Lead also copies each stage transition. The Log never routes or approves.",
+    "build-result carries proposedBranch, prUrl, testsPassed, and testsSummary. Lead uses it for the test gate. Builder copies the release-intel result into testsSummary."
   ]
 }

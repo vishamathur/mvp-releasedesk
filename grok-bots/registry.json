@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-18T07:12:00.000Z",
+  "updatedAt": "2026-11-22T10:30:00.000Z",
   "note": "Created in the Grok Bot app on 2026-11-18 as teammates. grokBotAppAgentId is a Grok Bot app agent id, not an xAI Agents API id. liveBotId stays null. App bots do not take API keys. Prior xAI POST /v1/agents errors (403/401/fetch failed) are cleared; they are not the current provision state.",
   "entries": [
     {
@@ -50,6 +50,16 @@
       "grokBotAppName": "Builder",
       "liveBotId": null,
       "createdAt": "2026-11-18T00:00:00.000Z",
+      "lastError": null,
+      "status": "created_in_grok_bot_app"
+    },
+    {
+      "definitionId": "log",
+      "host": "grok-bot-app",
+      "grokBotAppAgentId": "3824a7e2-512f-4a5b-a0bd-5202fd8dffbd",
+      "grokBotAppName": "Release Desk Log",
+      "liveBotId": null,
+      "createdAt": "2026-11-22T00:00:00.000Z",
       "lastError": null,
       "status": "created_in_grok_bot_app"
     }

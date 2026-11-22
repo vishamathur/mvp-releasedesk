@@ -1,6 +1,7 @@
 import { ChallengeTrigger } from "@/components/ChallengeTrigger";
 import { DeskHeader } from "@/components/DeskHeader";
 import { GrokBotsPanel } from "@/components/GrokBotsPanel";
+import { HandoffBoard } from "@/components/HandoffBoard";
 import { RunList } from "@/components/RunList";
 import { listRuns } from "@/lib/desk";
 
@@ -39,12 +40,11 @@ export default async function DeskPage() {
           <section>
             <h2 className="font-display text-2xl text-rd-ink">SDLC handover</h2>
             <p className="mt-2 max-w-2xl text-sm text-rd-forest/75">
-              Run PID-ER or PID-NC. Lead, Change Analyst, Standards, Security, and Builder hand stages
-              to each other. Human gates stay open until a person replies.
+              Bots run the process; Release Desk Log records it; Desk shows it.
             </p>
-            <a href="/handoff" className="btn-primary mt-4">
-              Open handover
-            </a>
+            <div className="mt-6">
+              <HandoffBoard />
+            </div>
           </section>
           <GrokBotsPanel deepDiveId="security" />
           <ChallengeTrigger />

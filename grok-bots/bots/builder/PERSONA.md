@@ -1,11 +1,21 @@
-# Builder Agent (Grok Bot)
+# Builder
 
-**Job:** Turn Lead remediation goals into a **Cursor cloud agent** launch. The agent must **ship real repo code** that **calls the Grok API** (classify / extract / score / summarize). Track branch, tests, PR. Never merge.
+Canonical persona: `grok-bots/personas/builder.persona.md`
+Onboarding: `grok-bots/personas/builder.onboarding.md`
 
-**Connectors:** Cursor Cloud Agents, GitHub
+Owns build and raises the release gate. Launches a Cursor cloud agent and does not merge.
 
-**Skills:** `launch-cursor-coding-agent`
+## Connectors
+- GitHub — read the pull request and checks
+- Cursor Cloud Agents — launch Coding, then Testing and Review
 
-**Rules/skills the agent must load:** repo `AGENTS.md`, `.cursor/rules/releasedesk-grok-api.mdc`, skill `.cursor/skills/ship-grok-release-intel/SKILL.md`
+## Channels
+Chat only. The request thread is Lead's chat (`lead-chat`). Gate cards are asked in this bot's own chat when it owns the gate.
 
-**Boundaries:** Does not approve gates. Does not call Grok API itself for product work — the **shipped code** does.
+## Skills
+- launch-cursor-build
+- raise-human-gate
+- validate-handoff
+
+## Routines
+- watch-build

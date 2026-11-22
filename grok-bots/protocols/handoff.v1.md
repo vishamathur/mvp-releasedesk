@@ -1,6 +1,6 @@
-# Handoff protocol v1.0.0
+# Handoff protocol v1.1.0
 
-Bots talk to each other with teammate messages. Humans see the same facts on the request thread. Machine shapes live in `handoff.v1.json` and `stage-transition.v1.json`.
+Bots talk to each other with teammate messages. The request thread is Lead's chat with Vishal. Machine shapes live in `handoff.v1.json` and `stage-transition.v1.json`. The message field `v` stays 1.
 
 ## Message
 
@@ -9,9 +9,9 @@ Bots talk to each other with teammate messages. Humans see the same facts on the
   "v": 1,
   "kind": "stage-handoff",
   "pid": "PID-ER",
-  "pidVersion": "1.0.0",
+  "pidVersion": "1.1.0",
   "requestId": "REQ-2026-0142",
-  "thread": { "channel": "#er-intake", "threadId": "thr_0142" },
+  "thread": { "channel": "lead-chat", "threadId": "thr_0142" },
   "from": "lead",
   "to": "change-analyst",
   "stage": "estimation",
@@ -25,25 +25,30 @@ Bots talk to each other with teammate messages. Humans see the same facts on the
 
 `kind` is `stage-handoff`, `consult`, `stage-return`, or `build-result`.
 
-`build-result` adds `proposedBranch`, `prUrl`, `testsPassed`, and `testsSummary`. Lead uses that message for the test gate.
+`build-result` adds `proposedBranch`, `prUrl`, `testsPassed`, and `testsSummary`. Lead uses that message for the test gate. Builder copies the release-intel result into `testsSummary`.
 
-When a human gate is open, `humanGate` is:
+When the stage owner returns a human decision, `humanGate` is:
 
 ```json
-{ "gate": "finance-approval", "status": "pending", "decidedBy": null, "note": "Sprint envelope, 3 engineer-days" }
+{
+  "gate": "finance-approval",
+  "status": "approved",
+  "decidedBy": "Vishal Mathur (Finance partner)",
+  "note": "2026-11-22T15:40:00+05:30 | verbatim: APPROVE finance-approval REQ-2026-0142 as Finance partner - ok"
+}
 ```
 
-A bot may set `status` to `pending`. Only a human reply may set `approved` or `rejected`, and `decidedBy` is that person's name.
+A bot never decides a gate. The stage owner of a gate stage may send `stage-return` with `humanGate.status` `approved` or `rejected` only when copying a human reply: `decidedBy` is a human name, and `note` is `<ISO-8601 time> | verbatim: <reply>`. Lead rejects anything else.
 
 ## Stage transition
 
-Lead appends this to `pid.transitions.{requestId}` and posts it on the thread:
+Lead appends this to `pid.transitions.{requestId}` and posts it on the thread. Lead also copies it to Release Desk Log.
 
 ```json
 {
   "requestId": "REQ-2026-0142",
   "pid": "PID-ER",
-  "pidVersion": "1.0.0",
+  "pidVersion": "1.1.0",
   "fromStage": "estimation",
   "toStage": "finance-approval",
   "at": "2026-11-21T15:00:00Z",
@@ -56,6 +61,6 @@ Lead appends this to `pid.transitions.{requestId}` and posts it on the thread:
 ## State
 
 - Lead memory `pid.state.{requestId}` is the only stage pointer.
-- One thread per request, opened in `#er-intake` (PID-ER) or `#new-customer` (PID-NC).
-- Lead mirrors human gate cards to `#release-desk`.
+- One thread per request, opened in Lead's chat (`thread.channel` = `lead-chat`).
+- Every bot copies Release Desk Log (priority false) on each message sent or received, each REJECT, and each gate ask or decision. Lead also copies each stage transition. The Log never routes or approves.
 - Other bots store their own slice and send it back. They do not advance the stage.

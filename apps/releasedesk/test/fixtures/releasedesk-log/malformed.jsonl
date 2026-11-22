@@ -1,0 +1,3 @@
+{"requestId":"REQ-2026-0099","seq":1,"at":"2026-11-22T09:00:00+05:30","event":"note","pid":"PID-ER","pidVersion":"1.1.0","from":"lead","to":"lead","summary":"A valid line before the bad one."}
+this is not json
+{

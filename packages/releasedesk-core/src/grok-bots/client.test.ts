@@ -26,7 +26,7 @@ const sample: GrokBotDefinition = {
   routines: [{ name: "mandatory-every-change", trigger: "every check", steps: ["run"] }],
   connectors: [{ name: "GitHub", purpose: "read", access: "read" }],
   teammates: ["lead"],
-  channels: [{ name: "#release-desk", purpose: "status" }],
+  channels: [{ name: "lead-chat", purpose: "status" }],
   handsOffTo: ["lead"],
   mandatoryOnEveryChange: true,
   markdownPackDir: "grok-bots/bots/security",

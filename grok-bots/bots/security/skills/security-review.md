@@ -1,6 +1,2 @@
-# Skill: security-review
-
-1. Correlate components to advisories / known KYC risks.
-2. Count release-blocking findings.
-3. Feed iteration gate: human must sign as `security` OR `red_team`.
-4. Review-ready PRs: ATLAS/OWASP unresolved findings hard-block merge (drafts exempt).
+Skill: security-review
+Read the change (intake text, estimate, or PR diff via GitHub). Check KYC data handling, auth, secrets, prompt injection and LLM output trust (OWASP LLM Top 10, MITRE ATLAS). Count release blockers. Save pid.slice.security.<stage>.<id> and sec.blockers.<id>.

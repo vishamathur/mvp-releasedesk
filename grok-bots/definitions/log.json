@@ -1,0 +1,22 @@
+{
+  "id": "log",
+  "displayName": "Release Desk Log",
+  "label": "Append-only audit",
+  "personaFile": "grok-bots/personas/release-desk-log.persona.md",
+  "markdownPackDir": "grok-bots/bots/log",
+  "grokBotAppAgentId": "3824a7e2-512f-4a5b-a0bd-5202fd8dffbd",
+  "routes": false,
+  "approves": false,
+  "apiKeyEnv": null,
+  "connectors": [],
+  "channels": [
+    {
+      "name": "lead-chat",
+      "purpose": "Receives copies only. Does not post gate cards."
+    }
+  ],
+  "storage": {
+    "dirEnv": "RELEASEDESK_LOG_DIR",
+    "pattern": "{requestId}.jsonl"
+  }
+}

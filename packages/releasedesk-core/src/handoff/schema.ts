@@ -1,14 +1,19 @@
 import { z } from "zod";
 import {
   HUMAN_GATE_IDS,
+  isHumanActor,
   isTeammateId,
+  stageOwner,
   type ProcessDefinition,
   type TeammateId,
-} from "./processes.js";
+} from "./process-defs.js";
 
 export const HANDOFF_KINDS = ["stage-handoff", "consult", "stage-return", "build-result"] as const;
 export const HANDOFF_ACTIONS = ["start", "consult", "return", "remediate", "block"] as const;
-export const THREAD_CHANNELS = ["#er-intake", "#new-customer", "#release-desk"] as const;
+export const THREAD_CHANNELS = ["lead-chat"] as const;
+
+/** Owner stage-return note: ISO-8601 time, then the human's verbatim reply. */
+export const VERBATIM_NOTE = /^\d{4}-\d{2}-\d{2}T[^|]+\| verbatim: .+/;
 
 const STATE_WRITE_KEYS = ["pidState", "writesPidState", "statePatch"] as const;
 
@@ -58,6 +63,7 @@ export type HandoffCode =
   | "unknown_recipient"
   | "only_lead_writes_pid_state"
   | "bot_cannot_approve"
+  | "gate_owner_mismatch"
   | "return_must_go_to_lead"
   | "only_lead_hands_off_stage"
   | "unknown_request"
@@ -143,9 +149,7 @@ export function validateHandoffMessage(
       errors.push(`Stage "${message.stage}" is not in ${process.id}`);
     }
     if (message.thread.channel !== process.entry.channel) {
-      errors.push(
-        `Thread channel must stay on ${process.entry.channel} for ${process.id}. Gate mirrors are posts, not a second thread.`,
-      );
+      errors.push(`Thread channel must be ${process.entry.channel} for ${process.id}. Chat only.`);
     }
   }
 
@@ -155,25 +159,49 @@ export function validateHandoffMessage(
   }
 
   if (message.humanGate && message.humanGate.status !== "pending") {
-    code = "bot_cannot_approve";
-    errors.push(
-      `A bot never sets humanGate to ${message.humanGate.status}. approved or rejected is copied from a human reply.`,
-    );
+    const gate = message.humanGate;
+    const owner = stageOwner(process, gate.gate);
+    const human = gate.decidedBy !== null && isHumanActor(gate.decidedBy);
+    const shapeOk =
+      message.kind === "stage-return" &&
+      message.action === "return" &&
+      message.to === "lead" &&
+      gate.gate === message.stage &&
+      human &&
+      VERBATIM_NOTE.test(gate.note);
+    if (message.from === "lead" || !owner) {
+      code = "bot_cannot_approve";
+      errors.push(
+        "A bot never decides a gate. Lead rejects an approved or rejected humanGate that Lead itself sends.",
+      );
+    } else if (message.from !== owner) {
+      code = "gate_owner_mismatch";
+      errors.push(`${message.from} does not own ${gate.gate}. The stage owner is ${owner}.`);
+    } else if (!shapeOk) {
+      code = "bot_cannot_approve";
+      errors.push(
+        "The stage owner may set approved or rejected only on a stage-return to Lead, for that gate, with a human decidedBy and a note '<ISO-8601 time> | verbatim: <reply>'.",
+      );
+    }
   }
   if (message.humanGate?.status === "pending" && message.humanGate.decidedBy !== null) {
     errors.push("A pending human gate has decidedBy null. The human reply fills the name.");
   }
 
+  const setCode = (next: HandoffCode) => {
+    if (code === "invalid_schema") code = next;
+  };
+
   if (
     (message.kind === "stage-return" || message.kind === "build-result") &&
     message.to !== "lead"
   ) {
-    code = "return_must_go_to_lead";
+    setCode("return_must_go_to_lead");
     errors.push(`${message.kind} comes back to Lead.`);
   }
 
   if (message.kind === "stage-handoff" && message.from !== "lead") {
-    code = "only_lead_hands_off_stage";
+    setCode("only_lead_hands_off_stage");
     errors.push("Only Lead messages the next stage owner.");
   }
 
