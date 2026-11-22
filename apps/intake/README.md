@@ -2,7 +2,7 @@
 
 Two entry options (New customer → PID-NC, Enhancement Request acceptance → PID-ER), a Grok chat assistant that fills the form,
 an EXAMPLE service catalogue, a finance estimation model (deterministic catalogue math + Grok recommendation), and a
-two-way relay with Release Desk Lead. See `docs/lead-integration.md`.
+two-way relay with Release Desk Lead. See `docs/intake/lead-integration.md`.
 
 ## Upload map
 | Local | Server |

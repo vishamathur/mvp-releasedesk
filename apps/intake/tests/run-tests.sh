@@ -2,6 +2,9 @@
 # Unit tests plus HTTP tests that do not call Grok. No stand-in Grok server.
 set -u
 cd "$(dirname "$0")/.."
+# bootstrap copies GROK_API_KEY from the environment over the empty test config.
+# XAI_API_KEY is not a fallback. Drop both so a machine key cannot change the run.
+unset GROK_API_KEY XAI_API_KEY
 TMP=$(mktemp -d); mkdir -p "$TMP/private"
 cp -r private/. "$TMP/private/"
 export TEST_HMAC=$(php -r 'echo bin2hex(random_bytes(32));')
