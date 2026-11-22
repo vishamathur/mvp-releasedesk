@@ -1,7 +1,5 @@
 import path from "node:path";
 import {
-  FileHandoffStore,
-  HandoffEngine,
   buildTrace,
   loadProcessDefinitionsSync,
   readLogDir,
@@ -21,29 +19,11 @@ function workspaceRoot(): string {
   return process.cwd();
 }
 
-export function handoffStorePath(root = workspaceRoot()): string {
-  return path.join(root, "apps", "releasedesk", "data", "handoff.json");
-}
-
-export function fixtureLogDir(root = workspaceRoot()): string {
-  return path.join(root, "apps", "releasedesk", "test", "fixtures", "releasedesk-log");
-}
-
-/** Engine helper for the mock simulation tests. The Desk UI does not call it. */
-export function createHandoffEngine(storePath = handoffStorePath()): HandoffEngine {
-  return new HandoffEngine({
-    workspaceRoot: workspaceRoot(),
-    store: new FileHandoffStore(storePath),
-  });
-}
-
-export type LogSource = "log" | "replay" | "unset";
+export type LogSource = "log" | "unset";
 
 export function resolveLogDir(options?: {
-  replay?: boolean;
   env?: Record<string, string | undefined>;
 }): { source: LogSource; dir: string | null } {
-  if (options?.replay) return { source: "replay", dir: fixtureLogDir() };
   const configured = (options?.env ?? process.env)[LOG_DIR_ENV]?.trim();
   if (!configured) return { source: "unset", dir: null };
   return { source: "log", dir: configured };
@@ -72,7 +52,6 @@ function processes(): ProcessDefinition[] {
 }
 
 export function listHandoffLogs(options?: {
-  replay?: boolean;
   env?: Record<string, string | undefined>;
 }): HandoffList {
   const resolved = resolveLogDir(options);
@@ -114,7 +93,7 @@ export function listHandoffLogs(options?: {
 
 export function traceHandoffLog(
   requestId: string,
-  options?: { replay?: boolean; env?: Record<string, string | undefined> },
+  options?: { env?: Record<string, string | undefined> },
 ): { ok: true; source: LogSource; trace: HandoffTrace; copy: typeof HANDOFF_COPY } | { ok: false; source: LogSource; error: string } {
   const resolved = resolveLogDir(options);
   if (!resolved.dir) {

@@ -1,8 +1,6 @@
-import { formatMockNote } from "@releasedesk/core";
-
 /**
  * Delivery Manager interface surface for the Lead Agent.
- * Text is the primary channel; voice is stubbed and labeled MOCK until wired.
+ * Text is the channel. Voice throws.
  */
 
 export type DmChannel = "text" | "voice";
@@ -38,42 +36,23 @@ export function replyAsLead(
   opts?: { channel?: DmChannel; at?: string },
 ): DmSession {
   const channel = opts?.channel ?? "text";
-  const mock = channel === "voice";
+  if (channel === "voice") {
+    throw new Error("Voice is not available. Use text.");
+  }
   return {
     messages: [
       ...session.messages,
       {
         channel,
         role: "lead",
-        text: mock ? formatMockNote(text) : text,
+        text,
         at: opts?.at ?? new Date().toISOString(),
-        ...(mock ? { mock: true } : {}),
       },
     ],
   };
 }
 
-/** Voice path is not implemented — always returns a MOCK-labeled acknowledgment. */
-export function receiveDmVoiceStub(
-  session: DmSession,
-  transcript: string,
-  at = new Date().toISOString(),
-): DmSession {
-  const withInbound = {
-    messages: [
-      ...session.messages,
-      {
-        channel: "voice" as const,
-        role: "dm" as const,
-        text: formatMockNote(`Voice transcript: ${transcript}`),
-        at,
-        mock: true,
-      },
-    ],
-  };
-  return replyAsLead(
-    withInbound,
-    "Voice channel is MOCK-only in Milestone 3; please continue in text.",
-    { channel: "voice", at },
-  );
+/** Voice is not a Release Desk channel. */
+export function receiveDmVoiceStub(_session: DmSession, _transcript: string): DmSession {
+  throw new Error("Voice is not available. Use text.");
 }

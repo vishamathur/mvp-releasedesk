@@ -1,3 +1,5 @@
+Historical brief. Mock mode and `RELEASEDESK_CLOUD_CLIENT` were removed. A missing exclusive key is a configuration error. This file is not current operator guidance.
+
 # PR #36 rework plan: bot-native Release Desk, mapped to the MVP requirement
 
 PR: https://github.com/vishamathur/mvp-releasedesk/pull/36 (branch `cursor/desk-e2e-handover-6823`, head `929ea94`, 33 files, base `main` @ `1ecfc1c`). Final draft, updated for Vishal's decisions (t94u, plus the 3:34 PM decisions): Release Desk Log JSONL is the Desk trace source, the Grok key goes in as an Actions secret, the PIDs bump to 1.1.0, and the system is chat only. The repo has not been touched.

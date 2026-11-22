@@ -8,15 +8,6 @@ export {
 } from "./agent-runner.js";
 
 export {
-  createDefaultStubRunners,
-  stubChangeAnalystRunner,
-  stubStandardsRunner,
-  stubSecurityRunner,
-  stubBuilderRunner,
-  createFlakyRunner,
-} from "./stub-runners.js";
-
-export {
   createApprovalGate,
   recordApprovalDecision,
   getPendingGates,
@@ -69,7 +60,6 @@ export {
 export {
   createDmSession,
   receiveDmText,
-  receiveDmVoiceStub,
   replyAsLead,
   type DmChannel,
   type DmMessage,
@@ -94,7 +84,6 @@ export {
 } from "./intake.js";
 
 export {
-  createMockPrClient,
   createRealPrClient,
   resolvePrClient,
   resolveGithubToken,
@@ -118,7 +107,6 @@ export {
   type PrWorkflowClient,
   type TrackedPullRequest,
   type PullRequestRecord,
-  type MockPrClientOptions,
   type RealPrClientOptions,
   type ResolvePrClientOptions,
 } from "./pr/index.js";

@@ -26,7 +26,6 @@ export {
   ZSCALER_FINDINGS_ROUTING_VALUES,
   resolveZscalerAiRedTeamCredentials,
   resolveZscalerLocalConfig,
-  createZscalerMockFindings,
   createZscalerAiRedTeamingProvider,
   type ZscalerFindingsRouting,
   type ZscalerLocalConfig,

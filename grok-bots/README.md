@@ -31,7 +31,7 @@ Desk (`/agents`, the Grok Bots panel, and `GET /api/bots`) reads this registry a
 
 ## API keys (application code, not the Grok Bot app)
 
-Each bot's application calls use **only** that bot's exclusive env var. Shared `XAI_API_KEY` / `GROK_API_KEY` are never fallbacks. A missing key is a labeled **MOCK** for that bot.
+Each bot's application calls use **only** that bot's exclusive env var. Shared `XAI_API_KEY` / `GROK_API_KEY` are never fallbacks. There is no mock mode. A missing key is a configuration error for that bot.
 
 | Bot | Definition | Exclusive key | Reads it from |
 | --- | --- | --- | --- |
@@ -49,7 +49,7 @@ Cursor Cloud Agents under Builder use their own keys (no shared `CURSOR_API_KEY`
 | Testing | `RELEASEDESK_CURSOR_API_KEY_TESTING` |
 | Review | `RELEASEDESK_CURSOR_API_KEY_REVIEW` |
 
-Live Coding dispatch also needs `RELEASEDESK_CLOUD_CLIENT=real`.
+A live Cursor dispatch uses the exclusive key for Coding, Testing, or Review. There is no mock client.
 
 ### Where to set the keys
 

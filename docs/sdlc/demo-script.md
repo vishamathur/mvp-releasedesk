@@ -7,7 +7,7 @@ Draft for PID-ER/PID-NC **v1.1.0**. Nothing here has been sent to any bot. Times
 1. Replace each teammate's description with its `<bot>.persona.md`, then send each one its `<bot>.onboarding.md`. Confirm each replies with the skills and routine it created.
 2. Have Vishal's chat with all five bots open: Lead, Change Analyst, Security and Builder will each ask him for a decision in their own chat.
 3. Chat only, no Slack. The request thread is Lead's chat with Vishal (`thread.channel` = `"lead-chat"`, `threadId` = `thr_NNNN`), and Release Desk Log's `{requestId}.jsonl` is the shared history. Gate cards appear in the owning bot's chat.
-4. For the Grok API to run live in the shipped code, `RELEASEDESK_GROK_API_KEY_LEAD` must be set where that code runs (see `pr-rework-plan.md`). Without it, the code returns a labelled MOCK result.
+4. For the Grok API to run, `RELEASEDESK_GROK_API_KEY_LEAD` must be set where that code runs. There is no mock mode. A missing key is a configuration error.
 5. Pick a small, real ask so the cloud agent finishes fast. Suggested: *"Add a `riskTier` (low|medium|high) field to the Grok release-intel classify output, with tests."* It changes code that calls the Grok API.
 
 ## Human gates: which bot asks Vishal

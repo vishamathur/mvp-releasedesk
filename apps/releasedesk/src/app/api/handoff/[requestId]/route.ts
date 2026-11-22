@@ -6,9 +6,8 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ requestId: string }> };
 
-export async function GET(request: Request, context: RouteContext) {
+export async function GET(_request: Request, context: RouteContext) {
   const { requestId } = await context.params;
-  const replay = new URL(request.url).searchParams.get("replay") === "1";
-  const result = traceHandoffLog(requestId, { replay });
+  const result = traceHandoffLog(requestId);
   return NextResponse.json(result, { status: result.ok ? 200 : 404 });
 }

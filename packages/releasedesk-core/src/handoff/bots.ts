@@ -31,7 +31,7 @@ export type BotContext = {
 
 /**
  * Mock teammate roster. Every response is labeled MOCK.
- * Cloud sub-agents never call Cursor. RELEASEDESK_CLOUD_CLIENT is ignored.
+ * Cloud sub-agents never call Cursor. A live dispatch uses the real Cursor client.
  */
 export const SDLC_ROSTER: Array<{
   id: TeammateId | SubAgentId;

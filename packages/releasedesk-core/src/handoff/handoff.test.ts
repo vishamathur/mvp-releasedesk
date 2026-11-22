@@ -157,9 +157,7 @@ describe("PID specs", () => {
 });
 
 describe("handoff happy path", () => {
-  it("runs every PID-ER stage across the five teammates and the three mock sub-agents", () => {
-    const previous = process.env.RELEASEDESK_CLOUD_CLIENT;
-    process.env.RELEASEDESK_CLOUD_CLIENT = "real";
+  it("runs every PID-ER stage across the five teammates and the three sub-agents", () => {
     try {
       const eng = engine();
       const opened = eng.openRequest({
@@ -233,8 +231,7 @@ describe("handoff happy path", () => {
       expect(view.log.some((item) => item.event === "transition")).toBe(true);
       expect(view.trace.some((item) => item.type === "message" && item.text.includes("build-result"))).toBe(true);
     } finally {
-      if (previous === undefined) delete process.env.RELEASEDESK_CLOUD_CLIENT;
-      else process.env.RELEASEDESK_CLOUD_CLIENT = previous;
+      /* protocol simulation does not call Cursor */
     }
   });
 

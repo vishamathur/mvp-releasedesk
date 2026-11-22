@@ -24,13 +24,10 @@ export async function GET() {
             : "reviews — never merges",
     };
   });
-  const cloudClient = String(process.env.RELEASEDESK_CLOUD_CLIENT ?? "mock").toLowerCase();
-
   return NextResponse.json({
     ok: true,
     grokIntel: grok,
     cursorCloudAgents: cursor,
-    cloudClientMode: cloudClient === "real" ? "real" : "mock",
     exclusiveKeysOnly: true,
     forbiddenSharedFallbacks: [
       "XAI_API_KEY",
@@ -40,7 +37,7 @@ export async function GET() {
     ],
     roomHint: grok.liveReady
       ? "Grok intel will label LIVE"
-      : `Grok intel will label MOCK until ${grok.keyEnvVar} is set`,
+      : `${grok.keyEnvVar} is not set. Refusing to invent a result.`,
   });
 }
 
@@ -51,11 +48,17 @@ export async function POST(request: Request) {
     findings?: Array<{ source: string; text: string; severity?: string }>;
   };
 
-  const intel = await runGrokReleaseIntel({
-    repository: body.repository ?? "vishamathur/mvp-releasedesk",
-    goal: body.goal ?? "Release readiness",
-    findings: body.findings ?? [],
-  });
+  let intel;
+  try {
+    intel = await runGrokReleaseIntel({
+      repository: body.repository ?? "vishamathur/mvp-releasedesk",
+      goal: body.goal ?? "Release readiness",
+      findings: body.findings ?? [],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "release-intel failed";
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
+  }
   const keyStatus = describeGrokIntelKeyStatus();
   return NextResponse.json({
     ok: true,
@@ -65,10 +68,7 @@ export async function POST(request: Request) {
       label: intel.label,
       mocked: intel.mocked,
       exclusiveKey: intel.trustCheck.keyEnvVar,
-      talkTrack:
-        intel.label === "LIVE"
-          ? `Live call via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`
-          : `MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE (shared XAI/GROK keys ignored).`,
+      talkTrack: `Live call via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`,
     },
   });
 }

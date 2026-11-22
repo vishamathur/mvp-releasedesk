@@ -1,70 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { createMockPrClient } from "./mock-client.js";
+import { MissingCredentialError } from "@releasedesk/core";
 import { createRealPrClient } from "./real-client.js";
-import { resolvePrClient, resolveGithubToken, describePrClientMode } from "./resolve.js";
-import {
-  openAndTrackPullRequest,
-  parsePrNumberFromUrl,
-  pollTrackedPullRequest,
-  refuseAutoMerge,
-  trackExistingPullRequest,
-} from "./workflow.js";
-
-describe("MOCK GitHub PR client", () => {
-  it("opens, tracks, polls, and refuses merge", async () => {
-    const client = createMockPrClient({ startNumber: 42, checkStatus: "success" });
-    expect(client.mode).toBe("mock");
-    expect(describePrClientMode(client)).toMatch(/^MOCK:/);
-
-    const opened = await openAndTrackPullRequest(client, {
-      repository: "vishamathur/mvp-releasedesk",
-      title: "Remediation",
-      body: "test",
-      head: "cursor/fix",
-      base: "main",
-    });
-    expect(opened.prNumber).toBe(42);
-    expect(opened.url).toContain("/pull/42");
-    expect(opened.autoMerge).toBe(false);
-    expect(opened.humanMergeGateRequired).toBe(true);
-    expect(opened.clientMode).toBe("mock");
-
-    const polled = await pollTrackedPullRequest(client, opened);
-    expect(polled.lastStatus?.checkStatus).toBe("success");
-    expect(polled.lastStatus?.autoMerge).toBe(false);
-    expect(polled.lastStatus?.mocked).toBe(true);
-
-    await expect(refuseAutoMerge(client, opened)).rejects.toThrow(/refuses auto-merge/i);
-  });
-
-  it("tracks existing PR URL from Builder", async () => {
-    const client = createMockPrClient();
-    const tracked = await trackExistingPullRequest(client, {
-      repository: "vishamathur/mvp-releasedesk",
-      prUrl: "https://github.com/vishamathur/mvp-releasedesk/pull/7",
-      head: "cursor/builder-branch",
-      source: "builder",
-    });
-    expect(tracked.prNumber).toBe(7);
-    expect(tracked.source).toBe("builder");
-    expect(tracked.autoMerge).toBe(false);
-  });
-});
+import { resolvePrClient, resolveGithubToken } from "./resolve.js";
+import { parsePrNumberFromUrl } from "./workflow.js";
 
 describe("resolvePrClient", () => {
-  it("defaults to MOCK without token", () => {
-    const client = resolvePrClient({
-      mode: "auto",
-      token: undefined,
-      // Force empty token path
-    });
-    // When we don't pass token and env may have one, force mock:
-    const mock = resolvePrClient({ mode: "mock" });
-    expect(mock.mode).toBe("mock");
-    expect(client.mode === "mock" || client.mode === "real").toBe(true);
+  it("throws when no token is configured", () => {
+    expect(() => resolvePrClient({ token: undefined })).toThrow(MissingCredentialError);
   });
 
-  it("uses real when mode=real + token", async () => {
+  it("uses the real client when a token is passed", async () => {
     const calls: string[] = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       calls.push(`${init?.method ?? "GET"} ${String(input)}`);

@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MockLabel } from "./MockLabel";
-
 type BotPack = {
   id: string;
   displayName: string;
@@ -73,7 +71,9 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
             Created in Grok Bot app
           </span>
         ) : (
-          <MockLabel>defs · no fake live IDs</MockLabel>
+          <span className="rounded-sm bg-rd-fog px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-rd-forest">
+            defs · live ids stay null
+          </span>
         )}
       </div>
 

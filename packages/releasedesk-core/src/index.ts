@@ -14,6 +14,8 @@ export {
   type AuditEventId,
 } from "./ids.js";
 
+export { MissingCredentialError } from "./config-error.js";
+
 export {
   MOCK_NOTE_PREFIX,
   MockMetaSchema,
@@ -251,7 +253,6 @@ export {
   ZSCALER_FINDINGS_ROUTING_VALUES,
   resolveZscalerAiRedTeamCredentials,
   resolveZscalerLocalConfig,
-  createZscalerMockFindings,
   createZscalerAiRedTeamingProvider,
   AI_RED_TEAM_PROVIDER_ENV,
   parseAiRedTeamProviderName,

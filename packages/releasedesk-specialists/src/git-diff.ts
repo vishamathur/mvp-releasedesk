@@ -94,7 +94,7 @@ function parseLog(raw: string): GitCommitSummary[] {
 
 /**
  * Inspect local git range `baseRef...headRef`.
- * On failure, returns empty files with MOCK metadata (caller may load fixtures).
+ * On failure, returns an empty file list. The caller must not invent a change set.
  */
 export async function collectLocalDiff(opts: {
   cwd: string;

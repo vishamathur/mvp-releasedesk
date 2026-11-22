@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MissingCredentialError } from "@releasedesk/core";
 import {
   classifyReleaseFindings,
   extractReleaseActions,
@@ -27,17 +28,15 @@ describe("grok-api-intel (Builder exclusive key)", () => {
       throw new Error("should not call Grok without builder key");
     });
 
-    const result = await classifyReleaseFindings(sample, {
-      env: {
-        XAI_API_KEY: "shared-must-not-be-used",
-        GROK_API_KEY: "also-shared",
-      },
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-
-    expect(result.mocked).toBe(true);
-    expect(result.keyRole).toBe("builder");
-    expect(result.text).toMatch(/^MOCK:/);
+    await expect(
+      classifyReleaseFindings(sample, {
+        env: {
+          XAI_API_KEY: "shared-must-not-be-used",
+          GROK_API_KEY: "also-shared",
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -67,17 +66,13 @@ describe("grok-api-intel (Builder exclusive key)", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
-  it("extract / score / summarize fall back locally without Builder key", async () => {
+  it("extract / score / summarize throw without the Builder key", async () => {
     const env = { CURSOR_API_KEY: "irrelevant", XAI_API_KEY: "shared" };
-    const extracted = await extractReleaseActions(sample, { env });
-    const scored = await scoreReleaseRisk(sample, { env });
-    const summarized = await summarizeReleaseFindings(sample, { env });
-
-    expect(extracted.mocked).toBe(true);
-    expect(scored.mocked).toBe(true);
-    expect(summarized.mocked).toBe(true);
-    expect(scored.text).toMatch(/high|Local score/i);
-    expect(summarized.keyRole).toBe("builder");
+    await expect(extractReleaseActions(sample, { env })).rejects.toBeInstanceOf(MissingCredentialError);
+    await expect(scoreReleaseRisk(sample, { env })).rejects.toBeInstanceOf(MissingCredentialError);
+    await expect(summarizeReleaseFindings(sample, { env })).rejects.toBeInstanceOf(
+      MissingCredentialError,
+    );
   });
 
   it("can opt into Security exclusive key for intel", async () => {
