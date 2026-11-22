@@ -31,6 +31,7 @@ KYC demo remains on port 3000 (`npm run dev`).
 | `/mvp` | Portfolio agility · mandatory Security · token efficiency · gate · Grok intel |
 | `/agents` | Full Grok Bot + Cursor Cloud Agent roster |
 | `/desk` | Challenge trigger + bot navigation |
+| `/handoff` | PID-ER and PID-NC bot-to-bot handover (mock clients) |
 
 Room runbook (commands + clicks + MOCK vs live): monorepo `docs/spacexai-room-runbook.md`.
 
@@ -89,3 +90,9 @@ API surface:
 - `POST /api/runs/:id/feature-signoffs` — per-item or full feature checklist sign-off (never auto-signed)
 - `POST /api/demos` — live or fixture scenarios
 - `POST /api/dm` — text or MOCK voice
+- `GET /api/handoff` · `POST /api/handoff` — open a PID-ER or PID-NC request and run to the next human gate
+- `GET /api/handoff/:requestId` — stage, messages, and trace
+- `POST /api/handoff/:requestId/decision` — human approve/reject (a bot id is refused)
+- `POST /api/handoff/:requestId/message` — validate one teammate message
+
+Handover specs are `grok-bots/processes/pid-er.v1.json`, `grok-bots/processes/pid-nc.v1.json`, and `grok-bots/protocols/handoff.v1.json`. The desk runs them with mock teammates. It does not set `RELEASEDESK_CLOUD_CLIENT=real` and it does not call Cursor. `apps/intake` is not part of this app.

@@ -174,6 +174,36 @@ export {
 export * from "./grok-bots/index.js";
 
 export {
+  SHARED_STAGE_IDS,
+  NC_PREFIX_STAGE_IDS,
+  TEAMMATE_IDS,
+  SUB_AGENT_IDS,
+  HUMAN_GATE_IDS,
+  loadProcessDefinitions,
+  loadProcessDefinitionsSync,
+  assertSharedSpine,
+  isTeammateId,
+  isSubAgentId,
+  isHumanActor,
+  validateHandoffMessage,
+  HandoffEngine,
+  MemoryHandoffStore,
+  FileHandoffStore,
+  SDLC_ROSTER,
+  traceOf,
+  type ProcessDefinition,
+  type ProcessId,
+  type TeammateId,
+  type SubAgentId,
+  type HumanGateId,
+  type HandoffMessage,
+  type HandoffCode,
+  type RequestView,
+  type HandoffResult,
+  type OpenRequestInput,
+} from "./handoff/index.js";
+
+export {
   FeatureSignOffItemIdSchema,
   DEFAULT_FEATURE_SIGNOFF_ITEM_DEFS,
   FeatureArtifactSchema,

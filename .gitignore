@@ -11,6 +11,7 @@ coverage
 .secrets/*
 !.secrets/*.example
 apps/kyc/data/store.json
+apps/releasedesk/data/handoff.json
 packages/releasedesk-core/data/
 .releasedesk/
 .turbo

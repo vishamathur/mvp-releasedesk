@@ -36,6 +36,16 @@ export default async function DeskPage() {
         </div>
 
         <div className="mt-14 animate-rise-delay space-y-16">
+          <section>
+            <h2 className="font-display text-2xl text-rd-ink">SDLC handover</h2>
+            <p className="mt-2 max-w-2xl text-sm text-rd-forest/75">
+              Run PID-ER or PID-NC. Lead, Change Analyst, Standards, Security, and Builder hand stages
+              to each other. Human gates stay open until a person replies.
+            </p>
+            <a href="/handoff" className="btn-primary mt-4">
+              Open handover
+            </a>
+          </section>
           <GrokBotsPanel deepDiveId="security" />
           <ChallengeTrigger />
           <section>

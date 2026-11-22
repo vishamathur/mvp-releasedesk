@@ -76,6 +76,13 @@ export default function AgentsPage() {
           Grok Bots (Lead, Change Analyst, Standards, Security, Builder) plus Cursor Cloud Agents
           (Coding, Testing, Review). Personas, skills, routines, connectors — exclusive keys only.
         </p>
+        <p className="mt-2 text-sm text-rd-forest/75">
+          The same five teammates run the PID-ER and PID-NC handover on{" "}
+          <Link href="/handoff" className="text-rd-canopy underline-offset-4 hover:underline">
+            /handoff
+          </Link>
+          . Coding, Testing, and Review stay mock sub-agents under Builder.
+        </p>
         <p className="mt-2">
           <Link href="/mvp" className="text-sm text-rd-canopy underline-offset-4 hover:underline">
             Back to SDLC control plane

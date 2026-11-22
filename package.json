@@ -18,7 +18,7 @@
     "build:specialists": "npm run build -w @releasedesk/specialists",
     "start": "npm run start -w @northwind/kyc",
     "start:desk": "npm run start -w @releasedesk/ui",
-    "test": "npm run test -w @northwind/kyc && npm run test -w @releasedesk/core && npm run test -w @releasedesk/lead && npm run test -w @releasedesk/specialists && npm run test -w @releasedesk/ui",
+    "test": "npm run build:core && npm run build:lead && npm run build:specialists && npm run test -w @northwind/kyc && npm run test -w @releasedesk/core && npm run test -w @releasedesk/lead && npm run test -w @releasedesk/specialists && npm run test -w @releasedesk/ui",
     "test:kyc": "npm run test -w @northwind/kyc",
     "test:core": "npm run test -w @releasedesk/core",
     "test:lead": "npm run test -w @releasedesk/lead",

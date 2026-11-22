@@ -36,6 +36,12 @@ export default function HomePage() {
             >
               Challenge desk
             </Link>
+            <Link
+              href="/handoff"
+              className="btn-secondary !border-white/25 !bg-white/10 !text-white hover:!bg-white/20"
+            >
+              SDLC handover
+            </Link>
             <span className="inline-flex items-center gap-2 text-sm text-white/55">
               <MockLabel>MOCK integrations labeled</MockLabel>
             </span>

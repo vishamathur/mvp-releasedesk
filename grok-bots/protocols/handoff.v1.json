@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "message": {
+    "v": 1,
+    "kind": "stage-handoff | consult | stage-return | build-result",
+    "pid": "PID-ER | PID-NC",
+    "pidVersion": "1.0.0",
+    "requestId": "REQ-…",
+    "thread": { "channel": "#er-intake | #new-customer", "threadId": "thr_…" },
+    "from": "lead | change-analyst | standards | security | builder",
+    "to": "teammate id",
+    "stage": "stage id from the PID",
+    "action": "start | consult | return | remediate | block",
+    "summary": "one paragraph a human can read",
+    "artifactRefs": ["memory:pid.artifacts.REQ-…"],
+    "memoryKey": "pid.state.REQ-…",
+    "humanGate": null
+  },
+  "humanGateShape": {
+    "gate": "proposal | finance-approval | security-compliance-approval | release-gate",
+    "status": "pending | approved | rejected",
+    "decidedBy": "human name, never a bot id",
+    "note": "short"
+  },
+  "rules": [
+    "Teammate messages use this object. The channel thread gets a short reading of the same facts.",
+    "Only Lead writes pid.state.{requestId}.",
+    "stage-return and build-result come back to Lead. Lead appends a stage-transition record and then messages the next owner.",
+    "humanGate.status may be pending when a bot posts the card. approved or rejected is copied from a human reply. A bot never sets approved.",
+    "build-result carries proposedBranch, prUrl, testsPassed, and testsSummary. Lead uses it for the test gate."
+  ]
+}
