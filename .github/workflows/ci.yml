@@ -24,3 +24,8 @@ jobs:
       - run: npm run typecheck -w @releasedesk/lead
       - run: npm run typecheck -w @releasedesk/specialists
       - run: npm run typecheck -w @releasedesk/ui
+      - name: PHP intake tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y php-cli php-curl
+          bash apps/intake/tests/run-tests.sh
