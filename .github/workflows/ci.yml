@@ -12,7 +12,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Make the main ref available for git-range checks
-        run: git fetch origin main:main
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+            git branch -f main origin/main
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
