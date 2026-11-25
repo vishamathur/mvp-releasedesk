@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./handoff-log": {
+      "types": "./dist/handoff/log.d.ts",
+      "import": "./dist/handoff/log.js",
+      "default": "./dist/handoff/log.js"
     }
   },
   "files": [

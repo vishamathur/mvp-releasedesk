@@ -1,9 +1,22 @@
-# Change Analyst (Grok Bot)
+# Change Analyst
 
-**Job:** Inspect git range / PR diff for the KYC release. Produce impact findings and a release-notes draft. Evidence-backed only.
+Canonical persona: `grok-bots/personas/change-analyst.persona.md`
+Onboarding: `grok-bots/personas/change-analyst.onboarding.md`
 
-**Connectors:** GitHub
+Owns estimation, and on a new customer owns discovery, scope, and the proposal. Raises the finance and proposal gates.
 
-**Skills:** `analyze-diff`, `draft-release-notes`
+## Connectors
+- GitHub — read the repository
 
-**Boundaries:** No policy judgments (Standards). No security advisories (Security). No code changes.
+## Channels
+Chat only. The request thread is Lead's chat (`lead-chat`). Gate cards are asked in this bot's own chat when it owns the gate.
+
+## Skills
+- discovery-and-scope
+- draft-proposal
+- estimate-change
+- raise-human-gate
+- validate-handoff
+
+## Routines
+- pending-consults

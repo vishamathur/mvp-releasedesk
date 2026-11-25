@@ -3,7 +3,7 @@
  * On-demand release check CLI for the Lead Agent (M6: verification + PR gates).
  *
  * Usage:
- *   npm run check:release:stubs -- --repo owner/name [--base main] [--head HEAD]
+ *   npm run check:release:lead -- --repo owner/name [--base main] [--head HEAD]
  *   npx tsx packages/releasedesk-lead/src/cli.ts --repo owner/name --json
  */
 import { mkdir } from "node:fs/promises";
@@ -40,13 +40,13 @@ Options:
   --store memory|file   Persistence (default: memory)
   --store-path <path>   File store path (default: .releasedesk/runs.json)
   --json                Print full JSON report
-  --approve             Apply MOCK in-memory approve of merge+release gates (demo only)
-  --reject              Apply MOCK in-memory reject of release gate (demo only)
+  --approve             Record an in-memory approve of merge+release gates (no git merge)
+  --reject              Record an in-memory reject of the release gate (no git merge)
   --decided-by <who>    Actor for --approve/--reject (default: cli)
   -h, --help            Show help
 
 Checkpoint verification runs after specialist + cloud-agent stages.
-PR workflow uses MOCK GitHub unless GH_TOKEN/GITHUB_TOKEN is set.
+PR workflow uses the real GitHub client. A missing GH_TOKEN or GITHUB_TOKEN throws.
 Human approval gates are requested but never auto-approved / never auto-merged.
 `);
 }

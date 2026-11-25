@@ -1,19 +1,10 @@
-import { ChallengeTrigger } from "@/components/ChallengeTrigger";
 import { DeskHeader } from "@/components/DeskHeader";
 import { GrokBotsPanel } from "@/components/GrokBotsPanel";
-import { RunList } from "@/components/RunList";
-import { listRuns } from "@/lib/desk";
+import { HandoffBoard } from "@/components/HandoffBoard";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Optimized Wednesday desk — brief spine only:
- * agent navigation · challenge trigger · recent runs.
- * Intake / demo gallery demoted (not deleted) off this surface.
- */
-export default async function DeskPage() {
-  const runs = await listRuns();
-
+export default function DeskPage() {
   return (
     <div className="min-h-screen">
       <DeskHeader />
@@ -26,27 +17,22 @@ export default async function DeskPage() {
             Release Desk
           </h1>
           <p className="mt-3 max-w-2xl text-rd-forest/75">
-            Open Lead · CA · Standards · Security · Builder (persona / skills / routines). Trigger
-            the workflow, then the red-team|security gate and Grok API intel. Full enterprise path:{" "}
-            <a href="/control" className="text-rd-canopy underline-offset-4 hover:underline">
-              /control
-            </a>
-            .
+            Open Intake, Lead, Change Analyst, Standards, Security, and Builder. The iteration gate is
+            Security's security-compliance-approval, asked in Security's chat.
           </p>
         </div>
 
         <div className="mt-14 animate-rise-delay space-y-16">
-          <GrokBotsPanel deepDiveId="security" />
-          <ChallengeTrigger />
           <section>
-            <h2 className="font-display text-2xl text-rd-ink">Recent runs</h2>
-            <p className="mt-2 text-sm text-rd-forest/65">
-              Open a run for iteration gate (approve/reject) + Grok API panel + cloud handoffs.
+            <h2 className="font-display text-2xl text-rd-ink">SDLC handover</h2>
+            <p className="mt-2 max-w-2xl text-sm text-rd-forest/75">
+              Bots run the process; Release Desk Log records it; Desk shows it.
             </p>
             <div className="mt-6">
-              <RunList runs={runs} />
+              <HandoffBoard />
             </div>
           </section>
+          <GrokBotsPanel deepDiveId="security" />
         </div>
       </main>
     </div>

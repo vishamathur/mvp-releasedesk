@@ -116,7 +116,7 @@ export async function listGrokBotPacks(): Promise<GrokBotPack[]> {
   const registry = await loadGrokBotRegistry(root);
   const byId = new Map(registry.entries.map((e) => [e.definitionId, e]));
 
-  return defs.map((def) => {
+  const packs = defs.map((def) => {
     const entry = byId.get(def.id);
     const keyPresent = Boolean(resolveAgentGrokApiKey(def.role));
     return {
@@ -136,6 +136,38 @@ export async function listGrokBotPacks(): Promise<GrokBotPack[]> {
       memoryNotes: def.persona.memory,
     };
   });
+  const intake = await intakePack(root, byId.get("intake"));
+  return intake ? [intake, ...packs] : packs;
+}
+
+/** Public front door. App teammate with no API key and no SDLC stage. */
+async function intakePack(
+  root: string,
+  entry: GrokBotRegistryEntry | undefined,
+): Promise<GrokBotPack | null> {
+  const personaPath = path.join(root, "grok-bots", "personas", "intake.md");
+  let persona = "";
+  try {
+    persona = await readFile(personaPath, "utf8");
+  } catch {
+    return null;
+  }
+  return {
+    id: "intake",
+    displayName: "Intake",
+    label: "Public front door",
+    apiKeyEnv: "",
+    keyPresent: false,
+    ...provisionFields(entry),
+    definitionPath: "grok-bots/personas/intake.md",
+    persona,
+    skills: [],
+    routines: [],
+    connectors: ["Public site HMAC (verify)"],
+    teammates: ["lead", "log"],
+    channels: ["public site — visitors", "lead — intake-request and public-status"],
+    memoryNotes: [],
+  };
 }
 
 async function listMarkdownFallback(root: string): Promise<GrokBotPack[]> {

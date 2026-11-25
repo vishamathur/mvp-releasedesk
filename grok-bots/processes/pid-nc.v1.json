@@ -1,0 +1,204 @@
+{
+  "id": "PID-NC",
+  "version": "1.1.0",
+  "title": "Full product request — new customer",
+  "summary": "A new customer, or an existing customer asking for a product Northwind does not yet run for them. Kickoff comes first. Onboarding, discovery, scope, a customer-approved proposal, and a phased estimate happen before the shared finance stage. The request does not join a sprint that is already running.",
+  "customerKind": "new",
+  "cadence": {
+    "kind": "kickoff_first",
+    "detail": "Lead schedules a kickoff before build. Discovery is not boxed to the enhancement sprint. Build starts only after the customer approves the proposal, finance and security humans approve, and a kickoff record names a future sprint. Release uses the window agreed at kickoff, not the PID-ER Thursday train."
+  },
+  "entry": {
+    "channel": "lead-chat",
+    "criteria": [
+      "No book-of-record product for this ask, or no customer record at all",
+      "Intake card names legal name, jurisdiction, intended product, and an internal sponsor",
+      "Started in Lead's chat with the intake card",
+      "Must not be dropped into a sprint that has already locked"
+    ]
+  },
+  "humanGates": [
+    "proposal",
+    "finance-approval",
+    "security-compliance-approval",
+    "release-gate"
+  ],
+  "gateRaisedBy": "stage-owner",
+  "auditLog": {
+    "bot": "log",
+    "agentId": "3824a7e2-512f-4a5b-a0bd-5202fd8dffbd",
+    "dirEnv": "RELEASEDESK_LOG_DIR"
+  },
+  "botsMayAutoApprove": false,
+  "securityMandatory": true,
+  "iterationGate": "red_team|security",
+  "stages": [
+    {
+      "id": "intake",
+      "name": "Intake",
+      "owner": "lead",
+      "consulting": [
+        "change-analyst"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "intake card",
+        "request thread",
+        "pid state record"
+      ],
+      "sla": "Acknowledge in Lead's chat within 1 business day",
+      "autoApprove": false
+    },
+    {
+      "id": "customer-onboarding",
+      "name": "Customer onboarding",
+      "owner": "lead",
+      "consulting": [
+        "change-analyst"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "onboarding dossier"
+      ],
+      "sla": "5 business days. Dossier covers sponsor, jurisdiction, and whether a data-processing addendum is required. This stage does not approve the proposal.",
+      "autoApprove": false
+    },
+    {
+      "id": "discovery",
+      "name": "Discovery",
+      "owner": "change-analyst",
+      "consulting": [
+        "standards",
+        "security"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "discovery notes"
+      ],
+      "sla": "10 business days",
+      "autoApprove": false
+    },
+    {
+      "id": "scope",
+      "name": "Scope",
+      "owner": "change-analyst",
+      "consulting": [
+        "standards"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "scope statement"
+      ],
+      "sla": "5 business days. In scope, out of scope, and assumptions are explicit.",
+      "autoApprove": false
+    },
+    {
+      "id": "proposal",
+      "name": "Proposal",
+      "owner": "change-analyst",
+      "consulting": [
+        "standards"
+      ],
+      "humanApprover": "Customer sponsor",
+      "artifacts": [
+        "proposal",
+        "customer approval record"
+      ],
+      "sla": "5 business days to draft. Customer approval clock is 10 business days. The customer sponsor approves in Lead's chat. A bot must not mark the proposal approved.",
+      "autoApprove": false
+    },
+    {
+      "id": "estimation",
+      "name": "Estimation",
+      "owner": "change-analyst",
+      "consulting": [
+        "builder",
+        "security",
+        "standards"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "phased estimate with cost range"
+      ],
+      "sla": "5 business days after customer approval. This is a phased cost range, not a sprint t-shirt.",
+      "autoApprove": false
+    },
+    {
+      "id": "finance-approval",
+      "name": "Finance approval",
+      "owner": "change-analyst",
+      "consulting": [],
+      "humanApprover": "Finance partner",
+      "artifacts": [
+        "investment memo decision"
+      ],
+      "sla": "5 business days. Full investment memo. There is no sprint-envelope shortcut.",
+      "autoApprove": false
+    },
+    {
+      "id": "security-compliance-approval",
+      "name": "Security and compliance approval",
+      "owner": "security",
+      "consulting": [
+        "standards",
+        "change-analyst"
+      ],
+      "humanApprover": "Security officer or AI red-team lead",
+      "artifacts": [
+        "security findings",
+        "compliance deviations",
+        "sign-off request"
+      ],
+      "sla": "5 business days. Security runs on every change. One human signature of kind red_team or security opens the iteration gate. A bot signature does not.",
+      "autoApprove": false
+    },
+    {
+      "id": "build",
+      "name": "Build",
+      "owner": "builder",
+      "consulting": [
+        "security",
+        "standards"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "pull request",
+        "cloud agent run reference",
+        "kickoff record"
+      ],
+      "sla": "Starts only after kickoff names a future sprint. Builder does not merge.",
+      "autoApprove": false
+    },
+    {
+      "id": "test-gate",
+      "name": "Test gate",
+      "owner": "lead",
+      "consulting": [
+        "builder",
+        "security"
+      ],
+      "humanApprover": null,
+      "artifacts": [
+        "test report"
+      ],
+      "sla": "Inside the build sprint named at kickoff. A failed report returns the request to build.",
+      "autoApprove": false
+    },
+    {
+      "id": "release-gate",
+      "name": "Release gate",
+      "owner": "builder",
+      "consulting": [
+        "security",
+        "standards"
+      ],
+      "humanApprover": "Release manager",
+      "artifacts": [
+        "release note",
+        "go/no-go record"
+      ],
+      "sla": "Release window agreed at kickoff. Human go/no-go in the request thread.",
+      "autoApprove": false
+    }
+  ]
+}

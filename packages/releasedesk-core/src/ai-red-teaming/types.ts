@@ -2,17 +2,16 @@ import { z } from "zod";
 import { MockMetaSchema } from "../mock.js";
 
 /**
- * Pluggable AI Red Teaming providers Lead can call interchangeably.
+ * Pluggable AI Red Teaming providers.
  *
- * Select via `RELEASEDESK_AI_RED_TEAM_PROVIDER`:
- * - `custom` (default) — in-repo custom agent contract
- * - `zscaler` — optional Zscaler stub (MOCK without credentials; never calls live APIs in CI)
+ * The only provider is `grok-guardrails`. Unset uses that provider.
+ * Any other name is a configuration error.
  */
 
-export const AiRedTeamProviderNameSchema = z.enum(["custom", "zscaler"]);
+export const AiRedTeamProviderNameSchema = z.enum(["grok-guardrails"]);
 export type AiRedTeamProviderName = z.infer<typeof AiRedTeamProviderNameSchema>;
 
-export const DEFAULT_AI_RED_TEAM_PROVIDER: AiRedTeamProviderName = "custom";
+export const DEFAULT_AI_RED_TEAM_PROVIDER: AiRedTeamProviderName = "grok-guardrails";
 
 /** Frameworks findings must map into for hard-block semantics. */
 export const AiRedTeamFrameworkSchema = z.enum(["atlas", "owasp_llm_top_10"]);
@@ -24,7 +23,7 @@ export type AiRedTeamProviderMode = z.infer<typeof AiRedTeamProviderModeSchema>;
 export const AiRedTeamProbeTargetSchema = z.object({
   /** Repo under test (owner/name or path). */
   repository: z.string().min(1).optional(),
-  /** Optional HTTP/OpenAI-compatible endpoint Zscaler-style Connect would hit. */
+  /** Optional endpoint label recorded with the probe target. */
   endpoint: z.string().min(1).optional(),
   /** Optional session correlation for multi-turn probes. */
   sessionId: z.string().min(1).optional(),
@@ -84,20 +83,6 @@ export type AiRedTeamingProvider = {
     target: AiRedTeamProbeTarget,
     frameworks: readonly AiRedTeamFramework[],
   ): Promise<AiRedTeamProbeResult>;
-  /** Lightweight readiness probe (no network to Zscaler in stub/CI). */
+  /** Readiness check. Must throw a configuration error when the provider cannot run. */
   healthCheck(): Promise<AiRedTeamHealthCheck>;
 };
-
-/** Error code when zscaler credentials exist but live API is not implemented. */
-export const ZSCALER_NOT_WIRED_CODE = "ZSCALER_AI_RED_TEAM_NOT_WIRED" as const;
-
-export class ZscalerAiRedTeamNotWiredError extends Error {
-  readonly code = ZSCALER_NOT_WIRED_CODE;
-
-  constructor(
-    message = "Zscaler AI Red Teaming API is not wired — stub refuses live calls (CI-safe)",
-  ) {
-    super(message);
-    this.name = "ZscalerAiRedTeamNotWiredError";
-  }
-}

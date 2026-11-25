@@ -37,17 +37,27 @@ const APP_AGENTS = {
     id: "c932bf04-d05e-4809-a5cc-64afa9fb0894",
     name: "Builder",
   },
+  log: {
+    id: "3824a7e2-512f-4a5b-a0bd-5202fd8dffbd",
+    name: "Release Desk Log",
+  },
+  intake: {
+    id: "ce1f6670-8b51-4478-8f61-42911ea3be41",
+    name: "Intake",
+  },
 } as const;
 
 describe("grok-bots registry", () => {
   it("records each bot as a Grok Bot app teammate, not an xAI agent", async () => {
     const registry = await loadGrokBotRegistry(workspaceRoot);
     expect(registry.entries.map((e) => e.definitionId)).toEqual([
+      "intake",
       "lead",
       "change-analyst",
       "standards",
       "security",
       "builder",
+      "log",
     ]);
     for (const entry of registry.entries) {
       const expected = APP_AGENTS[entry.definitionId as keyof typeof APP_AGENTS];
@@ -99,6 +109,16 @@ describe("grok-bots registry", () => {
           lastError: null,
           status: "created_in_grok_bot_app",
         },
+        {
+          definitionId: "log",
+          host: "grok-bot-app",
+          grokBotAppAgentId: APP_AGENTS.log.id,
+          grokBotAppName: "Release Desk Log",
+          liveBotId: null,
+          createdAt: "2026-11-22T00:00:00.000Z",
+          lastError: null,
+          status: "created_in_grok_bot_app",
+        },
       ],
     });
     const next = applyCreateResultsToRegistry(
@@ -115,6 +135,14 @@ describe("grok-bots registry", () => {
       "2026-11-18T07:12:00.000Z",
     );
     expect(next.note).toBe("keep me");
+    expect(next.entries.map((entry) => entry.definitionId)).toEqual(["security", "log"]);
+    expect(next.entries[1]).toMatchObject({
+      definitionId: "log",
+      host: "grok-bot-app",
+      grokBotAppAgentId: APP_AGENTS.log.id,
+      liveBotId: null,
+      status: "created_in_grok_bot_app",
+    });
     expect(next.entries[0]).toMatchObject({
       host: "grok-bot-app",
       status: "created_in_grok_bot_app",

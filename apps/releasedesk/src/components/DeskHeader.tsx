@@ -22,24 +22,11 @@ export function DeskHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
         </span>
       </Link>
       <nav className="flex items-center gap-2">
-        <Link href="/control" className={navLink}>
-          Control plane
-        </Link>
-        <Link href="/mvp" className={navLink}>
-          MVP
-        </Link>
         <Link href="/agents" className={navLink}>
           Agents
         </Link>
-        <Link
-          href="/control"
-          className={
-            dark
-              ? "text-sm font-medium text-white/70 underline-offset-4 hover:text-white hover:underline"
-              : "text-sm font-medium text-rd-forest/70 underline-offset-4 hover:text-rd-ink hover:underline"
-          }
-        >
-          Control plane
+        <Link href="/handoff" className={navLink}>
+          Handover
         </Link>
         <Link
           href="/desk"

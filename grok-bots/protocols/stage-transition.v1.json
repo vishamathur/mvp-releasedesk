@@ -1,0 +1,23 @@
+{
+  "version": "1.1.0",
+  "record": "stage-transition",
+  "fields": {
+    "requestId": "string",
+    "pid": "PID-ER | PID-NC",
+    "pidVersion": "semver of the process spec",
+    "fromStage": "stage id, or null when the request is opened",
+    "toStage": "stage id",
+    "at": "ISO-8601",
+    "actor": "lead",
+    "reason": "string",
+    "humanDecision": "null, or { gate, decision, decidedBy, at } copied from the owning bot's stage-return"
+  },
+  "storedAt": "Lead memory pid.transitions.{requestId}, append-only",
+  "postedTo": "The request thread in Lead's chat (thread.channel lead-chat)",
+  "state": {
+    "sourceOfTruth": "Lead memory pid.state.{requestId} holds pid, version, current stage, status, and the thread pointer",
+    "thread": "One thread per request, opened in Lead's chat. Human gates are asked by the stage owner in that bot's own chat. The owner returns the verbatim reply to Lead.",
+    "audit": "Every bot copies Release Desk Log (priority false) on each message sent or received, each REJECT, and each gate ask/decision; Lead also copies each stage transition. The Log never routes or approves.",
+    "otherBots": "Specialists store their own slice (estimate, findings, build record) and return it by teammate message. They do not advance pid.state."
+  }
+}

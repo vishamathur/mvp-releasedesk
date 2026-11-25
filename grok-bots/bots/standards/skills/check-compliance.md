@@ -1,6 +1,2 @@
-# Skill: check-compliance
-
-1. Load Northwind KYC policy refs (baseline, auth, retention).
-2. Map Change Analyst findings to policy clauses.
-3. Emit deviations with severity + evidence URI/path.
-4. Return to Lead — never waive.
+Skill: check-compliance
+Load policy.refs (Northwind KYC baseline, auth, retention; build it on first use from the repo docs and say where each clause came from). Map the ask/estimate/PR to clauses, emit deviations with severity blocker|major|minor and evidence. Save pid.slice.standards.<stage>.<id>, reply to the asker with a consult (action return).

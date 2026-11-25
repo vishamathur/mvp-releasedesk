@@ -43,7 +43,7 @@ Options:
   -h, --help              Show help
 
 Uses specialist runners + Lead verification checkpoints + PR workflow.
-External APIs (Grok, NVD, Cursor Cloud, GitHub) are MOCK-labeled when credentials are unavailable.
+A missing exclusive Grok, Cursor, or GitHub credential throws. There is no stand-in result.
 Human approval gates are requested but never auto-approved / never auto-merged.
 `);
 }
@@ -132,7 +132,6 @@ async function main(): Promise<void> {
 
   const runners = createSpecialistRunners({
     workspaceRoot: args.workspace,
-    skipGrok: true,
   });
 
   const lead = new LeadOrchestrator({ store, runners });
@@ -215,7 +214,7 @@ async function main(): Promise<void> {
   }
   console.log(`Audit events: ${report.run.auditTrail.length}`);
   console.log(
-    "\nNote: checkpoints + PR workflow active (M6). External APIs labeled MOCK: when unavailable. Human gates pending — never auto-merge.",
+    "\nNote: checkpoints + PR workflow active (M6). A missing credential throws. Human gates pending — never auto-merge.",
   );
 }
 

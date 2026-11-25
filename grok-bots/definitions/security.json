@@ -5,35 +5,88 @@
   "label": "Mandatory security",
   "apiKeyEnv": "RELEASEDESK_GROK_API_KEY_SECURITY",
   "persona": {
-    "job": "Mandatory on every change. Correlate risks to components. Emit release-blocking findings. Feeds iteration gate (red_team OR security).",
+    "job": "Find release-blocking risk and raise security-compliance-approval. That human signature is the iteration gate red_team|security.",
     "personality": "Blunt on blockers; never softens severity.",
-    "memory": ["Open blockers", "Last advisory set"],
-    "boundaries": ["Never auto-waive", "Does not merge"]
+    "memory": [
+      "pid.slice.security",
+      "sec.blockers",
+      "pid.gate.security-compliance-approval"
+    ],
+    "boundaries": [
+      "Never waive",
+      "Does not merge",
+      "Does not write pid.state",
+      "Does not send stage-handoff"
+    ]
   },
   "skills": [
     {
-      "name": "security-review",
-      "whenToUse": "Every Lead release check — no skip",
+      "name": "validate-handoff",
+      "whenToUse": "Every inbound teammate message",
       "steps": [
-        "Correlate components to advisories / known risks",
-        "Count release-blocking findings",
-        "Feed iteration gate: human must sign as security OR red_team"
+        "Check handoff.v1",
+        "REJECT the sender on the first failure"
       ],
-      "requiresApproval": ["iteration_gate"],
-      "output": "Release-blocking findings + gate signal"
+      "requiresApproval": [],
+      "output": "Accept or REJECT"
+    },
+    {
+      "name": "security-review",
+      "whenToUse": "A stage this bot owns or a consult on a diff",
+      "steps": [
+        "Read the change",
+        "Count release blockers",
+        "Save the slice"
+      ],
+      "requiresApproval": [],
+      "output": "Findings and blocker count"
+    },
+    {
+      "name": "raise-human-gate",
+      "whenToUse": "security-compliance-approval",
+      "steps": [
+        "Send Vishal the gate card in this chat",
+        "Record only his typed reply",
+        "stage-return with decidedBy security or red_team"
+      ],
+      "requiresApproval": [
+        "security-compliance-approval"
+      ],
+      "output": "Human gate on the stage-return"
     }
   ],
   "routines": [
     {
-      "name": "mandatory-every-change",
-      "trigger": "Every Lead release check",
-      "steps": ["Always run security-review", "Post blockers to Lead", "Pause for human iteration gate"]
+      "name": "pending-consults",
+      "trigger": "Every 15 minutes while a consult is open",
+      "steps": [
+        "Resend once after 10 minutes",
+        "Note it on the return after 20 minutes"
+      ]
     }
   ],
-  "connectors": [{ "name": "GitHub", "purpose": "Read change set for risk correlation", "access": "read" }],
-  "teammates": ["lead", "builder"],
-  "channels": [{ "name": "#release-desk", "purpose": "Blocker posts" }],
-  "handsOffTo": ["lead", "builder"],
+  "connectors": [
+    {
+      "name": "GitHub",
+      "purpose": "Read the change and the pull request diff",
+      "access": "read"
+    }
+  ],
+  "teammates": [
+    "lead",
+    "change-analyst",
+    "standards",
+    "builder"
+  ],
+  "channels": [
+    {
+      "name": "lead-chat",
+      "purpose": "Stage returns. The security gate is asked in this bot's own chat."
+    }
+  ],
+  "handsOffTo": [
+    "lead"
+  ],
   "mandatoryOnEveryChange": true,
   "markdownPackDir": "grok-bots/bots/security"
 }

@@ -3,7 +3,6 @@ import {
   describeGrokIntelKeyStatus,
   runGrokReleaseIntel,
 } from "@/lib/grok-release-intel";
-import { getRun } from "@/lib/desk";
 import { describeAgentCursorCredential } from "@releasedesk/core";
 
 export const runtime = "nodejs";
@@ -25,13 +24,10 @@ export async function GET() {
             : "reviews — never merges",
     };
   });
-  const cloudClient = String(process.env.RELEASEDESK_CLOUD_CLIENT ?? "mock").toLowerCase();
-
   return NextResponse.json({
     ok: true,
     grokIntel: grok,
     cursorCloudAgents: cursor,
-    cloudClientMode: cloudClient === "real" ? "real" : "mock",
     exclusiveKeysOnly: true,
     forbiddenSharedFallbacks: [
       "XAI_API_KEY",
@@ -41,45 +37,28 @@ export async function GET() {
     ],
     roomHint: grok.liveReady
       ? "Grok intel will label LIVE"
-      : `Grok intel will label MOCK until ${grok.keyEnvVar} is set`,
+      : `${grok.keyEnvVar} is not set. Refusing to invent a result.`,
   });
 }
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
-    runId?: string;
     repository?: string;
     goal?: string;
     findings?: Array<{ source: string; text: string; severity?: string }>;
   };
 
-  let findings = body.findings ?? [];
-  let repository = body.repository ?? "vishamathur/mvp-releasedesk";
-  let goal = body.goal ?? "Release readiness";
-
-  if (body.runId) {
-    const data = await getRun(body.runId);
-    if (!data) {
-      return NextResponse.json({ error: "Run not found" }, { status: 404 });
-    }
-    repository = String(data.view.run.target.repository ?? repository);
-    goal = data.view.run.goal ?? goal;
-    if (findings.length === 0) {
-      findings = data.view.run.tasks
-        .filter((t) => t.agentRole !== "lead")
-        .map((t) => ({
-          source: String(t.agentRole),
-          text: String(t.output?.summary ?? t.name),
-          severity: String(
-            (t.output as { riskLevel?: string } | null)?.riskLevel ??
-              (t.output as { overallImpact?: string } | null)?.overallImpact ??
-              "medium",
-          ),
-        }));
-    }
+  let intel;
+  try {
+    intel = await runGrokReleaseIntel({
+      repository: body.repository ?? "vishamathur/mvp-releasedesk",
+      goal: body.goal ?? "Release readiness",
+      findings: body.findings ?? [],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "release-intel failed";
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
   }
-
-  const intel = await runGrokReleaseIntel({ repository, goal, findings });
   const keyStatus = describeGrokIntelKeyStatus();
   return NextResponse.json({
     ok: true,
@@ -89,10 +68,7 @@ export async function POST(request: Request) {
       label: intel.label,
       mocked: intel.mocked,
       exclusiveKey: intel.trustCheck.keyEnvVar,
-      talkTrack:
-        intel.label === "LIVE"
-          ? `Live call via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`
-          : `MOCK labeled — set ${intel.trustCheck.keyEnvVar} for LIVE (shared XAI/GROK keys ignored).`,
+      talkTrack: `Live call via exclusive ${intel.trustCheck.keyEnvVar}; trustCheck keeps humans in charge.`,
     },
   });
 }

@@ -237,11 +237,15 @@ export function applyCreateResultsToRegistry(
     };
   });
 
+  const extras = (existing?.entries ?? []).filter(
+    (entry) => !definitionIds.includes(entry.definitionId) && isGrokBotAppRegistryEntry(entry),
+  );
+
   return {
     version: 1,
     updatedAt: nowIso,
     ...(existing?.note ? { note: existing.note } : {}),
-    entries,
+    entries: [...entries, ...extras],
   };
 }
 

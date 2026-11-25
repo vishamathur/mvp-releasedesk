@@ -24,7 +24,13 @@ function seedMultiCustomer() {
       summary: "Adjust PEP weights",
       requestedBy: "cs-northwind",
     },
-    cost: { amount: 12000, currency: "USD", direction: "charge", label: "NW delivery" },
+    cost: {
+      amount: 12000,
+      currency: "USD",
+      direction: "charge",
+      label: "NW delivery",
+      source: "billing_system",
+    },
     applyFairness: false,
   });
   queue = a1.queue;
@@ -35,7 +41,7 @@ function seedMultiCustomer() {
       summary: "Retry failed uploads",
       requestedBy: "cs-northwind",
     },
-    cost: { amount: 4500, direction: "spend", label: "NW internal" },
+    cost: { amount: 4500, direction: "spend", label: "NW internal", source: "billing_system" },
     applyFairness: false,
   });
   queue = a2.queue;
@@ -46,7 +52,7 @@ function seedMultiCustomer() {
       summary: "Contoso onboarding flow",
       requestedBy: "cs-contoso",
     },
-    cost: { amount: 8000, direction: "charge", label: "Contoso delivery" },
+    cost: { amount: 8000, direction: "charge", label: "Contoso delivery", source: "billing_system" },
     applyFairness: true,
   });
   return { queue: b1.queue, a1, a2, b1 };
@@ -77,8 +83,18 @@ describe("multi-customer intake with customerId-keyed costs", () => {
         customerId: "",
         amount: 10,
         direction: "charge",
-      } as never),
+        source: "billing_system",
+      }),
     ).toThrow(/customerId|orphaned/i);
+
+    expect(() =>
+      createCostEstimate({
+        requestId: "creq_1_1",
+        customerId: "cust_northwind",
+        amount: 10,
+        direction: "charge",
+      } as never),
+    ).toThrow(/billing_system/);
 
     const { a1 } = seedMultiCustomer();
     expect(() => assertCostTiedToCustomer(a1.cost, "cust_other")).toThrow(/does not match/);
@@ -126,7 +142,7 @@ describe("multi-customer intake with customerId-keyed costs", () => {
           summary: `Heavy request ${i}`,
           requestedBy: "cs",
         },
-        cost: { amount: 1000 + i, direction: "charge" },
+        cost: { amount: 1000 + i, direction: "charge", source: "billing_system" },
         applyFairness: false,
       }).queue;
     }
@@ -137,7 +153,7 @@ describe("multi-customer intake with customerId-keyed costs", () => {
         summary: "Light request",
         requestedBy: "cs",
       },
-      cost: { amount: 500, direction: "charge" },
+      cost: { amount: 500, direction: "charge", source: "billing_system" },
       applyFairness: true,
     }).queue;
 

@@ -2,7 +2,7 @@
 
 Lead Agent orchestrator for Release Desk (Milestones 3 + 6).
 
-Creates a shared run context, delegates to specialist runners (pluggable; MOCK stubs by default), runs **checkpoint verification** after specialist and cloud-agent stages, drives **remediation → reverify** loops, tracks **PR workflow** (MOCK GitHub or real via token), models **human approval gates** (never auto-merge), and consolidates release readiness with a full audit trail.
+Creates a shared run context, delegates to real specialist runners, runs **checkpoint verification** after specialist and cloud-agent stages, drives **remediation → reverify** loops, tracks pull requests with the real GitHub client, models **human approval gates** (never auto-merge), and consolidates release readiness with a full audit trail. There is no mock mode.
 
 Prefer `@releasedesk/specialists` (`createSpecialistRunners`) for real specialists + Builder Cloud Agents. Release Desk UI is Milestone 7.
 
@@ -20,12 +20,12 @@ npm run build:lead
 ## On-demand check (CLI)
 
 ```bash
-# Stubs (this package)
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --json
+# Lead package CLI (real clients; a missing key throws)
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --json
 
-# Demo human gates in-memory (no git merge)
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --approve --json
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --reject --json
+# Record human gates in memory (no git merge)
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --approve --json
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --reject --json
 
 # Full specialists path (root alias → @releasedesk/specialists)
 npm run check:release -- --repo vishamathur/mvp-releasedesk --json
@@ -40,29 +40,12 @@ npm run check:release -- --repo vishamathur/mvp-releasedesk --json
 File-backed store:
 
 ```bash
-npm run check:release:stubs -- --repo vishamathur/mvp-releasedesk --store file --store-path .releasedesk/runs.json
+npm run check:release:lead -- --repo vishamathur/mvp-releasedesk --store file --store-path .releasedesk/runs.json
 ```
 
-## PR workflow (MOCK vs real GitHub)
+## PR workflow
 
-| Mode | Env |
-| --- | --- |
-| MOCK (default) | unset `GH_TOKEN` / `GITHUB_TOKEN` |
-| real | `GH_TOKEN` or `GITHUB_TOKEN` set |
-
-```ts
-import {
-  LeadOrchestrator,
-  createMockPrClient,
-  resolvePrClient,
-} from "@releasedesk/lead";
-
-new LeadOrchestrator({
-  store,
-  prClient: { client: createMockPrClient() }, // tests
-  // or omit → resolvePrClient() from env
-});
-```
+`resolvePrClient()` returns the real GitHub client when `GH_TOKEN` or `GITHUB_TOKEN` is set. A missing token throws. `mergePullRequest` always throws.
 
 `mergePullRequest` always throws. Lead records `pr.merge_blocked` and requires the human merge gate.
 
@@ -96,8 +79,8 @@ console.log(report.checkpoints, report.pullRequests, report.approvals);
 | ATLAS / OWASP LLM Top 10 | Hard fails on AI findings; block open-for-review PR merge (drafts exempt); human waive only |
 | Checkpoint verification | After `specialist_analysis`, `cloud_agents`, `post_remediation` |
 | Remediation loop | Builder + standards/security reverify when checkpoints fail |
-| PR workflow | Open/track/poll; MOCK or real GitHub; never auto-merge |
-| Task status + evidence | Real store mutations; stubs labeled `MOCK:` |
+| PR workflow | Open/track/poll with the real GitHub client; never auto-merge |
+| Task status + evidence | Real store mutations |
 | Retry / failure | `failTask` + retry budget; recorded in audit |
 | Feature sign-off | Per AI-produced feature: developer checklist (`feature_review`); **never** auto-signed |
 | Human gates | `merge` + `release` (run-level); **never** auto-approved; require feature sign-offs first when features exist |
@@ -108,9 +91,9 @@ console.log(report.checkpoints, report.pullRequests, report.approvals);
 ```
 packages/releasedesk-lead/
   src/
-    agent-runner.ts, stub-runners.ts, approval.ts, readiness.ts
+    agent-runner.ts, approval.ts, readiness.ts
     verification.ts       # Checkpoint evaluation (M6)
-    pr/                   # GitHub PR client MOCK + real (M6)
+    pr/                   # real GitHub PR client (M6)
     dm-interface.ts, orchestrator.ts, cli.ts, index.ts
     *.test.ts
   README.md

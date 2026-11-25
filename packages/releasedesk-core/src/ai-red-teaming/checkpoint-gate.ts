@@ -2,13 +2,13 @@ import { z } from "zod";
 import { AiRedTeamFindingSchema, AiRedTeamProviderNameSchema } from "./types.js";
 
 /**
- * SPLX-inspired flow adapted into the Zscaler AI Red Teaming provider home.
+ * Collapsed AI red-team gate. Probe context may name the grok-guardrails provider.
  *
  * Optimized shape (not a separate SPLX worker):
  * - **One collapsed gate** runs both pre-release and post-remediation checks
  *   in a single pass (former SPLX Checkpoint 1 + Checkpoint 2).
  * - **Remediation is a non-blocking side queue** — never a stage on the main path.
- * - **Zscaler / MCP red-teaming context** stays attached to the collapsed gate.
+ * - Probe context stays attached to the collapsed gate. It is not a main-path stage.
  * - **Hard per-iteration approval:** every code iteration needs **red_team** OR
  *   **security** sign-off before it can proceed (no ship without one of the two).
  */
@@ -77,7 +77,7 @@ export const RemediationSideQueueItemSchema = z.object({
 });
 export type RemediationSideQueueItem = z.infer<typeof RemediationSideQueueItemSchema>;
 
-/** Zscaler / MCP context attached to the collapsed gate (not a main-flow stage). */
+/** Probe context attached to the collapsed gate (not a main-flow stage). */
 export const AiRedTeamGateContextSchema = z.object({
   provider: AiRedTeamProviderNameSchema,
   /** Optional MCP server / tool label when probes are MCP-backed. */
@@ -204,7 +204,7 @@ function shouldEnqueueRemediation(
 }
 
 /**
- * Run the collapsed single gate: both phases in one pass, attach Zscaler/MCP context,
+ * Run the collapsed single gate: both phases in one pass, attach probe context,
  * enqueue non-blocking remediation when routing warrants it, and enforce the
  * per-iteration red_team|security approval hard gate before main flow continues.
  */

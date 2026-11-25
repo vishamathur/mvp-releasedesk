@@ -10,7 +10,6 @@ export type {
   PullRequestRecord,
 } from "./types.js";
 
-export { createMockPrClient, type MockPrClientOptions } from "./mock-client.js";
 export { createRealPrClient, type RealPrClientOptions } from "./real-client.js";
 export {
   resolvePrClient,

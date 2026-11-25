@@ -1,6 +1,4 @@
 import {
-  createMockMeta,
-  formatMockNote,
   nowIso,
   BuilderAgentOutputSchema,
   type CreateEvidenceInput,
@@ -90,7 +88,7 @@ function planHandoffs(args: {
       acceptanceCriteria: [
         "Changes compile / typecheck",
         "Unit tests added or updated for the fix",
-        "Grok release-intel path present (MOCK without exclusive Lead key)",
+        "Grok release-intel path present; a missing exclusive Lead key fails the call",
         "No secrets introduced",
         "PR opened but not merged",
       ],
@@ -210,50 +208,29 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       data: { implementationInstructions, proposedBranch, baseBranch },
     });
 
-    if (!options.skipGrok) {
-      const grok = await grokComplete(
-        `Refine remediation plan for ${repository}: ${remediationGoals.join("; ")}`,
-        {
-          ...options.grok,
-          agentRole: options.grok?.agentRole ?? "builder",
-          fallback: implementationInstructions,
-        },
-      );
-      if (grok.mocked && grok.mock) mocksUsed.push(grok.mock);
-      if (!grok.mocked) {
-        evidence.push({
-          kind: "artifact",
-          title: "Grok remediation narrative",
-          summary: grok.text.slice(0, 2000),
-          source: "builder",
-        });
-      }
-    }
+    const grok = await grokComplete(
+      `Refine remediation plan for ${repository}: ${remediationGoals.join("; ")}`,
+      {
+        ...options.grok,
+        agentRole: options.grok?.agentRole ?? "builder",
+        safetySource: inv.runId,
+      },
+    );
+    evidence.push({
+      kind: "artifact",
+      title: "Grok remediation narrative",
+      summary: grok.text.slice(0, 2000),
+      source: "builder",
+    });
 
     let proposedPrUrl: string | undefined;
     let testsPassed: boolean | undefined;
     let finalBranch = proposedBranch;
     let cloudAudit: unknown[] = [];
     let cloudAttempts: unknown[] = [];
-    let clientMode: "mock" | "real" | "skipped" = "skipped";
+    let clientMode: "mock" | "real" = "real";
 
-    if (options.skipCloudDispatch) {
-      const cloudMock = createMockMeta(
-        "cursor-cloud-agents",
-        "Cloud dispatch skipped (skipCloudDispatch); handoffs remain planned",
-      );
-      mocksUsed.push(cloudMock);
-      evidence.push({
-        kind: "artifact",
-        title: "Cursor Cloud Agent handoffs (planned)",
-        summary: formatMockNote(
-          `Prepared ${handoffs.length} Cloud Agent handoff(s); dispatch skipped`,
-        ),
-        source: "builder",
-        mock: cloudMock,
-        data: { handoffs },
-      });
-    } else {
+    {
       const client = resolveCloudAgentClient({
         ...options.cloud,
         client: options.cloudClient ?? options.cloud?.client,
@@ -265,13 +242,6 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         title: "Cursor Cloud Agent client",
         summary: describeCloudClientMode(client),
         source: "builder",
-        mock:
-          client.mode === "mock"
-            ? createMockMeta(
-                "cursor-cloud-agents",
-                "Using MOCK Cloud Agent client — no live Cursor credentials required",
-              )
-            : undefined,
         data: { mode: client.mode, autoMerge: false },
       });
 
@@ -331,14 +301,6 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
         },
       });
 
-      if (client.mode === "mock" && !mocksUsed.some((m) => m.mockLabel === "cursor-cloud-agents")) {
-        mocksUsed.push(
-          createMockMeta(
-            "cursor-cloud-agents",
-            "MOCK Cloud Agent client used for Coding/Testing/Review dispatch",
-          ),
-        );
-      }
     }
 
     const workItems = handoffs.map((h) => ({
@@ -348,7 +310,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
       ...(h.metadata.prUrl ? { prUrl: h.metadata.prUrl } : {}),
       notes:
         h.status === "planned"
-          ? formatMockNote(`${h.agentKind} Cloud Agent handoff ${h.handoffId} planned`)
+          ? `${h.agentKind} Cloud Agent handoff ${h.handoffId} planned`
           : h.metadata.error
             ? `${h.agentKind} ${h.status}: ${h.metadata.error}`
             : `${h.agentKind} ${h.status} on ${h.metadata.branch ?? finalBranch}` +
@@ -359,19 +321,12 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
               "; merge requires human approval",
     }));
 
-    const dispatched = !options.skipCloudDispatch;
     const anyFailed = handoffs.some((h) => h.status === "failed");
-    const summaryBase = dispatched
-      ? `Builder dispatched Coding→Testing/Review on ${finalBranch}` +
-        (proposedPrUrl ? `; PR ${proposedPrUrl}` : "") +
-        (typeof testsPassed === "boolean" ? `; testsPassed=${testsPassed}` : "") +
-        `; client=${clientMode}; human merge gate required`
-      : `Builder remediation planned on ${finalBranch}; Cloud dispatch skipped`;
-
     const summary =
-      clientMode === "mock" || options.skipCloudDispatch
-        ? formatMockNote(summaryBase)
-        : summaryBase;
+      `Builder dispatched Coding→Testing/Review on ${finalBranch}` +
+      (proposedPrUrl ? `; PR ${proposedPrUrl}` : "") +
+      (typeof testsPassed === "boolean" ? `; testsPassed=${testsPassed}` : "") +
+      `; client=${clientMode}; human merge gate required`;
 
     const payload = BuilderAgentOutputSchema.parse({
       runId: inv.runId,
@@ -389,7 +344,7 @@ export function createBuilderRunner(options: SpecialistRunnerOptions = {}): Agen
     });
 
     return {
-      status: anyFailed && dispatched ? "completed" : "completed",
+      status: anyFailed ? "failed" : "completed",
       summary: payload.summary,
       payload: {
         agentRole: payload.agentRole,

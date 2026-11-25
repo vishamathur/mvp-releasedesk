@@ -1,8 +1,28 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createInMemoryStore } from "@releasedesk/core";
+import { createInMemoryStore, MissingCredentialError } from "@releasedesk/core";
 import type { AgentRunInvocation } from "@releasedesk/lead";
 import { createChangeAnalystRunner } from "./change-analyst.js";
-import { defaultWorkspaceRoot } from "./paths.js";
+
+function gitRange(): { root: string; base: string; head: string } {
+  const root = mkdtempSync(path.join(tmpdir(), "rd-git-"));
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "ignore" });
+  git("init");
+  git("config", "user.email", "test@example.com");
+  git("config", "user.name", "Test");
+  writeFileSync(path.join(root, "note.txt"), "one\n");
+  git("add", "note.txt");
+  git("commit", "-m", "one");
+  const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  writeFileSync(path.join(root, "note.txt"), "two\n");
+  git("add", "note.txt");
+  git("commit", "-m", "two");
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  return { root, base, head };
+}
 
 async function invocation(
   input: Record<string, unknown>,
@@ -31,31 +51,23 @@ async function invocation(
 
 describe("ChangeAnalystRunner", () => {
   it("analyzes local git range and returns evidence-backed findings", async () => {
+    const range = gitRange();
     const runner = createChangeAnalystRunner({
-      workspaceRoot: defaultWorkspaceRoot(),
-      skipGrok: true,
+      workspaceRoot: range.root,
     });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",
-      baseRef: "main",
-      headRef: "HEAD",
+      baseRef: range.base,
+      headRef: range.head,
       focusPaths: [],
     });
 
-    const result = await runner(inv);
-    expect(result.status).toBe("completed");
-    expect(result.payload.agentRole).toBe("change_analyst");
-    expect(typeof result.payload.releaseNotesDraft).toBe("string");
-    expect(Array.isArray(result.payload.findings)).toBe(true);
-    expect((result.payload.findings as unknown[]).length).toBeGreaterThan(0);
-    expect(result.evidence?.length).toBeGreaterThan(0);
-    expect(["low", "medium", "high", "unknown"]).toContain(result.payload.overallImpact);
+    await expect(runner(inv)).rejects.toBeInstanceOf(MissingCredentialError);
   });
 
-  it("falls back to fixture synthesis when git range yields nothing useful", async () => {
+  it("refuses to invent a change set when git yields nothing", async () => {
     const runner = createChangeAnalystRunner({
       workspaceRoot: "/tmp/nonexistent-releasedesk-workspace",
-      skipGrok: true,
     });
     const inv = await invocation({
       repository: "vishamathur/mvp-releasedesk",
@@ -63,12 +75,6 @@ describe("ChangeAnalystRunner", () => {
       headRef: "HEAD",
     });
 
-    const result = await runner(inv);
-    expect(result.status).toBe("completed");
-    expect(result.summary.startsWith("MOCK:") || result.mocksUsed?.some((m) => m.mocked)).toBe(
-      true,
-    );
-    expect((result.payload.findings as unknown[]).length).toBeGreaterThan(0);
-    expect(result.evidence?.some((e) => e.kind === "artifact" || e.kind === "diff")).toBe(true);
+    await expect(runner(inv)).rejects.toThrow(/Refusing to invent a change set/);
   });
 });

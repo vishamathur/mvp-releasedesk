@@ -61,16 +61,13 @@ function findingsBlock(findings: ReleaseFindingInput[]): string {
 
 async function intelComplete(
   prompt: string,
-  fallback: string,
   opts: GrokIntelOptions = {},
 ): Promise<GrokIntelResult> {
   const { apiKey, keyRole } = resolveIntelApiKey(opts);
-  // Explicit apiKey from resolveAgentGrokApiKey(role) — never shared XAI/GROK keys.
   const result = await grokComplete(prompt, {
     ...opts,
     apiKey,
     agentRole: keyRole,
-    fallback,
   });
   return { ...result, keyRole };
 }
@@ -80,11 +77,6 @@ export async function classifyReleaseFindings(
   findings: ReleaseFindingInput[],
   opts: GrokIntelOptions = {},
 ): Promise<GrokIntelResult> {
-  const fallback = findings.length
-    ? `Local classify: ${findings.length} finding(s) — ${findings
-        .map((f) => f.severity ?? "unspecified")
-        .join(", ")}`
-    : "Local classify: no findings";
   return intelComplete(
     [
       "Classify these Release Desk findings into concise themes",
@@ -92,7 +84,6 @@ export async function classifyReleaseFindings(
       "",
       findingsBlock(findings),
     ].join("\n"),
-    fallback,
     opts,
   );
 }
@@ -102,9 +93,6 @@ export async function extractReleaseActions(
   findings: ReleaseFindingInput[],
   opts: GrokIntelOptions = {},
 ): Promise<GrokIntelResult> {
-  const fallback = findings.length
-    ? `Local extract: remediate — ${findings.map((f) => f.summary).slice(0, 3).join("; ")}`
-    : "Local extract: no actions";
   return intelComplete(
     [
       "Extract concrete remediation actions from these Release Desk findings.",
@@ -112,7 +100,6 @@ export async function extractReleaseActions(
       "",
       findingsBlock(findings),
     ].join("\n"),
-    fallback,
     opts,
   );
 }
@@ -122,14 +109,6 @@ export async function scoreReleaseRisk(
   findings: ReleaseFindingInput[],
   opts: GrokIntelOptions = {},
 ): Promise<GrokIntelResult> {
-  const hasBlocking = findings.some((f) =>
-    /critical|high|block/i.test(`${f.severity ?? ""} ${f.summary}`),
-  );
-  const fallback = hasBlocking
-    ? "Local score: high — blocking signals present"
-    : findings.length
-      ? "Local score: medium — findings present without clear blockers"
-      : "Local score: low — no findings";
   return intelComplete(
     [
       "Score overall release risk from these findings as one of:",
@@ -138,7 +117,6 @@ export async function scoreReleaseRisk(
       "",
       findingsBlock(findings),
     ].join("\n"),
-    fallback,
     opts,
   );
 }
@@ -148,12 +126,6 @@ export async function summarizeReleaseFindings(
   findings: ReleaseFindingInput[],
   opts: GrokIntelOptions = {},
 ): Promise<GrokIntelResult> {
-  const fallback = findings.length
-    ? `Local summary: ${findings.length} finding(s). ${findings
-        .slice(0, 2)
-        .map((f) => f.summary)
-        .join(" · ")}`
-    : "Local summary: no release findings";
   return intelComplete(
     [
       "Summarize these Release Desk findings for a human merge/release gate.",
@@ -161,7 +133,6 @@ export async function summarizeReleaseFindings(
       "",
       findingsBlock(findings),
     ].join("\n"),
-    fallback,
     opts,
   );
 }

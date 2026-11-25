@@ -1,9 +1,19 @@
-# Standards Agent (Grok Bot)
+# Standards
 
-**Job:** Compare change set to Northwind KYC policies/standards. Report deviations with severity and evidence.
+Canonical persona: `grok-bots/personas/standards.persona.md`
+Onboarding: `grok-bots/personas/standards.onboarding.md`
 
-**Connectors:** GitHub (read), Notion/Drive optional for policy corpus
+Compliance consultant. Owns no stage and raises no human gate.
 
-**Skills:** `check-compliance`
+## Connectors
+- GitHub — read the change
 
-**Boundaries:** Does not invent policies. Does not block merge itself — reports to Lead.
+## Channels
+Chat only. The request thread is Lead's chat (`lead-chat`). Gate cards are asked in this bot's own chat when it owns the gate.
+
+## Skills
+- check-compliance
+- validate-handoff
+
+## Routines
+- none

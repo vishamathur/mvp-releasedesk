@@ -31,7 +31,7 @@ npm run typecheck -w @releasedesk/core
 | Feature sign-off | `feature-signoff` | Per-feature developer checklist for AI-produced code (`feature_review`) |
 | Mandatory gates | `gates` | Security always required on every change (`MANDATORY_ANALYSIS_ROLES`, `evaluateSecurityParticipation`) |
 | AI Security frameworks | `ai-security-frameworks` | MITRE ATLAS + OWASP LLM Top 10 hard fails; open-for-review PR merge block (drafts exempt); human waivers |
-| AI Red Teaming providers | `ai-red-teaming` | `AiRedTeamingProvider` (`runProbes` / `healthCheck`); `custom` \| `zscaler`; collapsed gate + non-blocking remediation side-queue; per-iteration **red_team \| security** hard approval |
+| AI Red Teaming | `ai-red-teaming` | Only `grok-guardrails`. Collapsed gate still requires a human `red_team` or `security` sign-off. |
 
 ## Per-agent API keys (no shared fallback)
 
@@ -121,13 +121,11 @@ Typical plug-in shape for a future runner:
 3. Agent returns a typed `*AgentOutput` (evidence + optional `mocksUsed`).
 4. Orchestrator writes evidence / complete / fail on the store (audit trail updates automatically).
 
-## Mocked integrations
+## Credentials
 
-When credentials or APIs are unavailable:
+A missing exclusive key throws. Shared `XAI_API_KEY`, `GROK_API_KEY`, and `CURSOR_API_KEY` are not substitutes.
 
-- Set `mock: { mocked: true, mockLabel: "<integration>", note?: "MOCK: …" }` on evidence.
-- Include the same meta in agent `mocksUsed`.
-- Prefer the `MOCK:` prefix on any human-readable fabricated summary (same convention as the KYC app).
+`mock.ts` formats the `MOCK:` prefix used by the KYC demo notes. It does not stand in for a live API.
 
 ## Layout
 

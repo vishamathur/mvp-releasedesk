@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MissingCredentialError } from "@releasedesk/core";
 import {
   describeGrokIntelKeyStatus,
   runGrokReleaseIntel,
@@ -6,34 +7,22 @@ import {
 } from "./grok-release-intel";
 
 describe("runGrokReleaseIntel", () => {
-  it("returns MOCK without exclusive Lead Grok key (ignores shared XAI/GROK)", async () => {
-    const result = await runGrokReleaseIntel(
-      {
-        repository: "vishamathur/mvp-releasedesk",
-        goal: "KYC release readiness",
-        findings: [
-          { source: "security", text: "TLS gap", severity: "high" },
-          { source: "standards", text: "retention deviation", severity: "medium" },
-        ],
-      },
-      {
-        env: {
-          XAI_API_KEY: "shared-must-not-use",
-          GROK_API_KEY: "shared-must-not-use",
+  it("throws without the exclusive Lead key and ignores shared XAI/GROK keys", async () => {
+    await expect(
+      runGrokReleaseIntel(
+        {
+          repository: "vishamathur/mvp-releasedesk",
+          goal: "KYC release readiness",
+          findings: [{ source: "security", text: "TLS gap", severity: "high" }],
         },
-      },
-    );
-
-    expect(result.mocked).toBe(true);
-    expect(result.mode).toBe("mock");
-    expect(result.label).toBe("MOCK");
-    expect(result.keyPresent).toBe(false);
-    expect(result.trustCheck.humanGateStillRequired).toBe(true);
-    expect(result.trustCheck.schemaValid).toBe(true);
-    expect(result.trustCheck.usedSharedFallback).toBe(false);
-    expect(result.trustCheck.keyEnvVar).toBe("RELEASEDESK_GROK_API_KEY_LEAD");
-    expect(result.summarize).toMatch(/MOCK:/);
-    expect(result.classify.category).toBe("security_or_compliance_hold");
+        {
+          env: {
+            XAI_API_KEY: "shared-must-not-use",
+            GROK_API_KEY: "shared-must-not-use",
+          },
+        },
+      ),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
   });
 
   it("parses live classify+summarize when exclusive key + fetch succeed", async () => {
@@ -48,6 +37,8 @@ describe("runGrokReleaseIntel", () => {
                   extract: ["Confirm docs-only delta"],
                   score: { level: "low", rationale: "docs only" },
                   summarize: "Clean wave; human gates still required.",
+                  riskTier: "low",
+                  blockers: [],
                 }),
               },
             },
@@ -76,6 +67,8 @@ describe("runGrokReleaseIntel", () => {
     expect(result.extract).toContain("Confirm docs-only delta");
     expect(result.score.level).toBe("low");
     expect(result.summarize).toContain("human gates");
+    expect(result.riskTier).toBe("low");
+    expect(result.blockers).toEqual([]);
     expect(result.trustCheck.humanGateStillRequired).toBe(true);
     expect(result.trustCheck.noAutoApprove).toBe(true);
   });
@@ -97,7 +90,7 @@ describe("runGrokReleaseIntel", () => {
     });
     expect(absent.keyPresent).toBe(false);
     expect(absent.liveReady).toBe(false);
-    expect(absent.mockUnlessLive).toMatch(/MOCK/);
+    expect(absent.mockUnlessLive).toMatch(/not set/);
 
     const present = describeGrokIntelKeyStatus({
       NODE_ENV: "test",

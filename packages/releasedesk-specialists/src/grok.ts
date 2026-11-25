@@ -1,7 +1,12 @@
 import {
-  createMockMeta,
-  formatMockNote,
+  assertGrokChatEndpoint,
+  assertGrokChatStatus,
+  buildGrokChatCompletionBody,
   GROK_API_KEY_ENV,
+  GROK_CHAT_COMPLETIONS_URL,
+  GROK_REQUEST_TIMEOUT_MS,
+  GrokGuidelineError,
+  MissingCredentialError,
   resolveAgentGrokApiKey,
   type GrokKeyedAgentRole,
   type MockMeta,
@@ -25,6 +30,8 @@ export type GrokClientOptions = {
   endpoint?: string;
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
+  /** Internal id hashed into safety_identifier. Defaults to the agent role. */
+  safetySource?: string;
 };
 
 export function resolveGrokApiKeyForAgent(
@@ -41,7 +48,7 @@ export function resolveGrokApiKey(_env: NodeJS.ProcessEnv = process.env): string
 
 export async function grokComplete(
   prompt: string,
-  opts: GrokClientOptions & { fallback: string } = { fallback: "" },
+  opts: GrokClientOptions = {},
 ): Promise<GrokCompleteResult> {
   const env = opts.env ?? process.env;
   const apiKey =
@@ -49,23 +56,29 @@ export async function grokComplete(
     (opts.agentRole !== undefined ? resolveGrokApiKeyForAgent(opts.agentRole, env) : undefined);
 
   if (!apiKey) {
-    const envHint = opts.agentRole
-      ? `${GROK_API_KEY_ENV[opts.agentRole]} missing for ${opts.agentRole}`
-      : "agentRole required — exclusive RELEASEDESK_GROK_API_KEY_* only";
-    const mock = createMockMeta(
-      "grok-api",
-      `${envHint}; local heuristic (shared XAI_API_KEY / GROK_API_KEY never used)`,
-    );
-    return {
-      text: formatMockNote(opts.fallback || "Grok enrichment skipped (no per-agent API key)"),
-      mocked: true,
-      mock,
-    };
+    const envVar = opts.agentRole
+      ? GROK_API_KEY_ENV[opts.agentRole]
+      : "RELEASEDESK_GROK_API_KEY_*";
+    throw new MissingCredentialError(envVar);
   }
 
-  const endpoint = opts.endpoint ?? "https://api.x.ai/v1/chat/completions";
+  const endpoint = opts.endpoint ?? GROK_CHAT_COMPLETIONS_URL;
+  assertGrokChatEndpoint(endpoint);
   const model = opts.model ?? (env.GROK_MODEL?.trim() || "grok-3");
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const body = buildGrokChatCompletionBody({
+    model,
+    safetySource: opts.safetySource ?? `bot:${opts.agentRole ?? "grok"}`,
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a Release Desk specialist. Reply with concise, evidence-oriented prose only.",
+      },
+      { role: "user", content: prompt },
+    ],
+  });
 
   try {
     const res = await fetchImpl(endpoint, {
@@ -74,49 +87,26 @@ export async function grokComplete(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a Release Desk specialist. Reply with concise, evidence-oriented prose only.",
-          },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.2,
-      }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(GROK_REQUEST_TIMEOUT_MS),
     });
 
+    assertGrokChatStatus(res.status);
     if (!res.ok) {
-      const mock = createMockMeta("grok-api", `Grok HTTP ${res.status}; falling back to local narrative`);
-      return {
-        text: formatMockNote(opts.fallback || `Grok request failed (${res.status})`),
-        mocked: true,
-        mock,
-      };
+      throw new Error(`Grok request failed (${res.status})`);
     }
 
-    const body = (await res.json()) as {
+    const payload = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const text = body.choices?.[0]?.message?.content?.trim();
+    const text = payload.choices?.[0]?.message?.content?.trim();
     if (!text) {
-      const mock = createMockMeta("grok-api", "Empty Grok response; local fallback");
-      return {
-        text: formatMockNote(opts.fallback || "Empty Grok response"),
-        mocked: true,
-        mock,
-      };
+      throw new Error("Empty Grok response");
     }
     return { text, mocked: false };
   } catch (err) {
+    if (err instanceof MissingCredentialError || err instanceof GrokGuidelineError) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    const mock = createMockMeta("grok-api", `Grok error: ${message}`);
-    return {
-      text: formatMockNote(opts.fallback || `Grok error: ${message}`),
-      mocked: true,
-      mock,
-    };
+    throw new Error(`Grok request failed: ${message}`);
   }
 }

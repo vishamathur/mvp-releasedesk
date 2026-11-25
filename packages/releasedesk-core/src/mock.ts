@@ -1,12 +1,8 @@
 import { z } from "zod";
 
 /**
- * Labeling convention for mocked integrations.
- *
- * - Prefer `mocked: true` on structured records.
- * - Human-readable notes / summaries MUST use the `MOCK:` prefix when content
- *   is fabricated or when a real vendor/API was not called.
- * - `mockLabel` is a short machine/stable tag (e.g. `github-api`, `nvd`, `ocr`).
+ * `MOCK:` prefix for the KYC demo notes.
+ * A missing Desk credential throws. This helper does not replace that call.
  */
 export const MOCK_NOTE_PREFIX = "MOCK:" as const;
 

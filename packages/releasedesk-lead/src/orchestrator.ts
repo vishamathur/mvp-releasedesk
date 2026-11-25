@@ -2,7 +2,6 @@ import {
   assertMandatoryAnalysisRoles,
   createAiFrameworkWaiver,
   evaluateSecurityParticipation,
-  formatMockNote,
   LeadAgentOutputSchema,
   listReadyTasks,
   MANDATORY_ANALYSIS_ROLES,
@@ -43,12 +42,10 @@ import {
   type FeatureSignOffItemId,
   type FeatureSignOffRecord,
 } from "./feature-signoff.js";
-import { createDefaultStubRunners } from "./stub-runners.js";
 import { assessReadiness, type ReadinessAssessment } from "./readiness.js";
 import {
   createDmSession,
   receiveDmText,
-  receiveDmVoiceStub,
   replyAsLead,
   type DmSession,
 } from "./dm-interface.js";
@@ -96,7 +93,7 @@ export type StartReleaseCheckInput = {
     releaseTag?: string;
   };
   trigger?: ReleaseCheckTrigger;
-  /** Override default stub runners per role. */
+  /** Real specialist runners. There is no stand-in. */
   runners?: AgentRunnerMap;
   metadata?: Record<string, unknown>;
 };
@@ -119,7 +116,7 @@ export type ReleaseCheckReport = {
 
 export type LeadOrchestratorOptions = {
   store: RunContextStore;
-  /** Defaults to MOCK stub runners for all specialists. */
+  /** Real specialist runners. A missing role throws when that role is dispatched. */
   runners?: AgentRunnerMap;
   /** Max builder → reverify cycles after the analysis wave (default 2 for M6 loops). */
   maxRemediationCycles?: number;
@@ -127,7 +124,7 @@ export type LeadOrchestratorOptions = {
   defaultMaxAttempts?: number;
   /** When false, never schedule builder even if findings recommend it (default true). */
   enableRemediation?: boolean;
-  /** PR workflow client options (MOCK when no GH token). */
+  /** PR workflow client options. A missing GH_TOKEN or GITHUB_TOKEN throws. */
   prClient?: ResolvePrClientOptions;
   /** When false, skip opening/tracking PRs (default true). */
   enablePrWorkflow?: boolean;
@@ -139,6 +136,19 @@ export type LeadOrchestratorOptions = {
  */
 const ANALYSIS_ROLES: SpecialistRole[] = [...MANDATORY_ANALYSIS_ROLES];
 assertMandatoryAnalysisRoles(ANALYSIS_ROLES);
+
+function unsetPrClient(): PrWorkflowClient {
+  const refuse = () => {
+    throw new Error("PR workflow is off. Pass enablePrWorkflow and GH_TOKEN or GITHUB_TOKEN to open a pull request.");
+  };
+  return {
+    mode: "real",
+    openPullRequest: refuse,
+    getPullRequest: refuse,
+    getPullRequestStatus: refuse,
+    mergePullRequest: refuse,
+  };
+}
 
 const ROLE_TASK_NAME: Record<SpecialistRole, string> = {
   change_analyst: "Change analysis",
@@ -159,15 +169,14 @@ export class LeadOrchestrator {
 
   constructor(options: LeadOrchestratorOptions) {
     this.store = options.store;
-    this.runners = {
-      ...createDefaultStubRunners(),
-      ...options.runners,
-    };
+    this.runners = { ...(options.runners ?? {}) } as Record<SpecialistRole, AgentRunner>;
     this.maxRemediationCycles = options.maxRemediationCycles ?? 2;
     this.defaultMaxAttempts = options.defaultMaxAttempts ?? 2;
     this.enableRemediation = options.enableRemediation ?? true;
-    this.enablePrWorkflow = options.enablePrWorkflow ?? true;
-    this.prClient = resolvePrClient(options.prClient);
+    this.enablePrWorkflow = options.enablePrWorkflow ?? false;
+    this.prClient = this.enablePrWorkflow
+      ? resolvePrClient(options.prClient)
+      : (options.prClient?.client ?? unsetPrClient());
     this.dmSession = createDmSession();
   }
 
@@ -177,10 +186,9 @@ export class LeadOrchestrator {
     return this.dmSession;
   }
 
-  /** Voice is MOCK-only in M3. */
-  handleDmVoice(transcript: string): DmSession {
-    this.dmSession = receiveDmVoiceStub(this.dmSession, transcript);
-    return this.dmSession;
+  /** Voice is not a Release Desk channel. */
+  handleDmVoice(_transcript: string): DmSession {
+    throw new Error("Voice is not available. Use text.");
   }
 
   getDmSession(): DmSession {
@@ -271,16 +279,6 @@ export class LeadOrchestrator {
         prClientMode: this.prClient.mode,
       },
     });
-
-    if (this.prClient.mode === "mock") {
-      await this.store.appendAudit({
-        runId: run.runId,
-        action: "mock.integration_used",
-        message: describePrClientMode(this.prClient),
-        actor: { kind: "system" },
-        details: { integration: "github-pr", mode: "mock" },
-      });
-    }
 
     // Wave 1: mandatory analysis specialists in parallel (Security always included).
     const delegations: LeadDelegation[] = [];
@@ -1231,7 +1229,6 @@ export class LeadOrchestrator {
             "**Never auto-merged.** Human merge + release approval gates required.",
             "",
             `Builder task: ${builderTaskId}`,
-            ...(this.prClient.mode === "mock" ? [formatMockNote("MOCK GitHub PR")] : []),
           ].join("\n"),
           head: proposedBranch,
           base: baseBranch,
@@ -1465,6 +1462,9 @@ export class LeadOrchestrator {
           const snapshot = await this.requireRun(runId);
           const attempt = started.retry?.attempt ?? 0;
           const runner = runners[role];
+          if (!runner) {
+            throw new Error(`No specialist runner for ${role}. There is no stand-in runner.`);
+          }
           let result: AgentRunResult;
           try {
             result = await runner({
@@ -1479,7 +1479,7 @@ export class LeadOrchestrator {
             const message = err instanceof Error ? err.message : String(err);
             result = {
               status: "failed",
-              summary: formatMockNote(`Runner threw: ${message}`),
+              summary: `Runner threw: ${message}`,
               payload: { agentRole: role },
               failure: {
                 code: "runner_exception",

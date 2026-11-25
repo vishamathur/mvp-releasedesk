@@ -15,7 +15,6 @@ export async function GET() {
     count: bots.length,
     createdCount: createdInApp.length,
     bots,
-    createScript: "npm run create:grok-bots",
     note:
       "grokBotAppAgentId values are Grok Bot app teammate ids (host grok-bot-app), not xAI Agents API ids. Desk does not call api.x.ai with them. Exclusive RELEASEDESK_GROK_API_KEY_* keys authenticate application chat-completions calls and are unset here when missing.",
     envVars: [

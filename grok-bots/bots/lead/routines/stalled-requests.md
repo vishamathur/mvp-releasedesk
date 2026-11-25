@@ -1,0 +1,2 @@
+Routine: stalled-requests (every 15 min while pid.index is not empty; 4 runs an hour, well under the 200-per-routine cap)
+For each open request: status open and no message for the current stage for 20 min = resend the last stage-handoff once (same JSON) and note it in pid.state; 40 min = status blocked, tell Vishal which bot and stage. Status ready-for-human = do nothing (the gate owner is waiting on Vishal); after 24 h remind Vishal once which bot holds the card. Never resend a gate stage handoff while that bot is waiting on Vishal.

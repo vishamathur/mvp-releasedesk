@@ -1,59 +1,71 @@
 # Slide 2 — Architecture / workflow
 
-**Title:** Release Desk — Grok Bot → Cursor → Grok API
+**Title:** Release Desk — seven Grok Bot teammates, chat only
 
-**One-liner:** Lead + specialists hand off asynchronously; Builder launches Cursor; shipped Desk code calls Grok API; iteration gate needs red team **or** security before humans merge/release.
+**One-liner:** Intake sends public requests to Lead. Lead, Change Analyst, Standards, Security, and Builder hand work with handoff.v1. Lead sends public-status back to Intake. Release Desk Log records every copy. Builder launches Cursor. Shipped Desk code calls the Grok API. The iteration gate still needs red team or security before Vishal merges.
 
-## Diagram (paste into Mermaid)
+## Diagram
+
+The handover sequence is the picture, not a second Mermaid.
+
+![Release Desk handover](./sdlc/release-desk-handover-diagram.png)
+
+Source: `docs/sdlc/release-desk-handover-diagram.svg`, rendered by `scripts/render_handover_diagram.py`.
+
+## Bot-native shape
 
 ```mermaid
 flowchart TB
-  subgraph Humans["Human handoffs"]
-    Trigger["Desk trigger / intake"]
-    Gate["Iteration gate<br/>red_team OR security"]
-    MergeRel["Merge + release gates"]
+  subgraph Chat["Chat only"]
+    Vishal["Vishal"]
+    Thread["Lead chat · lead-chat"]
   end
 
-  subgraph GrokBots["Grok Bots"]
-    Lead["Lead — Release Desk"]
-    CA["Change Analyst"]
-    Std["Standards"]
-    Sec["Security · deep dive"]
-    Bld["Builder"]
+  subgraph Teammates["Grok Bot teammates"]
+    Intake["Intake · public front door"]
+    Lead["Lead · sole pid.state writer"]
+    CA["Change Analyst · finance and proposal gates"]
+    Std["Standards · consult only"]
+    Sec["Security · iteration gate"]
+    Bld["Builder · build and release gate"]
   end
+
+  Log["Release Desk Log · append-only JSONL"]
+  Desk["Desk /handoff · read only"]
 
   subgraph CursorPath["Cursor cloud agent"]
     Rules["AGENTS.md · rules · skills"]
-    Ship["Ships Desk Grok intel path"]
+    Ship["Ships grok-release-intel.ts"]
   end
 
   subgraph GrokAPI["Grok API · shipped code"]
-    Intel["classify · extract · score · summarize"]
-    Trust["trustCheck · schemaValid<br/>humanGateStillRequired"]
+    Intel["classify · summarize · riskTier · blockers"]
+    Trust["trustCheck · humanGateStillRequired · noAutoApprove"]
   end
 
-  Trigger --> Lead
-  Lead --> CA & Std & Sec
-  Sec -.->|blocker| Bld
-  Bld --> Rules
-  Rules --> Ship
-  Ship --> Intel
-  Intel --> Trust
-  Trust --> Lead
-  Lead --> Gate
-  Gate -->|open| MergeRel
-  Gate -->|blocked| Sec
+  Vishal --> Thread --> Lead
+  Intake -->|"intake-request"| Lead
+  Lead -->|"public-status"| Intake
+  Lead --> CA & Std & Sec & Bld
+  CA & Sec & Bld --> Vishal
+  Intake & Lead & CA & Std & Sec & Bld -.->|cc, priority false| Log
+  Log --> Desk
+  Bld --> Rules --> Ship --> Intel --> Trust
+  Trust --> Bld
+  Bld --> Lead
 ```
 
-## Callouts (say while tracing)
+## Callouts
 
-1. **Why each bot** — Lead owns run; CA = diff/impact; Standards = policy evidence; Security = release blockers; Builder = only bot that launches Cursor.
-2. **Why Cursor** — real repo change under our rules/skills, not chat theater.
-3. **Why this Grok API** — structured classify/extract/score/summarize on release findings; `trustCheck` keeps humans in the loop.
-4. **Proof gate** — `evaluateIterationProceedGate` (PR #14 spine).
+1. **Seven teammates.** Intake is the public front door and talks only to Lead. Five move the SDLC work. Release Desk Log only records it and never routes or approves.
+2. **Gate owner asks.** Change Analyst raises proposal and finance. Security raises security-compliance, which is the `red_team|security` iteration gate. Builder raises release. Lead does not ask Vishal for a gate.
+3. **Chat only.** The request thread is Lead's chat (`lead-chat`). There is no other channel.
+4. **Why Cursor.** Builder launches a cloud agent under AGENTS.md, the Grok rule, and `ship-grok-release-intel`. The agent opens a pull request and does not merge.
+5. **Why this Grok API.** `grok-release-intel.ts` returns classify, summarize, `riskTier`, and `blockers`. Builder copies that into `build-result.testsSummary`. Security and Lead use `riskTier` and blockers at the test gate. `trustCheck.humanGateStillRequired` and `noAutoApprove` stay true.
+6. **Proof gate.** `evaluateIterationProceedGate` still needs a human `red_team` or `security` signature. ATLAS/OWASP still blocks a review-ready merge.
 
 ## Source files
 
-- Mermaid above (challenge-shaped)
-- Gate detail: [demo-architecture-diagram.md](./demo-architecture-diagram.md) (PR #14 collapsed gate)
+- Diagram: [sdlc/release-desk-handover-diagram.png](./sdlc/release-desk-handover-diagram.png)
+- Processes: `grok-bots/processes/pid-er.v1.json`, `pid-nc.v1.json` (version 1.1.0)
 - Brief slide wording: [spacexai-two-slides.md](./spacexai-two-slides.md)

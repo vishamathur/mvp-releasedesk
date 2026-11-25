@@ -27,13 +27,11 @@ The five bots were created in the **Grok Bot app** on 2026-11-18 as teammates. T
 | Security | Security | `c325bdd3-28df-419e-9824-4ede1338afc9` |
 | Builder | Builder | `c932bf04-d05e-4809-a5cc-64afa9fb0894` |
 
-Desk (`/agents`, `/mvp`, the Grok Bots panel, and `GET /api/bots`) reads this registry and shows the bots as **created**. Nothing in Desk calls `api.x.ai` with these ids. App bots do not take API keys.
-
-`npm run create:grok-bots` leaves these rows alone. It does not POST the app agent ids to `https://api.x.ai/v1/agents`.
+Desk (`/agents`, the Grok Bots panel, and `GET /api/bots`) reads this registry and shows the bots as **created**. Nothing in Desk calls `api.x.ai` with these ids. App bots do not take API keys.
 
 ## API keys (application code, not the Grok Bot app)
 
-Each bot's application calls use **only** that bot's exclusive env var. Shared `XAI_API_KEY` / `GROK_API_KEY` are never fallbacks. A missing key is a labeled **MOCK** for that bot.
+Each bot's application calls use **only** that bot's exclusive env var. Shared `XAI_API_KEY` / `GROK_API_KEY` are never fallbacks. There is no mock mode. A missing key is a configuration error for that bot.
 
 | Bot | Definition | Exclusive key | Reads it from |
 | --- | --- | --- | --- |
@@ -51,7 +49,7 @@ Cursor Cloud Agents under Builder use their own keys (no shared `CURSOR_API_KEY`
 | Testing | `RELEASEDESK_CURSOR_API_KEY_TESTING` |
 | Review | `RELEASEDESK_CURSOR_API_KEY_REVIEW` |
 
-Live Coding dispatch also needs `RELEASEDESK_CLOUD_CLIENT=real`.
+A live Cursor dispatch uses the exclusive key for Coding, Testing, or Review. There is no mock client.
 
 ### Where to set the keys
 
@@ -65,21 +63,6 @@ Names and empty values are listed in `.env.example`.
 ## Definitions (source of truth for persona / skills / routines)
 
 Local JSON definitions in `grok-bots/definitions/` and markdown packs in `grok-bots/bots/` describe how Desk opens each bot. The Grok Bot app ids above are the live teammates; the JSON files are not a second set of API agents.
-
-## Optional xAI Agents API script
-
-```bash
-# Dry run (no HTTP). App teammates are preserved either way.
-npm run create:grok-bots -- --dry-run
-
-# Attempts POST /v1/agents only for definitions that are not already
-# created_in_grok_bot_app. Does not send grokBotAppAgentId.
-npm run create:grok-bots
-```
-
-Optional: `RELEASEDESK_GROK_BOT_API_BASE` (default `https://api.x.ai/v1`), `RELEASEDESK_GROK_BOT_CREATE_PATH` (default `/agents`).
-
-If the team/key lacks Agents entitlement the script records an xAI error on **non-app** rows only. The five app teammates stay `created_in_grok_bot_app` with `liveBotId: null`.
 
 ## Desk
 

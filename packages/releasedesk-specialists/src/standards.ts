@@ -105,28 +105,21 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
       },
     });
 
-    if (!options.skipGrok && deviations.length > 0) {
-      const grok = await grokComplete(
-        `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
-        {
-          ...options.grok,
-          agentRole: options.grok?.agentRole ?? "standards",
-          fallback: deviations.map((d) => d.summary).join("; "),
-        },
-      );
-      if (grok.mocked && grok.mock) mocksUsed.push(grok.mock);
-      if (!grok.mocked) {
-        evidence.push({
-          kind: "finding",
-          title: "Grok standards narrative",
-          summary: grok.text.slice(0, 2000),
-          source: "standards",
-        });
-      }
-    }
+    const grok = await grokComplete(
+      `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
+      {
+        ...options.grok,
+        agentRole: options.grok?.agentRole ?? "standards",
+        safetySource: inv.runId,
+      },
+    );
+    evidence.push({
+      kind: "finding",
+      title: "Grok standards narrative",
+      summary: grok.text.slice(0, 2000),
+      source: "standards",
+    });
 
-    // Fixture corpus itself is real in-repo content — not mocked.
-    // Only mark MOCK when we fabricated screening labels elsewhere.
     const compliant = deviations.length === 0;
     const summary = compliant
       ? `Standards check complete — compliant (${policies.map((p) => p.id).join(", ")})`

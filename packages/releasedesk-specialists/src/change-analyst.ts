@@ -1,7 +1,4 @@
-import { readFile } from "node:fs/promises";
 import {
-  createMockMeta,
-  formatMockNote,
   nowIso,
   ChangeAnalystOutputSchema,
   type CreateEvidenceInput,
@@ -16,7 +13,7 @@ import {
 } from "./git-diff.js";
 import { grokComplete } from "./grok.js";
 import type { SpecialistRunnerOptions } from "./options.js";
-import { defaultWorkspaceRoot, releaseNotesFixturePath } from "./paths.js";
+import { defaultWorkspaceRoot } from "./paths.js";
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -44,42 +41,10 @@ export function createChangeAnalystRunner(options: SpecialistRunnerOptions = {})
     let diff = await collectLocalDiff({ cwd: workspaceRoot, baseRef, headRef });
     mocksUsed.push(...diff.mocksUsed);
 
-    let usedFixtureNotes = false;
     if (diff.files.length === 0) {
-      usedFixtureNotes = true;
-      const notesPath = options.releaseNotesPath ?? releaseNotesFixturePath();
-      let fixtureBody = "";
-      try {
-        fixtureBody = await readFile(notesPath, "utf8");
-      } catch {
-        fixtureBody = "Fixture release notes unavailable.";
-      }
-      const mock = createMockMeta(
-        "release-notes-fixture",
-        "No git name-status entries; loaded sample release notes fixture",
+      throw new Error(
+        `No git changes between ${baseRef} and ${headRef}. Refusing to invent a change set.`,
       );
-      mocksUsed.push(mock);
-      evidence.push({
-        kind: "artifact",
-        title: "Sample release notes fixture",
-        summary: formatMockNote("Loaded fixtures/release-notes/sample-release-notes.md"),
-        source: "change_analyst",
-        uri: notesPath,
-        mock,
-        data: { preview: fixtureBody.slice(0, 500) },
-      });
-
-      // Synthesize findings from focus paths / known layout when git is empty.
-      const syntheticPaths =
-        focusPaths.length > 0
-          ? focusPaths
-          : ["apps/kyc", "packages/releasedesk-core", "packages/releasedesk-lead"];
-      diff = {
-        ...diff,
-        files: syntheticPaths.map((p) => ({ status: "M" as const, path: p })),
-        source: "fixture",
-        mocked: true,
-      };
     }
 
     const findings = diff.files
@@ -94,10 +59,7 @@ export function createChangeAnalystRunner(options: SpecialistRunnerOptions = {})
           path,
           changeType: mapChangeType(f.status),
           impact,
-          summary:
-            diff.source === "git"
-              ? `${mapChangeType(f.status)} ${path} (impact ${impact})`
-              : formatMockNote(`${mapChangeType(f.status)} ${path} from fixture synthesis`),
+          summary: `${mapChangeType(f.status)} ${path} (impact ${impact})`,
         };
       });
 
@@ -107,10 +69,7 @@ export function createChangeAnalystRunner(options: SpecialistRunnerOptions = {})
     evidence.push({
       kind: "diff",
       title: `Changes ${baseRef}...${headRef}`,
-      summary:
-        diff.source === "git"
-          ? `Inspected ${findings.length} path(s), ${commitsReviewed} commit(s) via local git`
-          : formatMockNote(`Fixture/synthetic change set: ${findings.length} path(s)`),
+      summary: `Inspected ${findings.length} path(s), ${commitsReviewed} commit(s) via local git`,
       source: "change_analyst",
       data: {
         repository,
@@ -120,9 +79,6 @@ export function createChangeAnalystRunner(options: SpecialistRunnerOptions = {})
         commits: diff.commits.slice(0, 50),
         source: diff.source,
       },
-      ...(diff.mocked
-        ? { mock: createMockMeta("git-diff", "Partial or fixture-backed change analysis") }
-        : {}),
     });
 
     const localNotes = [
@@ -140,36 +96,20 @@ export function createChangeAnalystRunner(options: SpecialistRunnerOptions = {})
             .slice(0, 15)
             .map((c) => `- ${c.sha} ${c.subject}`)
             .join("\n")}`
-        : usedFixtureNotes
-          ? "### Notes\nDerived from fixture release notes because git range was empty or unavailable."
-          : "### Notes\nNo commits in range.",
+        : "### Notes\nNo commits in range.",
     ].join("\n");
 
-    let releaseNotesDraft = localNotes;
-    if (!options.skipGrok) {
-      const grok = await grokComplete(
-        `Draft concise release notes for ${repository} (${baseRef}...${headRef}). Findings JSON: ${JSON.stringify(findings.slice(0, 30))}`,
-        {
-          ...options.grok,
-          agentRole: options.grok?.agentRole ?? "change_analyst",
-          fallback: localNotes,
-        },
-      );
-      if (grok.mocked && grok.mock) mocksUsed.push(grok.mock);
-      // Prefer local structured draft; append Grok narrative only when live.
-      if (!grok.mocked) {
-        releaseNotesDraft = `${localNotes}\n\n### Grok narrative\n${grok.text}`;
-      } else {
-        releaseNotesDraft = localNotes;
-      }
-    }
+    const grok = await grokComplete(
+      `Draft concise release notes for ${repository} (${baseRef}...${headRef}). Findings JSON: ${JSON.stringify(findings.slice(0, 30))}`,
+      {
+        ...options.grok,
+        agentRole: options.grok?.agentRole ?? "change_analyst",
+        safetySource: inv.runId,
+      },
+    );
+    const releaseNotesDraft = `${localNotes}\n\n### Grok narrative\n${grok.text}`;
 
-    const summary =
-      diff.source === "git"
-        ? `Change analysis complete: ${findings.length} path(s), impact ${overallImpact}`
-        : formatMockNote(
-            `Change analysis complete via fixtures/synthesis: ${findings.length} path(s), impact ${overallImpact}`,
-          );
+    const summary = `Change analysis complete: ${findings.length} path(s), impact ${overallImpact}`;
 
     const payload = ChangeAnalystOutputSchema.parse({
       runId: inv.runId,

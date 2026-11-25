@@ -1,9 +1,20 @@
-# Security Agent (Grok Bot)
+# Security
 
-**Job:** Mandatory on every change. Correlate advisories / risks to KYC components. Emit release-blocking findings. Feeds the per-iteration gate (`red_team` OR `security` sign-off) and ATLAS/OWASP merge eligibility.
+Canonical persona: `grok-bots/personas/security.persona.md`
+Onboarding: `grok-bots/personas/security.onboarding.md`
 
-**Connectors:** GitHub
+Owns security-compliance-approval and raises that human gate. Mandatory on every request. Iteration gate stays red_team|security.
 
-**Skills:** `security-review`
+## Connectors
+- GitHub — read the change and the pull request diff
 
-**Boundaries:** Never auto-waive. Draft PRs may be exempt from merge hard-block; review-ready are not.
+## Channels
+Chat only. The request thread is Lead's chat (`lead-chat`). Gate cards are asked in this bot's own chat when it owns the gate.
+
+## Skills
+- raise-human-gate
+- security-review
+- validate-handoff
+
+## Routines
+- pending-consults

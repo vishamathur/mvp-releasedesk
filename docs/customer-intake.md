@@ -24,4 +24,4 @@ Unapproved or partially approved items **must not** enter Lead/SDLC.
 - `@releasedesk/lead` — `CustomerIntake` (enqueue, dual approve, reorder+sign-off, `startLeadFromApprovedQueueItem`)  
 - Release Desk UI — intake list with per-customer filter, cost beside each item, approve/reject controls  
 
-MOCK billing source/currency when no real billing system is configured.
+A cost estimate requires an explicit `source` of `billing_system`. Omitting it throws. Currency defaults to USD when it is not passed.

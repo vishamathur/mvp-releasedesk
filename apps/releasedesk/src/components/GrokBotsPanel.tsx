@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MockLabel } from "./MockLabel";
-
 type BotPack = {
   id: string;
   displayName: string;
@@ -26,7 +24,7 @@ type BotPack = {
   memoryNotes: string[];
 };
 
-const ORDER = ["lead", "change-analyst", "standards", "security", "builder"];
+const ORDER = ["intake", "lead", "change-analyst", "standards", "security", "builder"];
 
 export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string }) {
   const [bots, setBots] = useState<BotPack[]>([]);
@@ -62,7 +60,7 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
         <div>
           <h2 className="font-display text-2xl text-rd-ink">Grok Bots</h2>
           <p className="mt-2 max-w-2xl text-sm text-rd-forest/70">
-            Lead · CA · Standards · Security · Builder — open persona, skills, routines, connectors.
+            Intake · Lead · CA · Standards · Security · Builder — open persona, skills, routines, connectors.
             {allCreatedInApp
               ? " Created in the Grok Bot app. Those agent ids are not sent to the xAI API."
               : ""}
@@ -73,7 +71,9 @@ export function GrokBotsPanel({ deepDiveId = "security" }: { deepDiveId?: string
             Created in Grok Bot app
           </span>
         ) : (
-          <MockLabel>defs · no fake live IDs</MockLabel>
+          <span className="rounded-sm bg-rd-fog px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-rd-forest">
+            defs · live ids stay null
+          </span>
         )}
       </div>
 
