@@ -142,10 +142,12 @@ t('assess: explicit lines from Lead bypass Grok', function () use ($cfg) {
     ok($a['source'] === 'explicit-lines' && $a['estimate']['totalInr'] === 220000, json_encode([$a['source'], $a['estimate']['totalInr']]));
 });
 $base = ['route' => 'er', 'pid' => 'PID-ER', 'catalogueOptionId' => 'ER-KYC-LABELS', 'addOns' => [],
-    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'CUST-1042', 'projectRef' => 'PRJ-ONB-7',
+    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'cust_1042', 'projectRef' => 'PRJ-ONB-7',
     'changeType' => 'enhancement', 'title' => 'Rename two labels', 'description' => 'Rename two labels on the onboarding screen for clarity.', 'urgency' => 'standard', 'consent' => true];
 t('validation: valid ER passes; bad ids/date/budget/route caught', function () use ($cfg, $base) {
     ok(intake_validate($base, $cfg)[0] === [], json_encode(intake_validate($base, $cfg)[0]));
+    ok(in_array('customerId', intake_validate(['customerId' => 'CUST-1042'] + $base, $cfg)[0], true), 'hyphenated customer id');
+    ok(intake_validate(['customerId' => 'cust_northwind'] + $base, $cfg)[0] === [], 'portfolio customer id');
     $e = intake_validate(['customerId' => 'bad id with spaces', 'projectRef' => '', 'desiredBy' => '2026-02-30', 'customerBudgetInr' => 'lots', 'urgency' => 'asap'] + $base, $cfg)[0];
     sort($e); ok($e === ['customerBudgetInr', 'customerId', 'desiredBy', 'projectRef', 'urgency'], json_encode($e));
     ok(in_array('route', intake_validate(['route' => 'x'] + $base, $cfg)[0], true), 'route');

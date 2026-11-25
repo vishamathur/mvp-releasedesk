@@ -13,6 +13,8 @@ const HANDOFF_WORK_OWNER = ['intake' => 'lead', 'customer-onboarding' => 'lead',
 const HANDOFF_GATE_OWNER = ['finance-approval' => 'change-analyst', 'proposal' => 'change-analyst', 'security-compliance-approval' => 'security', 'release-gate' => 'builder'];
 
 const INTAKE_ID_RE = '/^[A-Za-z0-9][A-Za-z0-9._\/-]{1,39}$/';
+/** Canonical customerId. Same rule as CustomerIdSchema in @releasedesk/core. */
+const CUSTOMER_ID_RE = '/^cust_[a-z0-9][a-z0-9_-]*$/i';
 
 /** Validates a visitor submission. Returns [errors[], cleanData]. */
 function intake_validate(array $b, array $cfg): array {
@@ -26,7 +28,12 @@ function intake_validate(array $b, array $cfg): array {
     $req('contactName', 2, 100); $req('email', 5, 254); $req('company', 1, 120);
     if ($d['email'] !== '' && !filter_var($d['email'], FILTER_VALIDATE_EMAIL)) $e[] = 'email';
     if ($route === 'er') {
-        foreach (['customerId', 'projectRef'] as $k) { $v = app_clean($b[$k] ?? '', 41); if (!preg_match(INTAKE_ID_RE, $v)) $e[] = $k; $d[$k] = $v; }
+        $cid = app_clean($b['customerId'] ?? '', 41);
+        if (!preg_match(CUSTOMER_ID_RE, $cid)) $e[] = 'customerId';
+        $d['customerId'] = $cid;
+        $pref = app_clean($b['projectRef'] ?? '', 41);
+        if (!preg_match(INTAKE_ID_RE, $pref)) $e[] = 'projectRef';
+        $d['projectRef'] = $pref;
         $ct = $b['changeType'] ?? ''; if (!in_array($ct, ['enhancement', 'defect', 'regulatory'], true)) $e[] = 'changeType'; $d['changeType'] = $ct;
         $req('title', 5, 150); $req('description', 20, 4000);
         $by = app_clean($b['desiredBy'] ?? '', 10);

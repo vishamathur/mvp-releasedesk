@@ -4,6 +4,8 @@ Two entry options (New customer → PID-NC, Enhancement Request acceptance → P
 an EXAMPLE service catalogue, a finance estimation model (deterministic catalogue math + Grok recommendation), and a
 two-way relay with Release Desk Lead. See `docs/intake/lead-integration.md`.
 
+Enhancement requests ask for a customer id in the canonical `cust_<slug>` form (for example `cust_1042`), matching `CustomerIdSchema` in `@releasedesk/core`.
+
 ## Upload map
 | Local | Server |
 |---|---|

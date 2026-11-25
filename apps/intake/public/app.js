@@ -8,7 +8,7 @@
     const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     return [r, await r.json().catch(() => ({}))];
   };
-  const LABELS = { contactName: "name", email: "email", company: "company", customerId: "customer ID", projectRef: "project reference",
+  const LABELS = { contactName: "name", email: "email", company: "company", customerId: "customer ID (cust_1042)", projectRef: "project reference",
     changeType: "change type", legalName: "legal name", jurisdiction: "jurisdiction", intendedProduct: "intended product", sponsor: "sponsor",
     title: "title", description: "description (20+ characters)", urgency: "urgency", desiredBy: "needed-by date", customerBudgetInr: "budget",
     artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
