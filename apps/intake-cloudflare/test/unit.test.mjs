@@ -1,0 +1,211 @@
+// Port of apps/intake/tests/unit-tests.php. Same fixtures and expected values. No network.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import * as W from "../src/worker.mjs";
+import { PHP_APP } from "./helpers.mjs";
+
+const rawCatalogue = () => JSON.parse(readFileSync(join(PHP_APP, "private", "catalogue.example.json"), "utf8"));
+const throwsWith = (fn, pred) => { try { fn(); } catch (e) { return pred(e.message); } return false; };
+const rejectsWith = async (fn, pred) => { try { await fn(); } catch (e) { return pred(e.message); } return false; };
+const cfg = { GROK_API_KEY: "", GROK_MODEL: "grok-4.3", GROK_BASE_URL: "https://api.x.ai/v1", LEAD_BOT_ID: "46e50097-0409-4972-9be0-6ade37563135", PUBLIC_HOST: "intake.vishalmathur.org" };
+
+test("grok body: guidelines, hashed safety id, no stop or n", async () => {
+  const body = await W.grokChatBody({ GROK_MODEL: "grok-4.20-0309-non-reasoning" }, "system", "visitor text", "intake_chat", { type: "object", required: [] }, "REQ-20261122-000123");
+  assert.deepEqual(body.guidelines, W.grokGuidelines());
+  assert.deepEqual(body.guidelines, [
+    { type: "policy", category: "nsfw", behavior: "decline" },
+    { type: "policy", category: "violence", behavior: "decline" },
+    { type: "policy", category: "profanity", behavior: "decline" },
+  ]);
+  assert.equal(body.safety_identifier, createHash("sha256").update("REQ-20261122-000123").digest("hex"));
+  assert.ok(!("stop" in body) && !("n" in body));
+  assert.ok(!body.safety_identifier.includes("REQ-"));
+  assert.equal(body.response_format.type, "json_schema");
+  assert.equal(body.response_format.json_schema.strict, true);
+  assert.equal(body.temperature, 0.2);
+  assert.equal(body.max_tokens, 1200);
+  assert.ok(await rejectsWith(() => W.grokChatBody({ GROK_MODEL: "grok-4.20-multi-agent" }, "s", "u", "n", { type: "object" }, "REQ-1"), (m) => m.includes("guidelines")), "multi-agent");
+  assert.ok(await rejectsWith(() => W.grokSafetyIdentifier("   "), () => true), "empty id");
+  assert.ok(await rejectsWith(() => W.grokChatBody({}, "s", "u", "n", { type: "object" }, "REQ-1"), (m) => m.includes("GROK_MODEL is not set")), "model");
+  assert.equal(W.grokChatUrl({ GROK_BASE_URL: "https://api.x.ai/v1/" }), "https://api.x.ai/v1/chat/completions");
+  assert.ok(throwsWith(() => W.grokChatUrl({ GROK_BASE_URL: "https://example.com/v1" }), (m) => m.includes("https://api.x.ai")), "base url");
+});
+
+test("catalogue: EXAMPLE services load and validate", () => {
+  const c = W.catalogueLoad();
+  assert.equal(Object.keys(c.byId).length, 13);
+  assert.ok(c.byId["SVC-WEB"] && c.byId["SVC-AI"]);
+  assert.ok(c.label.includes("EXAMPLE DATA - illustrative prices only"));
+  assert.ok(c.optionById["ER-KYC-LABELS"] && c.optionById["NC-KYC"]);
+  let raw = rawCatalogue(); raw.enhancements[0].options[0].billOfMaterials[0].serviceId = "SVC-NOPE";
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m.includes("catalogue_unknown_service")), "unknown service");
+  raw = rawCatalogue(); raw.enhancements[0].options[0].billOfMaterials[0].qty = 0;
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m.includes("catalogue_bad_qty")), "qty");
+  raw = rawCatalogue(); raw.newApplications[0].id = "SVC-KYC";
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m.includes("catalogue_duplicate_id")), "duplicate");
+  raw = rawCatalogue();
+  raw.services.push({ id: "SVC-CMS", name: "CMS setup", description: "A small content site.", unit: "site", unitPriceInr: 90000, effortDays: 5, riskMultiplier: 1.0 });
+  raw.enhancements[0].options.push({ id: "ER-KYC-WEB", name: "KYC landing page", description: "A landing page on the KYC app.", targetServiceId: "SVC-CMS", billOfMaterials: [{ serviceId: "SVC-CMS", qty: 1 }, { serviceId: "SVC-REL", qty: 1 }] });
+  raw.enhancements.push({ id: "APP-LATER", name: "Reserved application", description: "A group that can gain options later.", options: [] });
+  const idx = W.catalogueIndex(raw);
+  assert.ok(idx.byId["SVC-CMS"] && idx.optionById["ER-KYC-WEB"]);
+  assert.deepEqual(idx.enhancements[idx.enhancements.length - 1].options, []);
+  raw = rawCatalogue(); raw.enhancements[0].options[0].showcase45 = "yes";
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m === "catalogue_bad_showcase45"), "showcase flag");
+  raw = rawCatalogue(); raw.newApplications[0].grokApi = ["ok", 1];
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m === "catalogue_bad_grokApi"), "grokApi");
+  raw = rawCatalogue(); raw.newApplications[0].demoScript = "two\nlines";
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m === "catalogue_bad_demoScript"), "demoScript");
+  raw = rawCatalogue(); raw.label = "Prices";
+  assert.ok(throwsWith(() => W.catalogueIndex(raw), (m) => m === "catalogue_bad_label"), "label must stay EXAMPLE");
+});
+
+test("catalogue: showcase options price from their bill of materials", () => {
+  const expect = {
+    "SX-HELPDESK-BOT": ["PID-ER", 1286850, ["grok-4.7 chat with guidelines and safety_identifier"]],
+    "SX-LIVE-REVIEW": ["PID-ER", 385000, ["grok-4.7 with web_search, code_execution and structured outputs"]],
+    "SX-LANDING-PAGE": ["PID-NC", 836000, ["grok-4.7 structured output for HTML", "optional grok-imagine-image-2.0 for a hero image"]],
+  };
+  for (const [id, [pid, total, api]] of Object.entries(expect)) {
+    const opt = W.catalogueRequireOption(id);
+    assert.equal(opt.pid, pid, id); assert.equal(opt.showcase45, true, id); assert.deepEqual(opt.grokApi, api, id);
+    assert.equal(typeof opt.demoScript, "string"); assert.ok(!opt.demoScript.includes("\n"));
+    const est = W.financePriceOption(id, [], pid, "standard");
+    assert.equal(est.totalInr, total, id); assert.equal(est.urgency, "standard");
+  }
+});
+
+test("catalogue: BOM pricing, unknown option, pid mismatch", () => {
+  const est = W.financePriceOption("ER-KYC-LABELS", [], "PID-ER", "standard");
+  assert.equal(est.totalInr, 187000); assert.equal(est.subtotalInr, 170000); assert.ok(Math.abs(est.effortDays - 7.0) < 0.01);
+  assert.deepEqual(est.artifactRefs, ["catalogue:ER-KYC-LABELS@example-2026-11"]);
+  assert.equal(W.financePriceOption("NC-KYC", ["ADD-NC-KYC-API"], "PID-NC", "standard").totalInr, 1907850);
+  assert.ok(throwsWith(() => W.financePriceOption("NO-SUCH", [], "PID-ER"), (m) => m.startsWith("Unknown catalogue option")));
+  assert.ok(throwsWith(() => W.financePriceOption("NC-KYC", [], "PID-ER"), (m) => m.includes("not PID-ER")));
+});
+
+test("math: 2x UI-S + 1x REL, standard, high conf = 187,000", () => {
+  const e = W.financeEstimate([{ serviceId: "SVC-UI-S", qty: 2 }, { serviceId: "SVC-REL", qty: 1 }]);
+  assert.equal(e.subtotalInr, 170000); assert.equal(e.contingencyPct, 10); assert.equal(e.totalInr, 187000);
+  assert.deepEqual(e.budgetBandsInr, { low: 159000, expected: 187000, high: 234000 });
+  assert.ok(Math.abs(e.effortDays - 7.0) < 0.01);
+});
+
+test("math: KYC (risk 1.3) critical -> risk + urgency + contingency 20%", () => {
+  const e = W.financeEstimate([{ serviceId: "SVC-KYC", qty: 1 }], "critical");
+  assert.deepEqual([e.subtotalInr, e.contingencyPct, e.totalInr], [845000, 20, 1318200]);
+});
+
+test("math: unknown ids dropped, qty clamped 1..24, low confidence +5%", () => {
+  const e = W.financeEstimate([{ serviceId: "NOPE", qty: 3 }, { serviceId: "SVC-UI-S", qty: 99 }], "standard", "low");
+  assert.equal(e.lines.length, 1); assert.equal(e.lines[0].qty, 24); assert.equal(e.contingencyPct, 15);
+});
+
+test("policy: small ER -> approve-recommended", () => {
+  assert.equal(W.financePolicy("PID-ER", W.financeEstimate([{ serviceId: "SVC-UI-S", qty: 1 }]), "high", null)[0], "approve-recommended");
+});
+
+test("policy: NC always >= review; high risk -> review; over ceiling -> reject; tiny budget -> reject; no lines -> reject", () => {
+  assert.equal(W.financePolicy("PID-NC", W.financeEstimate([{ serviceId: "SVC-UI-S", qty: 1 }]), "high", null)[0], "review");
+  assert.equal(W.financePolicy("PID-ER", W.financeEstimate([{ serviceId: "SVC-REG", qty: 1 }]), "high", null)[0], "review");
+  const ceiling = W.financePolicy("PID-ER", W.financeEstimate([{ serviceId: "SVC-KYC", qty: 10 }]), "high", null);
+  assert.equal(ceiling[0], "reject-suggested");
+  assert.equal(ceiling[1][0], "Estimate exceeds the web-intake ceiling of INR 5,000,000.");
+  assert.equal(W.financePolicy("PID-ER", W.financeEstimate([{ serviceId: "SVC-UI-M", qty: 1 }]), "high", 10000)[0], "reject-suggested");
+  assert.equal(W.financePolicy("PID-ER", W.financeEstimate([]), "high", null)[0], "reject-suggested");
+});
+
+test("assess: missing GROK_API_KEY throws and does not invent a recommendation", async () => {
+  assert.ok(await rejectsWith(() => W.financeAssess({ ...cfg, GROK_API_KEY: "" }, { pid: "PID-NC", text: "new KYC onboarding", urgency: "standard" }), (m) => m.includes("GROK_API_KEY is not set")));
+});
+
+test("assess: explicit lines from Lead bypass Grok", async () => {
+  const a = await W.financeAssess(cfg, { pid: "PID-ER", text: "", lines: [{ serviceId: "SVC-SEC", qty: 1 }] });
+  assert.equal(a.source, "explicit-lines"); assert.equal(a.estimate.totalInr, 220000);
+  assert.equal(a.gate.decidedBy, null); assert.equal(a.gate.status, "pending");
+});
+
+test("assess: the Grok finance prompt fences visitor text and escapes slashes like json_encode", () => {
+  const [system, user] = W.financePrompt("PID-ER", "standard", null, "see https://x.test/a");
+  assert.ok(system.endsWith(W.GROK_UNTRUSTED_RULES));
+  assert.equal(user, '<visitor_input>\n{"pid":"PID-ER","urgency":"standard","statedBudgetInr":null,"request":"see https:\\/\\/x.test\\/a"}\n</visitor_input>');
+});
+
+const base = { route: "er", pid: "PID-ER", catalogueOptionId: "ER-KYC-LABELS", addOns: [],
+  contactName: "Jane Doe", email: "jane@example.com", company: "Acme", customerId: "cust_1042", projectRef: "PRJ-ONB-7",
+  changeType: "enhancement", title: "Rename two labels", description: "Rename two labels on the onboarding screen for clarity.", urgency: "standard", consent: true };
+
+test("validation: valid ER passes; bad ids/date/budget/route caught", () => {
+  assert.deepEqual(W.intakeValidate(base)[0], []);
+  assert.ok(W.intakeValidate({ ...base, customerId: "CUST-1042" })[0].includes("customerId"), "hyphenated customer id");
+  assert.deepEqual(W.intakeValidate({ ...base, customerId: "cust_northwind" })[0], [], "portfolio customer id");
+  const e = W.intakeValidate({ ...base, customerId: "bad id with spaces", projectRef: "", desiredBy: "2026-02-30", customerBudgetInr: "lots", urgency: "asap" })[0];
+  assert.deepEqual([...e].sort(), ["customerBudgetInr", "customerId", "desiredBy", "projectRef", "urgency"]);
+  assert.ok(W.intakeValidate({ ...base, route: "x" })[0].includes("route"));
+  assert.ok(W.intakeValidate({ ...base, catalogueOptionId: "NO-SUCH" })[0].includes("catalogueOptionId"));
+  assert.ok(W.intakeValidate({ ...base, catalogueOptionId: "NC-KYC" })[0].includes("pid"));
+});
+
+test("validation: NC requires legalName/jurisdiction/intendedProduct/sponsor", () => {
+  const e = W.intakeValidate({ ...base, route: "new_customer", pid: "PID-NC", catalogueOptionId: "NC-KYC" })[0];
+  assert.deepEqual([...e].sort(), ["intendedProduct", "jurisdiction", "legalName", "sponsor"]);
+});
+
+test("handoff: proposed handoff passes validate-handoff (ER -> estimation, NC -> discovery)", async () => {
+  for (const [route, [pid, stage, opt]] of Object.entries({ er: ["PID-ER", "estimation", "ER-KYC-LABELS"], new_customer: ["PID-NC", "discovery", "NC-KYC"] })) {
+    const d = W.intakeValidate({ ...base, route, pid, catalogueOptionId: opt, legalName: "Acme Pvt Ltd", jurisdiction: "India", intendedProduct: "Lending", sponsor: "R. Rao, CFO" })[1];
+    const rid = "REQ-20261122-000123";
+    const fin = await W.financeAssess({ ...cfg, GROK_API_KEY: "" }, { pid, text: d.description, urgency: "standard", lines: [{ serviceId: "SVC-UI-S", qty: 1 }] });
+    const card = W.intakeBuildCard(cfg, rid, d, fin, "2026-11-22T12:00:00Z");
+    const h = card.proposedHandoff;
+    assert.deepEqual(W.handoffV1Validate(h, "lead"), []);
+    assert.equal(h.pid, pid); assert.equal(h.stage, stage); assert.equal(h.to, "change-analyst"); assert.equal(h.thread.threadId, "thr_20261122000123");
+    assert.equal(card.to, "lead"); assert.equal(card.leadBotId, "46e50097-0409-4972-9be0-6ade37563135"); assert.equal(card.kind, "intake-card"); assert.ok(!("pidState" in card));
+    assert.ok(h.artifactRefs.includes(`finance:${rid}@preliminary`)); assert.ok(h.summary.includes("INR"));
+    assert.ok(h.summary.includes("INR 49,500 (bands 42,000 / 50,000 / 62,000"), h.summary);
+  }
+});
+
+test("handoff validator: rejects bot approval, non-lead stage-handoff, extra fields, wrong thread", () => {
+  const h = { v: 1, kind: "stage-return", pid: "PID-ER", pidVersion: "1.1.0", requestId: "REQ-20261122-000123", thread: { channel: "lead-chat", threadId: "thr_20261122000123" },
+    from: "change-analyst", to: "lead", stage: "finance-approval", action: "return", summary: "s", artifactRefs: [], memoryKey: "pid.state.REQ-20261122-000123",
+    humanGate: { gate: "finance-approval", status: "approved", decidedBy: "change-analyst", note: "ok" } };
+  assert.ok(W.handoffV1Validate(h, "change-analyst").includes("bot_cannot_approve"));
+  h.humanGate = { gate: "finance-approval", status: "approved", decidedBy: "Vishal Mathur", note: '2026-11-22T18:00:00+05:30 verbatim: "approve"' };
+  assert.deepEqual(W.handoffV1Validate(h, "change-analyst"), []);
+  assert.notDeepEqual(W.handoffV1Validate({ ...h, kind: "stage-handoff", from: "security" }, "security"), []);
+  assert.notDeepEqual(W.handoffV1Validate({ extra: 1, ...h }, "change-analyst"), []);
+  assert.notDeepEqual(W.handoffV1Validate({ ...h, thread: { channel: "#er-intake", threadId: "x" } }, "change-analyst"), []);
+  assert.deepEqual(W.handoffV1Validate({ pidState: [], ...h }, "change-analyst"), ["only_lead_writes_pid_state"]);
+});
+
+test("status: lifecycle transitions", () => {
+  assert.ok(W.statusAllowedTransition("received", "estimating") && W.statusAllowedTransition("estimating", "finance-approval") && W.statusAllowedTransition("build", "security"));
+  assert.ok(!W.statusAllowedTransition("finance-approval", "received") && !W.statusAllowedTransition("done", "build") && !W.statusAllowedTransition("rejected", "received"));
+  assert.ok(W.statusAllowedTransition("security", "rejected"));
+  assert.equal(W.STATUS_FROM_STAGE["test-gate"], "build"); assert.equal(W.STATUS_FROM_STAGE.proposal, "estimating"); assert.equal(W.STATUS_FROM_STAGE["release-gate"], "release");
+});
+
+test("status: Lead update validation (gate owner, approval wording, quote)", () => {
+  const u = { requestId: "REQ-20261122-000123", updateId: "u-0001", from: "lead", stage: "finance-approval", message: "Estimate ready; finance review next.",
+    nextGate: { gate: "finance-approval", owner: "change-analyst" }, quote: { totalInr: 187000, budgetBandsInr: { low: 159000, expected: 187000, high: 234000 }, lines: [{ serviceId: "SVC-UI-S", qty: 2, lineTotalInr: 90000 }] } };
+  const [e, c] = W.statusValidateUpdate(u); assert.deepEqual(e, []); assert.equal(c.status, "finance-approval");
+  assert.deepEqual(W.statusValidateUpdate({ ...u, nextGate: { gate: "finance-approval", owner: "lead" } })[0], ["nextGate"]);
+  assert.notDeepEqual(W.statusValidateUpdate({ ...u, message: "Your request is approved." })[0], []);
+  assert.deepEqual(W.statusValidateUpdate({ ...u, message: "Finance approved by Vishal on 22 Nov." })[0], []);
+  assert.deepEqual(W.statusValidateUpdate({ ...u, from: "change-analyst" })[0], ["from"]);
+});
+
+test("php helpers: trim, round, number_format, (int), is_numeric, app_clean", () => {
+  assert.equal(W.phpTrim("\u00a0 x \n"), "\u00a0 x");
+  assert.equal(W.phpRound(2.5), 3); assert.equal(W.phpRound(-2.5), -3); assert.equal(W.phpRound(1.005, 2), 1.01); assert.equal(W.phpRound(7.05, 1), 7.1);
+  assert.equal(W.numberFormat(1286850), "1,286,850"); assert.equal(W.numberFormat(0), "0");
+  assert.equal(W.phpInt("12abc"), 12); assert.equal(W.phpInt("1e3"), 1000); assert.equal(W.phpInt(2.9), 2); assert.equal(W.phpInt("x"), 0); assert.equal(W.phpInt(true), 1);
+  assert.ok(W.phpIsNumeric(" 12") && W.phpIsNumeric("1e3") && W.phpIsNumeric("12 ") && !W.phpIsNumeric("lots") && !W.phpIsNumeric(true));
+  assert.equal(W.appClean("  a\u202Eb\u0007c  "), "abc");
+  assert.equal(W.appClean(42), "42"); assert.equal(W.appClean(["x"]), ""); assert.equal(W.appClean("😀😀😀", 2), "😀😀");
+  assert.equal(W.appLen("😀a"), 2);
+});

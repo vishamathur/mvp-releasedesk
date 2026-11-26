@@ -1,0 +1,556 @@
+// GENERATED from apps/intake/private/catalogue.example.json by scripts/build.mjs. Do not edit by hand.
+// EXAMPLE DATA - illustrative prices only. test/parity.test.mjs fails if this drifts from the PHP catalogue.
+export const CATALOGUE_RAW = {
+  "label": "EXAMPLE DATA - illustrative prices only, not a quote or offer",
+  "currency": "INR",
+  "taxNote": "Prices exclude GST.",
+  "version": "example-2026-11",
+  "services": [
+    {
+      "id": "SVC-DISC",
+      "name": "Discovery workshop",
+      "description": "Two-day workshop to frame goals, users, constraints and success measures.",
+      "unit": "workshop",
+      "unitPriceInr": 150000,
+      "effortDays": 4,
+      "riskMultiplier": 1
+    },
+    {
+      "id": "SVC-KYC",
+      "name": "KYC onboarding module",
+      "description": "Customer identity checks, document capture and screening hooks for onboarding.",
+      "unit": "module",
+      "unitPriceInr": 650000,
+      "effortDays": 30,
+      "riskMultiplier": 1.3
+    },
+    {
+      "id": "SVC-API",
+      "name": "API integration",
+      "description": "Connect one external or internal system through a documented API.",
+      "unit": "integration",
+      "unitPriceInr": 320000,
+      "effortDays": 15,
+      "riskMultiplier": 1.2
+    },
+    {
+      "id": "SVC-UI-S",
+      "name": "UI change - small",
+      "description": "Copy, label, layout or validation tweak on an existing screen.",
+      "unit": "change",
+      "unitPriceInr": 45000,
+      "effortDays": 2,
+      "riskMultiplier": 1
+    },
+    {
+      "id": "SVC-UI-M",
+      "name": "UI change - medium",
+      "description": "New fields or a reworked flow across one or two screens.",
+      "unit": "change",
+      "unitPriceInr": 120000,
+      "effortDays": 6,
+      "riskMultiplier": 1.1
+    },
+    {
+      "id": "SVC-UI-L",
+      "name": "UI change - large",
+      "description": "New screen set or a redesigned journey.",
+      "unit": "change",
+      "unitPriceInr": 300000,
+      "effortDays": 15,
+      "riskMultiplier": 1.2
+    },
+    {
+      "id": "SVC-DATA",
+      "name": "Data migration",
+      "description": "Move and reconcile data between systems with a rollback plan.",
+      "unit": "migration",
+      "unitPriceInr": 400000,
+      "effortDays": 18,
+      "riskMultiplier": 1.4
+    },
+    {
+      "id": "SVC-REG",
+      "name": "Regulatory change",
+      "description": "Change driven by a regulator or compliance rule, with evidence pack.",
+      "unit": "change",
+      "unitPriceInr": 220000,
+      "effortDays": 10,
+      "riskMultiplier": 1.3
+    },
+    {
+      "id": "SVC-SEC",
+      "name": "Security review",
+      "description": "Threat model, code and configuration review, findings report.",
+      "unit": "review",
+      "unitPriceInr": 200000,
+      "effortDays": 8,
+      "riskMultiplier": 1
+    },
+    {
+      "id": "SVC-REL",
+      "name": "Release support",
+      "description": "Release planning, deployment window support and hypercare.",
+      "unit": "release",
+      "unitPriceInr": 80000,
+      "effortDays": 3,
+      "riskMultiplier": 1
+    },
+    {
+      "id": "SVC-RET",
+      "name": "Monthly support retainer",
+      "description": "Business-hours support and minor fixes, billed monthly.",
+      "unit": "month",
+      "unitPriceInr": 250000,
+      "effortDays": 10,
+      "riskMultiplier": 1
+    },
+    {
+      "id": "SVC-WEB",
+      "name": "Site or landing page",
+      "description": "A site, microsite or landing-page build.",
+      "unit": "site",
+      "unitPriceInr": 300000,
+      "effortDays": 12,
+      "riskMultiplier": 1.1
+    },
+    {
+      "id": "SVC-AI",
+      "name": "GenAI pilot",
+      "description": "A chatbot or GenAI pilot on the Grok API.",
+      "unit": "pilot",
+      "unitPriceInr": 350000,
+      "effortDays": 12,
+      "riskMultiplier": 1.3
+    }
+  ],
+  "enhancements": [
+    {
+      "id": "APP-KYC",
+      "name": "KYC onboarding app",
+      "description": "The Northwind KYC onboarding application: identity checks, document capture and screening.",
+      "options": [
+        {
+          "id": "ER-KYC-LABELS",
+          "name": "Label and validation tweak",
+          "description": "Copy, labels or validation on the existing KYC onboarding screens.",
+          "targetServiceId": "SVC-KYC",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-UI-S",
+              "qty": 2
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "ER-KYC-FIELDS",
+          "name": "New onboarding fields",
+          "description": "Add fields to the KYC application flow and release them.",
+          "targetServiceId": "SVC-KYC",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-UI-M",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "ER-KYC-REG",
+          "name": "Regulatory screening change",
+          "description": "Update a KYC screening rule, review it, and support the release.",
+          "targetServiceId": "SVC-KYC",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-REG",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-SEC",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "APP-PORTAL",
+      "name": "Customer portal",
+      "description": "The existing customer self-service portal.",
+      "options": [
+        {
+          "id": "ER-PORTAL-COPY",
+          "name": "Portal copy and layout tweak",
+          "description": "Small copy or layout change on the customer portal.",
+          "targetServiceId": "SVC-UI-S",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-UI-S",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "ER-PORTAL-JOURNEY",
+          "name": "Account journey rework",
+          "description": "Rework one account journey on the customer portal.",
+          "targetServiceId": "SVC-UI-M",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-UI-M",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "APP-PAY",
+      "name": "Payments API",
+      "description": "The existing payments API.",
+      "options": [
+        {
+          "id": "ER-PAY-ENDPOINT",
+          "name": "New payments endpoint",
+          "description": "Add one payments API endpoint, with a security review and release support.",
+          "targetServiceId": "SVC-API",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-API",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-SEC",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "ER-PAY-REVIEW",
+          "name": "Payments API security review",
+          "description": "Review the existing payments API and support the release of fixes.",
+          "targetServiceId": "SVC-SEC",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-SEC",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "APP-RPT",
+      "name": "Reporting",
+      "description": "Existing operational and regulatory reporting.",
+      "options": [
+        {
+          "id": "ER-RPT-VIEW",
+          "name": "New report view",
+          "description": "Add or rework one report view.",
+          "targetServiceId": "SVC-UI-M",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-UI-M",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "ER-RPT-REG",
+          "name": "Regulatory report change",
+          "description": "Change a regulatory report and support the release.",
+          "targetServiceId": "SVC-REG",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-REG",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "APP-SHOWCASE",
+      "name": "Showcase",
+      "description": "Short Grok demonstrations on an existing engagement.",
+      "options": [
+        {
+          "id": "SX-HELPDESK-BOT",
+          "name": "Helpdesk chatbot",
+          "description": "A helpdesk chatbot on an existing system, with one API connection, a security review and release support.",
+          "targetServiceId": "SVC-API",
+          "showcase45": true,
+          "grokApi": [
+            "grok-4.7 chat with guidelines and safety_identifier"
+          ],
+          "demoScript": "Ask the helpdesk bot a policy question and show the grounded reply.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-AI",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-API",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-SEC",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-REL",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "SX-LIVE-REVIEW",
+          "name": "Live review report",
+          "description": "A live review of an existing change: discovery plus a security review, written up as a report.",
+          "targetServiceId": "SVC-SEC",
+          "showcase45": true,
+          "grokApi": [
+            "grok-4.7 with web_search, code_execution and structured outputs"
+          ],
+          "demoScript": "Paste a change and show the review that searched the web and ran a check.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-DISC",
+              "qty": 1
+            },
+            {
+              "serviceId": "SVC-SEC",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "newApplications": [
+    {
+      "id": "NC-KYC",
+      "name": "KYC onboarding app",
+      "description": "A new KYC onboarding application: discovery, the onboarding module, security review and release support.",
+      "billOfMaterials": [
+        {
+          "serviceId": "SVC-DISC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-KYC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-SEC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-REL",
+          "qty": 1
+        }
+      ],
+      "addOns": [
+        {
+          "id": "ADD-NC-KYC-API",
+          "name": "Extra system integration",
+          "description": "Connect one more system to the new KYC app.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-API",
+              "qty": 1
+            }
+          ]
+        },
+        {
+          "id": "ADD-NC-KYC-DATA",
+          "name": "Data migration",
+          "description": "Migrate existing customer records into the new KYC app.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-DATA",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NC-PORTAL",
+      "name": "Customer self-service portal",
+      "description": "A new customer portal: discovery, a large UI journey, security review and release support.",
+      "billOfMaterials": [
+        {
+          "serviceId": "SVC-DISC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-UI-L",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-SEC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-REL",
+          "qty": 1
+        }
+      ],
+      "addOns": [
+        {
+          "id": "ADD-NC-PORTAL-API",
+          "name": "Portal API integration",
+          "description": "Connect the portal to one existing system.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-API",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NC-PARTNER",
+      "name": "Partner API gateway",
+      "description": "A new partner API: discovery, one integration, security review and release support.",
+      "billOfMaterials": [
+        {
+          "serviceId": "SVC-DISC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-API",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-SEC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-REL",
+          "qty": 1
+        }
+      ],
+      "addOns": [
+        {
+          "id": "ADD-NC-PARTNER-API",
+          "name": "Second partner integration",
+          "description": "Connect one more partner system.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-API",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NC-REG",
+      "name": "Regulatory reporting app",
+      "description": "A new regulatory reporting application: discovery, the regulatory change, data movement, security review and release support.",
+      "billOfMaterials": [
+        {
+          "serviceId": "SVC-DISC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-REG",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-DATA",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-SEC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-REL",
+          "qty": 1
+        }
+      ],
+      "addOns": [
+        {
+          "id": "ADD-NC-REG-UI",
+          "name": "Report screens",
+          "description": "Medium UI for reviewing the regulatory reports.",
+          "billOfMaterials": [
+            {
+              "serviceId": "SVC-UI-M",
+              "qty": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SX-LANDING-PAGE",
+      "name": "Marketing landing page",
+      "description": "A new marketing site: a landing page, a discovery workshop, a security review and release support.",
+      "showcase45": true,
+      "grokApi": [
+        "grok-4.7 structured output for HTML",
+        "optional grok-imagine-image-2.0 for a hero image"
+      ],
+      "demoScript": "Describe the product and show the HTML page with an optional hero image.",
+      "billOfMaterials": [
+        {
+          "serviceId": "SVC-WEB",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-DISC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-SEC",
+          "qty": 1
+        },
+        {
+          "serviceId": "SVC-REL",
+          "qty": 1
+        }
+      ]
+    }
+  ]
+};
