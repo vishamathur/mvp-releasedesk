@@ -1,11 +1,10 @@
 import { assessRisk } from "./risk";
-import { canSubmitApplication, validateIdentity } from "./validation";
+import { canSubmitApplication, parseIdentity } from "./validation";
 import { transitionStatus } from "./status";
 import type {
   AddDocumentInput,
   CreateApplicationInput,
   DocumentType,
-  Identity,
   KycApplication,
   KycDocument,
 } from "./types";
@@ -22,6 +21,16 @@ function referenceFromId(id: string): string {
   return `NW-${id.slice(-8).toUpperCase()}`;
 }
 
+const ACTOR_RE = /^[A-Za-z0-9:._-]{1,64}$/;
+
+function requireActorId(actorId: string, label: string): string {
+  const actor = actorId.trim();
+  if (!ACTOR_RE.test(actor)) {
+    throw new Error(`${label} actor is required.`);
+  }
+  return actor;
+}
+
 function mockOcrSummary(type: DocumentType, fileName: string): string {
   return `MOCK OCR: Detected ${type.replaceAll("_", " ")} from “${fileName}” — fields not extracted (placeholder).`;
 }
@@ -29,11 +38,10 @@ function mockOcrSummary(type: DocumentType, fileName: string): string {
 export function createDraftApplication(
   input: CreateApplicationInput,
   now?: Date,
+  createdBy?: string | null,
 ): KycApplication {
-  const issues = validateIdentity(input.identity);
-  if (issues.length > 0) {
-    throw new Error(issues.map((i) => `${i.field}: ${i.message}`).join("; "));
-  }
+  const identity = parseIdentity(input.identity);
+  const owner = createdBy == null || createdBy === "" ? null : requireActorId(createdBy, "createdBy");
 
   const createdAt = isoNow(now);
   const id = newId("app");
@@ -42,31 +50,30 @@ export function createDraftApplication(
     id,
     reference: referenceFromId(id),
     status: "draft",
-    identity: { ...input.identity },
+    identity,
     documents: [],
     risk: null,
     createdAt,
     updatedAt: createdAt,
     submittedAt: null,
     notes: ["Application created"],
+    createdBy: owner,
+    decidedBy: null,
   };
 }
 
 export function updateIdentity(
   app: KycApplication,
-  identity: Identity,
+  identity: unknown,
   now?: Date,
 ): KycApplication {
   if (app.status !== "draft" && app.status !== "needs_info") {
     throw new Error("Identity can only be edited in draft or needs_info.");
   }
-  const issues = validateIdentity(identity);
-  if (issues.length > 0) {
-    throw new Error(issues.map((i) => `${i.field}: ${i.message}`).join("; "));
-  }
+  const nextIdentity = parseIdentity(identity);
   return {
     ...app,
-    identity: { ...identity },
+    identity: nextIdentity,
     updatedAt: isoNow(now),
     notes: [...app.notes, "Identity updated"],
   };
@@ -142,15 +149,22 @@ export function submitApplication(app: KycApplication, now?: Date): KycApplicati
 export function advanceReview(
   app: KycApplication,
   decision: "in_review" | "approved" | "rejected" | "needs_info",
+  actorId: string,
   note?: string,
   now?: Date,
 ): KycApplication {
+  const actor = requireActorId(actorId, "decidedBy");
+  if (note !== undefined && note.length > 500) {
+    throw new Error("note must be at most 500 characters.");
+  }
   const next = transitionStatus(app.status, decision);
   const updatedAt = isoNow(now);
+  const text = note?.trim() || `Status → ${decision}`;
   return {
     ...app,
     status: next,
+    decidedBy: actor,
     updatedAt,
-    notes: [...app.notes, note?.trim() || `Status → ${decision}`],
+    notes: [...app.notes, `${text} [decidedBy: ${actor}]`],
   };
 }

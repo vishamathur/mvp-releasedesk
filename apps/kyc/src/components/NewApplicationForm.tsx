@@ -16,6 +16,7 @@ const initial: Identity = {
   city: "",
   postalCode: "",
   country: "US",
+  occupation: "",
 };
 
 export function NewApplicationForm() {
@@ -35,6 +36,7 @@ export function NewApplicationForm() {
     try {
       const res = await fetch("/api/applications", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           identity: {
@@ -130,7 +132,26 @@ export function NewApplicationForm() {
             value={form.phone}
             onChange={(e) => update("phone", e.target.value)}
             required
+            minLength={8}
+            maxLength={20}
           />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="occupation">
+            Occupation <span className="font-normal normal-case tracking-normal text-[color:var(--nw-steel)]">(optional)</span>
+          </label>
+          <input
+            id="occupation"
+            className="field"
+            value={form.occupation ?? ""}
+            onChange={(e) => update("occupation", e.target.value)}
+            autoComplete="organization-title"
+            maxLength={80}
+            placeholder="Teacher"
+          />
+          <p className="mt-1 text-xs text-[color:var(--nw-steel)]">
+            Job title only, 2–80 characters if you provide one. Not used for risk scoring.
+          </p>
         </div>
       </section>
 

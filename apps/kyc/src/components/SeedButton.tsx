@@ -12,7 +12,7 @@ export function SeedButton() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/seed", { method: "POST" });
+      const res = await fetch("/api/seed", { method: "POST", credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Seed failed");
       setMessage(`Loaded ${data.count} sample applications.`);

@@ -55,7 +55,7 @@ Open [http://localhost:3002](http://localhost:3002).
 1. Open Release Desk on port **3002** and read a handover at `/handoff` (set `RELEASEDESK_LOG_DIR`, or import a `.jsonl` file in the browser).
 2. Follow one PID-ER request in [the demo script](./docs/sdlc/demo-script.md). Change Analyst raises finance, Security raises the iteration gate, and Builder raises release. Vishal decides in that bot's chat.
 3. A release-intel comment appears on a pull request only when `RELEASEDESK_GROK_API_KEY_LEAD` is set. A missing key fails the check. CI does not invent a result.
-4. Open the KYC demo on port 3000: draft an application, add document placeholders, submit, and use the analyst actions. **Load sample data** on `/applications` for pre-built cases.
+4. Open the KYC demo on port 3000. Sign in with the customer token to draft an application (including optional occupation), add document placeholders, and submit. Sign in with the analyst token to load sample data and review cases. See [apps/kyc/docs/PII.md](./apps/kyc/docs/PII.md).
 
 ## Mocked integrations (labeled in UI/API)
 
@@ -148,7 +148,7 @@ See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.m
 
 - Statuses: `draft` → `submitted` → `in_review` → `approved` | `rejected` | `needs_info`
 - Required docs to submit: one government ID (`passport` \| `national_id` \| `drivers_license`) + `proof_of_address`
-- Persistence: `apps/kyc/data/store.json` (gitignored; recreated by seed)
+- Persistence: `apps/kyc/data/store.json` (gitignored AES-256-GCM ciphertext; recreated by seed). Requires `KYC_DATA_KEY`. See [apps/kyc/docs/PII.md](./apps/kyc/docs/PII.md).
 
 ## GPL-3.0
 

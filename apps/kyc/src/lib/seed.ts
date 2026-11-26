@@ -32,6 +32,7 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
         city: "San Francisco",
         postalCode: "94105",
         country: "US",
+        occupation: "Product designer",
       }),
     },
     t0,
@@ -40,8 +41,8 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
   approved = addDocument(approved, { type: "proof_of_address", fileName: "ava-utility.pdf" }, t0);
   approved = addDocument(approved, { type: "selfie", fileName: "ava-selfie.jpg" }, t0);
   approved = submitApplication(approved, t0);
-  approved = advanceReview(approved, "in_review", "Analyst queue pick-up", t1);
-  approved = advanceReview(approved, "approved", "Identity consistent; low risk", t1);
+  approved = advanceReview(approved, "in_review", "analyst:seed", "Analyst queue pick-up", t1);
+  approved = advanceReview(approved, "approved", "analyst:seed", "Identity consistent; low risk", t1);
 
   let inReview = createDraftApplication(
     {
@@ -56,6 +57,7 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
         city: "London",
         postalCode: "EC4N 7BA",
         country: "GB",
+        occupation: "Compliance analyst",
       }),
     },
     t1,
@@ -67,7 +69,13 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
     t1,
   );
   inReview = submitApplication(inReview, t1);
-  inReview = advanceReview(inReview, "in_review", "Manual review for cross-border residency", t2);
+  inReview = advanceReview(
+    inReview,
+    "in_review",
+    "analyst:seed",
+    "Manual review for cross-border residency",
+    t2,
+  );
 
   let draft = createDraftApplication(
     {
@@ -82,6 +90,7 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
         city: "Madrid",
         postalCode: "28014",
         country: "ES",
+        occupation: "Architect",
       }),
     },
     t2,
@@ -101,6 +110,7 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
         city: "Demo City",
         postalCode: "00000",
         country: "ZZ",
+        occupation: "Test analyst",
       }),
     },
     t2,
@@ -112,7 +122,7 @@ export function buildSeedApplications(now = new Date()): KycApplication[] {
   return [approved, inReview, draft, highRisk];
 }
 
-export async function seedStore(now = new Date()) {
+export async function seedStore(now = new Date(), actorId = "analyst:seed") {
   const applications = buildSeedApplications(now);
-  return replaceAllApplications(applications, now.toISOString());
+  return replaceAllApplications(applications, now.toISOString(), actorId);
 }

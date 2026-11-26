@@ -46,6 +46,24 @@ describe("assessRisk", () => {
     expect(risk.factors.length).toBeGreaterThan(2);
   });
 
+  it("does not change the score when an optional occupation is present", () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const without = assessRisk({
+      identity: base,
+      documentCount: 3,
+      hasSelfie: true,
+      now,
+    });
+    const withOccupation = assessRisk({
+      identity: { ...base, occupation: "Teacher" },
+      documentCount: 3,
+      hasSelfie: true,
+      now,
+    });
+    expect(withOccupation.score).toBe(without.score);
+    expect(withOccupation.level).toBe(without.level);
+  });
+
   it("treats nationality ≠ residence as a medium signal", () => {
     const risk = assessRisk({
       identity: { ...base, nationality: "CA", country: "US" },

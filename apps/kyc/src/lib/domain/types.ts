@@ -31,6 +31,11 @@ export interface Identity {
   city: string;
   postalCode: string;
   country: string; // ISO 3166-1 alpha-2
+  /**
+   * Optional job title. Ordinary personal data, not a special-category attribute.
+   * Omitted on records captured before the field existed.
+   */
+  occupation?: string;
 }
 
 export interface KycDocument {
@@ -65,10 +70,15 @@ export interface KycApplication {
   updatedAt: string;
   submittedAt: string | null;
   notes: string[];
+  /** Customer actor id that created the case. Null for synthetic seed samples. */
+  createdBy: string | null;
+  /** Analyst actor id for the latest review decision. Never taken from the client. */
+  decidedBy: string | null;
 }
 
 export interface CreateApplicationInput {
-  identity: Identity;
+  /** Parsed with the Identity allow-list. Extra keys are rejected. */
+  identity: unknown;
 }
 
 export interface AddDocumentInput {

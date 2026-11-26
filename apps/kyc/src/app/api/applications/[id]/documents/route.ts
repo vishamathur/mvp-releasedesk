@@ -1,21 +1,34 @@
-import { NextResponse } from "next/server";
 import { addDocument } from "@/lib/domain/application";
 import type { DocumentType } from "@/lib/domain/types";
+import { customerOwns } from "@/lib/access";
+import { authorize, jsonError, NO_STORE } from "@/lib/gate";
 import { getApplication, saveApplication } from "@/lib/store";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+const DOCUMENT_TYPES = new Set<DocumentType>([
+  "passport",
+  "national_id",
+  "drivers_license",
+  "proof_of_address",
+  "selfie",
+]);
+
 /**
  * MOCK document upload: accepts metadata only. No file bytes are persisted.
  * Real OCR / identity verification APIs are not called.
+ * Filenames are metadata. Do not send raw government ID numbers.
  */
 export async function POST(request: Request, ctx: Ctx) {
+  const gate = authorize(request, "customer");
+  if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
   const existing = await getApplication(id);
-  if (!existing) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing || !customerOwns(existing, gate.actor)) {
+    return jsonError("Not found", 404);
   }
 
   try {
@@ -23,11 +36,11 @@ export async function POST(request: Request, ctx: Ctx) {
       type?: DocumentType;
       fileName?: string;
     };
-    if (!body.type || !body.fileName) {
-      return NextResponse.json(
-        { error: "type and fileName are required (mock upload — no file bytes)" },
-        { status: 400 },
-      );
+    if (!body.type || !body.fileName || !DOCUMENT_TYPES.has(body.type)) {
+      return jsonError("type and fileName are required (mock upload — no file bytes)", 400);
+    }
+    if (body.fileName.length > 120) {
+      return jsonError("fileName must be at most 120 characters.", 400);
     }
 
     const application = addDocument(existing, {
@@ -42,12 +55,9 @@ export async function POST(request: Request, ctx: Ctx) {
           note: "Document upload is mocked. Filename recorded only; OCR summary is fabricated locally.",
         },
       },
-      { status: 201 },
+      { status: 201, headers: NO_STORE },
     );
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Document add failed" },
-      { status: 400 },
-    );
+    return jsonError(err instanceof Error ? err.message : "Document add failed", 400);
   }
 }

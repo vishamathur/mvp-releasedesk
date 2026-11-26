@@ -23,13 +23,13 @@ export default function HomePage() {
           </p>
           <div className="animate-rise-delay mt-10 flex flex-wrap gap-3">
             <Link
-              href="/applications/new"
+              href="/login?next=/applications/new"
               className="btn-primary !bg-[color:var(--nw-accent)] !text-[color:var(--nw-navy)] hover:!brightness-110"
             >
               Start customer KYC
             </Link>
-            <Link href="/applications" className="btn-secondary !border-white/30 !bg-white/10 !text-white hover:!bg-white/20">
-              View applications
+            <Link href="/login?next=/applications" className="btn-secondary !border-white/30 !bg-white/10 !text-white hover:!bg-white/20">
+              Analyst queue
             </Link>
           </div>
         </div>
@@ -45,7 +45,7 @@ export default function HomePage() {
             {
               step: "01",
               title: "Identity",
-              body: "Collect legal name, date of birth, contact details, and residential address.",
+              body: "Collect legal name, date of birth, contact details, residential address, and an optional occupation.",
             },
             {
               step: "02",

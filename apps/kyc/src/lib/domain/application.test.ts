@@ -40,10 +40,12 @@ describe("KYC application lifecycle", () => {
     expect(app.risk).not.toBeNull();
     expect(app.documents[0]?.mockOcrSummary).toContain("MOCK OCR");
 
-    app = advanceReview(app, "in_review");
-    app = advanceReview(app, "approved", "Looks good");
+    app = advanceReview(app, "in_review", "analyst:test");
+    app = advanceReview(app, "approved", "analyst:test", "Looks good");
     expect(app.status).toBe("approved");
+    expect(app.decidedBy).toBe("analyst:test");
     expect(app.notes.at(-1)).toContain("Looks good");
+    expect(app.notes.at(-1)).toContain("decidedBy: analyst:test");
   });
 
   it("rejects submit without required documents", () => {
@@ -56,6 +58,34 @@ describe("KYC application lifecycle", () => {
     app = addDocument(app, { type: "passport", fileName: "passport.pdf" });
     app = addDocument(app, { type: "proof_of_address", fileName: "bill.pdf" });
     app = submitApplication(app);
-    expect(() => advanceReview(app, "approved")).toThrow(/Invalid status transition/);
+    expect(() => advanceReview(app, "approved", "analyst:test")).toThrow(/Invalid status transition/);
+  });
+
+  it("stores optional occupation and rejects unknown identity keys", () => {
+    const app = createDraftApplication({
+      identity: { ...identity, occupation: "  Teacher  " },
+    });
+    expect(app.identity?.occupation).toBe("Teacher");
+    expect(app.createdBy).toBeNull();
+    expect(app.decidedBy).toBeNull();
+    expect(Object.keys(app.identity ?? {})).not.toContain("passportNumber");
+
+    expect(() =>
+      createDraftApplication({
+        identity: { ...identity, passportNumber: "AB123456" },
+      }),
+    ).toThrow(/Unknown identity fields: passportNumber/);
+  });
+
+  it("rejects non-string identity values and requires an analyst actor", () => {
+    expect(() =>
+      createDraftApplication({
+        identity: { ...identity, email: 42 },
+      }),
+    ).toThrow(/email must be a string/);
+
+    const draft = createDraftApplication({ identity }, undefined, "customer:northwind-demo");
+    expect(draft.createdBy).toBe("customer:northwind-demo");
+    expect(() => advanceReview(draft, "in_review", " ")).toThrow(/decidedBy actor is required/);
   });
 });

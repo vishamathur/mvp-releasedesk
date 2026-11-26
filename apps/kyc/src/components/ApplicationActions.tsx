@@ -13,7 +13,13 @@ const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: "selfie", label: "Selfie / liveness (optional)" },
 ];
 
-export function ApplicationActions({ application }: { application: KycApplication }) {
+export function ApplicationActions({
+  application,
+  role,
+}: {
+  application: KycApplication;
+  role: "customer" | "analyst";
+}) {
   const router = useRouter();
   const [docType, setDocType] = useState<DocumentType>("passport");
   const [fileName, setFileName] = useState("");
@@ -21,10 +27,12 @@ export function ApplicationActions({ application }: { application: KycApplicatio
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const editable = application.status === "draft" || application.status === "needs_info";
-  const canSubmit = editable;
+  const customerEditing =
+    role === "customer" && (application.status === "draft" || application.status === "needs_info");
+  const canSubmit = customerEditing;
   const canReview =
-    application.status === "submitted" || application.status === "in_review";
+    role === "analyst" &&
+    (application.status === "submitted" || application.status === "in_review");
 
   async function refresh() {
     router.refresh();
@@ -38,6 +46,7 @@ export function ApplicationActions({ application }: { application: KycApplicatio
     try {
       const res = await fetch(`/api/applications/${application.id}/documents`, {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: docType, fileName }),
       });
@@ -60,6 +69,7 @@ export function ApplicationActions({ application }: { application: KycApplicatio
     try {
       const res = await fetch(`/api/applications/${application.id}/submit`, {
         method: "POST",
+        credentials: "same-origin",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submit failed");
@@ -82,6 +92,7 @@ export function ApplicationActions({ application }: { application: KycApplicatio
     try {
       const res = await fetch(`/api/applications/${application.id}`, {
         method: "PATCH",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, note }),
       });
@@ -98,7 +109,7 @@ export function ApplicationActions({ application }: { application: KycApplicatio
 
   return (
     <div className="space-y-8">
-      {editable ? (
+      {customerEditing ? (
         <section className="space-y-4">
           <h2 className="font-display text-2xl text-[color:var(--nw-ink)]">Documents</h2>
           <MockBanner>

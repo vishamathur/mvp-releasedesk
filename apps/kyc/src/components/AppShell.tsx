@@ -1,13 +1,17 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/LogoutButton";
+import type { KycRole } from "@/lib/auth";
 
 export function AppShell({
   children,
   title,
   subtitle,
+  role,
 }: {
   children: React.ReactNode;
   title: string;
   subtitle?: string;
+  role?: KycRole;
 }) {
   return (
     <div className="min-h-screen">
@@ -19,13 +23,29 @@ export function AppShell({
               Bank · KYC
             </span>
           </Link>
-          <nav className="flex gap-3 text-sm">
-            <Link href="/applications" className="text-white/75 hover:text-white">
-              Applications
-            </Link>
-            <Link href="/applications/new" className="text-[color:var(--nw-accent)] hover:text-white">
-              New application
-            </Link>
+          <nav className="flex items-center gap-3 text-sm">
+            {role === "analyst" ? (
+              <Link href="/applications" className="text-white/75 hover:text-white">
+                Applications
+              </Link>
+            ) : null}
+            {role === "customer" ? (
+              <Link href="/applications/new" className="text-[color:var(--nw-accent)] hover:text-white">
+                New application
+              </Link>
+            ) : null}
+            {role ? (
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">
+                  {role}
+                </span>
+                <LogoutButton />
+              </>
+            ) : (
+              <Link href="/login" className="text-white/75 hover:text-white">
+                Sign in
+              </Link>
+            )}
           </nav>
         </div>
       </header>

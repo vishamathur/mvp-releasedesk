@@ -13,10 +13,10 @@ export function SiteHeader() {
           </span>
         </Link>
         <nav className="flex items-center gap-2 text-sm text-white/85">
-          <Link href="/applications" className="btn-ghost text-white/80 hover:text-white">
-            Applications
+          <Link href="/login?next=/applications" className="btn-ghost text-white/80 hover:text-white">
+            Analyst queue
           </Link>
-          <Link href="/applications/new" className="btn-primary !bg-white !text-[color:var(--nw-ink)] hover:!bg-[color:var(--nw-sand)]">
+          <Link href="/login?next=/applications/new" className="btn-primary !bg-white !text-[color:var(--nw-ink)] hover:!bg-[color:var(--nw-sand)]">
             Start KYC
           </Link>
         </nav>

@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# encrypted store and in-flight atomic writes
+/data/store.json
+/data/.store.*.tmp

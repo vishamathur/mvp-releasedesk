@@ -4,6 +4,8 @@ import { AppShell } from "@/components/AppShell";
 import { ApplicationActions } from "@/components/ApplicationActions";
 import { MockBanner } from "@/components/MockBanner";
 import { RiskBadge, StatusBadge } from "@/components/StatusBadge";
+import { customerOwns } from "@/lib/access";
+import { requirePageActor } from "@/lib/session";
 import { getApplication } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +14,16 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function ApplicationDetailPage({ params }: Props) {
   const { id } = await params;
+  const actor = await requirePageActor("either", `/applications/${id}`);
   const application = await getApplication(id);
   if (!application) notFound();
+  if (actor.role === "customer" && !customerOwns(application, actor)) notFound();
 
   const identity = application.identity;
 
   return (
     <AppShell
+      role={actor.role}
       title={application.reference}
       subtitle={
         identity
@@ -27,9 +32,15 @@ export default async function ApplicationDetailPage({ params }: Props) {
       }
     >
       <div className="mb-6">
-        <Link href="/applications" className="btn-ghost px-0">
-          ← All applications
-        </Link>
+        {actor.role === "analyst" ? (
+          <Link href="/applications" className="btn-ghost px-0">
+            ← All applications
+          </Link>
+        ) : (
+          <Link href="/applications/new" className="btn-ghost px-0">
+            ← New application
+          </Link>
+        )}
       </div>
 
       <div className="mb-8 flex flex-wrap items-center gap-3">
@@ -60,6 +71,10 @@ export default async function ApplicationDetailPage({ params }: Props) {
                 <div>
                   <dt className="label">Phone</dt>
                   <dd>{identity.phone}</dd>
+                </div>
+                <div>
+                  <dt className="label">Occupation</dt>
+                  <dd>{identity.occupation || "—"}</dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="label">Address</dt>
@@ -101,7 +116,7 @@ export default async function ApplicationDetailPage({ params }: Props) {
           </section>
 
           <div className="rounded-lg border border-[color:var(--nw-sand)] bg-white/80 p-6">
-            <ApplicationActions application={application} />
+            <ApplicationActions application={application} role={actor.role} />
           </div>
         </div>
 
@@ -131,6 +146,11 @@ export default async function ApplicationDetailPage({ params }: Props) {
           <section className="rounded-lg border border-[color:var(--nw-sand)] bg-white/80 p-6">
             <h2 className="font-display text-2xl text-[color:var(--nw-ink)]">Audit notes</h2>
             <ul className="mt-4 space-y-2 text-sm text-[color:var(--nw-steel)]">
+              {application.decidedBy ? (
+                <li className="border-l-2 border-[color:var(--nw-teal)] pl-3">
+                  Latest analyst actor: {application.decidedBy}
+                </li>
+              ) : null}
               {application.notes.map((note, idx) => (
                 <li key={`${idx}-${note}`} className="border-l-2 border-[color:var(--nw-teal)] pl-3">
                   {note}

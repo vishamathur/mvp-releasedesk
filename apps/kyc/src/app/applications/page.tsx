@@ -2,30 +2,30 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { RiskBadge, StatusBadge } from "@/components/StatusBadge";
 import { SeedButton } from "@/components/SeedButton";
+import { requirePageActor } from "@/lib/session";
 import { listApplications } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApplicationsPage() {
+  const actor = await requirePageActor("analyst", "/applications");
   const applications = await listApplications();
 
   return (
     <AppShell
+      role={actor.role}
       title="KYC applications"
-      subtitle="Track onboarding cases from draft through risk review. Seed sample Northwind customers if the list is empty."
+      subtitle="Analyst queue. Customer identity is encrypted at rest. Records are eligible for deletion 90 days after the last update."
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <SeedButton />
-        <Link href="/applications/new" className="btn-primary">
-          New application
-        </Link>
       </div>
 
       {applications.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[color:var(--nw-sand)] bg-white/60 px-6 py-16 text-center">
           <p className="font-display text-2xl text-[color:var(--nw-ink)]">No applications yet</p>
           <p className="mt-2 text-[color:var(--nw-steel)]">
-            Start a new KYC case or load the sample seed set.
+            Load the synthetic sample set. Customer applications are started from a separate sign-in.
           </p>
         </div>
       ) : (
@@ -35,6 +35,7 @@ export default async function ApplicationsPage() {
               <tr>
                 <th className="px-4 py-3 font-semibold">Reference</th>
                 <th className="px-4 py-3 font-semibold">Customer</th>
+                <th className="px-4 py-3 font-semibold">Occupation</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Risk</th>
                 <th className="px-4 py-3 font-semibold">Updated</th>
@@ -55,6 +56,9 @@ export default async function ApplicationsPage() {
                     {app.identity
                       ? `${app.identity.firstName} ${app.identity.lastName}`
                       : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-[color:var(--nw-ink)]">
+                    {app.identity?.occupation || "—"}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={app.status} />
