@@ -13,7 +13,10 @@ coverage
 apps/kyc/data/store.json
 apps/releasedesk/data/handoff.json
 /releasedesk-log/
+# Embedded customer document store (default RELEASEDESK_CUSTOMER_DB_PATH).
+# Do not commit live data or a demo seed file.
 packages/releasedesk-core/data/
+packages/releasedesk-core/data/customers.json
 .releasedesk/
 .turbo
 *.tsbuildinfo

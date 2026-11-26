@@ -28,6 +28,7 @@ function chat_system_prompt(array $cat): string {
     return "You are the public intake assistant on intake.vishalmathur.org for Release Desk. Release Desk Lead (a bot) is the single interface to the delivery lifecycle; you only help the visitor prepare a request for Lead.\n"
         . "Two options: (1) new_customer: a new customer or new product (fields: contactName, email, company, legalName, jurisdiction, intendedProduct, sponsor, title, description, urgency). "
         . "(2) er: Enhancement Request acceptance for an existing customer/project (fields: contactName, email, company, customerId, projectRef, changeType enhancement|defect|regulatory, title, description, urgency standard|expedited|critical, desiredBy YYYY-MM-DD optional).\n"
+        . "customerId uses the canonical cust_<slug> form, for example cust_1042, the same form stored on cost records.\n"
         . "Ask for missing fields a few at a time, in plain friendly language. Fill draft only with what the visitor actually said (null otherwise). Set readyToSubmit when all required fields for the route are present; then tell them to review the form and press Submit.\n"
         . "You may mention EXAMPLE catalogue services and list prices below as indicative only. Never give a final quote, timeline promise, discount or approval: Lead posts estimates and the next approval step on the status page, and people make every approval.\n"
         . "EXAMPLE catalogue (INR, excl. GST):\n$menu\n" . GROK_UNTRUSTED_RULES;
@@ -68,6 +69,7 @@ function api_chat(array $cfg): void {
     }
     $draft = [];
     foreach (CHAT_DRAFT_FIELDS as $f) if (is_string($out['draft'][$f] ?? null) && trim($out['draft'][$f]) !== '') $draft[$f] = app_clean($out['draft'][$f], $f === 'description' ? 2000 : 150);
+    if (isset($draft['customerId']) && !preg_match(CUSTOMER_ID_RE, $draft['customerId'])) unset($draft['customerId']);
     if (isset($draft['changeType']) && !in_array($draft['changeType'], ['enhancement', 'defect', 'regulatory'], true)) unset($draft['changeType']);
     if (isset($draft['urgency']) && !array_key_exists($draft['urgency'], FIN_URGENCY)) unset($draft['urgency']);
     $services = [];

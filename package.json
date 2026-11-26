@@ -28,6 +28,7 @@
     "check:release:lead": "npm run check -w @releasedesk/lead --",
     "lint": "npm run lint -w @northwind/kyc",
     "seed": "npm run seed -w @northwind/kyc",
+    "seed:customers": "npm run seed:customers -w @releasedesk/core",
     "dev:desk": "npm run desk"
   },
   "engines": {

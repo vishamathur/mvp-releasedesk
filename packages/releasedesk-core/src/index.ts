@@ -375,3 +375,23 @@ export {
   type ReorderBacklogInput,
   type BacklogViewItem,
 } from "./intake.js";
+
+export {
+  CUSTOMER_DB_PATH_ENV,
+  SEED_DEMO_CUSTOMERS_ENV,
+  InMemoryCustomerStore,
+  FileCustomerStore,
+  createInMemoryCustomerStore,
+  createFileCustomerStore,
+  defaultCustomerDbPath,
+  resolveCustomerDbPath,
+  demoSeedEnabled,
+  demoCustomerInputs,
+  nextCustomerRecord,
+  nextRequestRecord,
+  seedDemoCustomers,
+  type CustomerStore,
+  type FileCustomerStoreOptions,
+  type SeedDemoCustomersOptions,
+  type SeedDemoCustomersResult,
+} from "./customer-store.js";

@@ -25,6 +25,7 @@ npm run typecheck -w @releasedesk/core
 | Audit trail | `audit` | Action enum + events appended on every store mutation |
 | Run context | `run-context` | Goal, target repo refs, tasks, audit trail, status |
 | Store | `store` | `InMemoryRunContextStore` and `FileBackedRunContextStore` |
+| Customer store | `customer-store` | `InMemoryCustomerStore` and LowDB `FileCustomerStore`; demo seed is opt-in |
 | Agent contracts | `agents/*` | Lead, Change Analyst, Standards, Security, Builder I/O |
 | Per-agent API keys | `agent-credentials` | Exclusive `RELEASEDESK_GROK_API_KEY_*` / `RELEASEDESK_CURSOR_API_KEY_*` only |
 | SDLC agent catalog | `sdlc-agents` | Lead + specialists + Coding/Testing/Review definitions |
@@ -127,6 +128,19 @@ A missing exclusive key throws. Shared `XAI_API_KEY`, `GROK_API_KEY`, and `CURSO
 
 `mock.ts` formats the `MOCK:` prefix used by the KYC demo notes. It does not stand in for a live API.
 
+## Customer store
+
+`Customer` and `CustomerRequest` can be saved through `CustomerStore`. `InMemoryCustomerStore` starts empty. `FileCustomerStore` writes a LowDB JSON document. Pass `filePath`, or set `RELEASEDESK_CUSTOMER_DB_PATH`. The default path is `packages/releasedesk-core/data/customers.json`, which is gitignored. Upsert validates with `CustomerSchema`, keeps `createdAt`, and bumps `updatedAt`. Requests are listed by `customerId`.
+
+`customerId` is `cust_<slug>` (for example `cust_1042` or `cust_northwind`). That is the form already stored on cost records.
+
+Demo seed reads `DEMO_PORTFOLIO` and inserts Northwind Bank, Contoso Retail, and Fabrikam Logistics with `metadata.demo = true`. It does not run when the store opens.
+
+```bash
+RELEASEDESK_SEED_DEMO_CUSTOMERS=1 npm run seed:customers
+npm run seed:customers -- --demo
+```
+
 ## Layout
 
 ```
@@ -139,6 +153,7 @@ packages/releasedesk-core/
     audit.ts          # audit event shapes + hook type
     run-context.ts
     store.ts          # in-memory + file-backed stores
+    customer-store.ts # customer documents (memory + LowDB file)
     agents/           # Lead + specialist contracts
     *.test.ts
   README.md

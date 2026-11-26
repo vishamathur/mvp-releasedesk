@@ -16,7 +16,7 @@ function signed(string $url, array $body, string $secret, ?int $ts = null): arra
 }
 $J = ['Content-Type: application/json', "Origin: $O"];
 $er = ['route' => 'er', 'pid' => 'PID-ER', 'catalogueOptionId' => 'ER-KYC-LABELS', 'addOns' => [],
-    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'CUST-1042', 'projectRef' => 'PRJ-ONB-7',
+    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'cust_1042', 'projectRef' => 'PRJ-ONB-7',
     'changeType' => 'enhancement', 'title' => 'Rename two labels', 'description' => 'Rename two labels on the onboarding screen for clarity.', 'urgency' => 'standard',
     'artifactLinks' => ['https://example.com/shot.png'], 'website' => '', 'consent' => true];
 $R = [];
@@ -86,6 +86,7 @@ t('intake with an invalid catalogue option is rejected', function () use ($base,
 });
 t('validation, honeypot, origin, content-type, size', function () use ($base, $J, $er, $data) {
     [$c, $j] = req('POST', "$base/api/intake.php", ['customerId' => '', 'consent' => false] + $er, $J); ok($c === 400 && in_array('customerId', $j['fields']) && in_array('consent', $j['fields']), 'val');
+    [$c, $j] = req('POST', "$base/api/intake.php", ['customerId' => 'CUST-1042'] + $er, $J); ok($c === 400 && in_array('customerId', $j['fields']), 'hyphenated customer id');
     $n = count(glob("$data/submissions/REQ-*.json") ?: []);
     [$c] = req('POST', "$base/api/intake.php", ['website' => 'x'] + $er, $J); ok($c === 200 && count(glob("$data/submissions/REQ-*.json") ?: []) === $n, 'honeypot');
     [$c] = req('POST', "$base/api/intake.php", $er, ['Content-Type: application/json', 'Origin: https://evil.example']); ok($c === 403, 'origin');

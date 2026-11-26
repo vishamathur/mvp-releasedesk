@@ -6,6 +6,10 @@ import { nowIso } from "./ids.js";
  * Multi-customer intake → weighted prioritized backlog with per-request cost
  * estimates keyed by unique customerId.
  *
+ * Customer and CustomerRequest persistence is the customer store
+ * (customer-store.ts): in-memory for tests, LowDB file for a real data file.
+ * That store starts empty. Demo rows are an explicit seed, not an open side effect.
+ *
  * Dual human gates (queue item + cost record) must clear before Lead/SDLC.
  * Post-approval reorders require a quick human re-prioritize sign-off.
  * Weighting prevents one customer from starving others.

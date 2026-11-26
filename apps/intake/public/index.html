@@ -57,7 +57,7 @@
           </label>
         </div>
         <div class="grid route-er">
-          <label>Customer ID<input name="customerId" maxlength="40" placeholder="e.g. CUST-1042" /></label>
+          <label>Customer ID<input name="customerId" minlength="6" maxlength="40" pattern="[cC][uU][sS][tT]_[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="e.g. cust_1042" title="Customer ID in the form cust_1042" /></label>
           <label>Project reference<input name="projectRef" maxlength="40" placeholder="e.g. PRJ-ONB-7" /></label>
           <label>Change type
             <select name="changeType"><option value="enhancement">Enhancement</option><option value="defect">Defect</option><option value="regulatory">Regulatory tweak</option></select>
