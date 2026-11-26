@@ -19,12 +19,30 @@ export {
   GROK_GUIDELINES,
   GROK_CHAT_COMPLETIONS_URL,
   GROK_REQUEST_TIMEOUT_MS,
+  GROK_MODEL_DEFAULT,
+  resolveGrokModel,
   GrokGuidelineError,
   hashSafetyIdentifier,
   buildGrokChatCompletionBody,
   assertGrokChatEndpoint,
   assertGrokChatStatus,
 } from "./grok-guardrails.js";
+
+export {
+  GROK_LONG_CONTEXT_PROMPT_TOKENS,
+  GROK_PRICE_TABLE,
+  GROK_PRICE_TABLE_CHECKED,
+  GROK_PRICE_TABLE_SOURCE,
+  buildGrokTelemetry,
+  estimateGrokCostUsd,
+  formatGrokTelemetryLine,
+  lookupGrokPrice,
+  readGrokServedModel,
+  readGrokUsage,
+  type GrokPrice,
+  type GrokTelemetry,
+  type GrokUsage,
+} from "./grok-telemetry.js";
 
 export {
   MOCK_NOTE_PREFIX,

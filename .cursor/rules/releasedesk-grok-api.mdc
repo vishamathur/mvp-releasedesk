@@ -17,3 +17,6 @@ When implementing Builder → Cursor remediation for Release Desk:
 8. Preserve iteration gate + ATLAS/OWASP merge block behavior.
 9. Keep **Coding + Testing + Review** Cursor cloud agents: Coding ships; Testing verifies; Review reviews; **none merge**.
 10. Each Cloud Agent uses its exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` — no shared `CURSOR_API_KEY` fallback.
+11. The model comes from `resolveGrokModel(env)` in `@releasedesk/core`: `GROK_MODEL` (env or repository variable), default `grok-4.3`. Do not hard-code a model slug and do not default to a retired one (`grok-3` is served by `grok-4.3`).
+12. Keep the report's `headSha`, the served `model` (what the response reported) and `telemetry` (usage, latency, estimated cost). A missing `usage` or `model` stays null and is shown as "not reported". Never fill a value in.
+13. Keep the `## release-intel v1` heading and the hidden `<!-- release-intel-json:v1 -->` block: Builder reads them (see `docs/grok-release-intel-report.md`).

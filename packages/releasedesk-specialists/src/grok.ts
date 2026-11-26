@@ -6,6 +6,7 @@ import {
   GROK_CHAT_COMPLETIONS_URL,
   GROK_REQUEST_TIMEOUT_MS,
   GrokGuidelineError,
+  resolveGrokModel,
   MissingCredentialError,
   resolveAgentGrokApiKey,
   type GrokKeyedAgentRole,
@@ -64,7 +65,7 @@ export async function grokComplete(
 
   const endpoint = opts.endpoint ?? GROK_CHAT_COMPLETIONS_URL;
   assertGrokChatEndpoint(endpoint);
-  const model = opts.model ?? (env.GROK_MODEL?.trim() || "grok-3");
+  const model = opts.model ?? resolveGrokModel(env);
   const fetchImpl = opts.fetchImpl ?? fetch;
   const body = buildGrokChatCompletionBody({
     model,
