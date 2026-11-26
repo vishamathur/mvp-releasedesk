@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { ApplicationActions } from "@/components/ApplicationActions";
 import { MockBanner } from "@/components/MockBanner";
 import { RiskBadge, StatusBadge } from "@/components/StatusBadge";
-import { customerOwns } from "@/lib/access";
+import { customerOwns, publicApplication } from "@/lib/access";
 import { requirePageActor } from "@/lib/session";
 import { getApplication } from "@/lib/store";
 
@@ -74,7 +74,10 @@ export default async function ApplicationDetailPage({ params }: Props) {
                 </div>
                 <div>
                   <dt className="label">Occupation</dt>
-                  <dd>{identity.occupation || "—"}</dd>
+                  <dd>
+                    {identity.occupationCategory || "—"}
+                    {identity.occupation ? ` (${identity.occupation})` : ""}
+                  </dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="label">Address</dt>
@@ -116,7 +119,7 @@ export default async function ApplicationDetailPage({ params }: Props) {
           </section>
 
           <div className="rounded-lg border border-[color:var(--nw-sand)] bg-white/80 p-6">
-            <ApplicationActions application={application} role={actor.role} />
+            <ApplicationActions application={publicApplication(application)} role={actor.role} />
           </div>
         </div>
 

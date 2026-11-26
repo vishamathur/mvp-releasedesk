@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DemoStoreNotice } from "@/components/DemoStoreNotice";
 import { SiteHeader } from "@/components/SiteHeader";
 
 export default function HomePage() {
@@ -36,6 +37,7 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-20">
+        <DemoStoreNotice />
         <h2 className="font-display text-3xl text-[color:var(--nw-ink)]">How onboarding works</h2>
         <p className="mt-3 max-w-2xl text-[color:var(--nw-steel)]">
           A three-step happy path for demo reviews and later release-check agents.

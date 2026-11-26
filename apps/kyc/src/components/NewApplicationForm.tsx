@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Identity } from "@/lib/domain/types";
+import { OCCUPATION_CATEGORIES, type Identity, type OccupationCategory } from "@/lib/domain/types";
 
 const initial: Identity = {
   firstName: "",
@@ -16,14 +16,19 @@ const initial: Identity = {
   city: "",
   postalCode: "",
   country: "US",
-  occupation: "",
 };
+
+interface IssuedCredential {
+  id: string;
+  credential: string;
+}
 
 export function NewApplicationForm() {
   const router = useRouter();
   const [form, setForm] = useState<Identity>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [issued, setIssued] = useState<IssuedCredential | null>(null);
 
   function update<K extends keyof Identity>(key: K, value: Identity[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -43,17 +48,41 @@ export function NewApplicationForm() {
             ...form,
             nationality: form.nationality.toUpperCase(),
             country: form.country.toUpperCase(),
+            occupation: form.occupationCategory === "Other" ? form.occupation : undefined,
           },
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not create application");
-      router.push(`/applications/${data.application.id}`);
-      router.refresh();
+      setIssued({ id: data.application.id, credential: data.applicantCredential });
+      setBusy(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create application");
       setBusy(false);
     }
+  }
+
+  if (issued) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-[color:var(--nw-ink)]">
+          Save this applicant credential. It opens only this case. It is not shown again.
+        </p>
+        <p className="break-all rounded-md bg-[color:var(--nw-paper)] px-4 py-3 font-mono text-sm">
+          {issued.credential}
+        </p>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => {
+            router.push(`/applications/${issued.id}`);
+            router.refresh();
+          }}
+        >
+          Continue to application
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -136,23 +165,44 @@ export function NewApplicationForm() {
             maxLength={20}
           />
         </div>
-        <div className="sm:col-span-2">
-          <label className="label" htmlFor="occupation">
+        <div>
+          <label className="label" htmlFor="occupationCategory">
             Occupation <span className="font-normal normal-case tracking-normal text-[color:var(--nw-steel)]">(optional)</span>
           </label>
-          <input
-            id="occupation"
+          <select
+            id="occupationCategory"
             className="field"
-            value={form.occupation ?? ""}
-            onChange={(e) => update("occupation", e.target.value)}
-            autoComplete="organization-title"
-            maxLength={80}
-            placeholder="Teacher"
-          />
-          <p className="mt-1 text-xs text-[color:var(--nw-steel)]">
-            Job title only, 2–80 characters if you provide one. Not used for risk scoring.
-          </p>
+            value={form.occupationCategory ?? ""}
+            onChange={(e) =>
+              update("occupationCategory", (e.target.value || undefined) as OccupationCategory | undefined)
+            }
+          >
+            <option value="">Not provided</option>
+            {OCCUPATION_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
         </div>
+        {form.occupationCategory === "Other" ? (
+          <div>
+            <label className="label" htmlFor="occupation">
+              Occupation detail
+            </label>
+            <input
+              id="occupation"
+              className="field"
+              value={form.occupation ?? ""}
+              onChange={(e) => update("occupation", e.target.value)}
+              autoComplete="organization-title"
+              minLength={2}
+              maxLength={80}
+              placeholder="Teacher"
+              required
+            />
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2">

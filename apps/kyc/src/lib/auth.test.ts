@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { authenticateCredential, credentialFromRequest, SESSION_COOKIE_NAME } from "./auth";
+import { authenticateCredential, credentialFromRequest, INTAKE_ACTOR_ID, SESSION_COOKIE_NAME } from "./auth";
 
 const CUSTOMER = "customer-test-token";
 const ANALYST = "analyst-test-token";
@@ -19,7 +19,7 @@ describe("KYC auth", () => {
     expect(authenticateCredential("nope-token-value")).toBeNull();
     expect(authenticateCredential(CUSTOMER)).toEqual({
       role: "customer",
-      actorId: "customer:northwind-demo",
+      actorId: INTAKE_ACTOR_ID,
     });
     expect(authenticateCredential(ANALYST)).toEqual({
       role: "analyst",

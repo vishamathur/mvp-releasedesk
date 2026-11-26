@@ -1,4 +1,4 @@
-import type { DocumentType, Identity } from "./types";
+import { OCCUPATION_CATEGORIES, type DocumentType, type Identity, type OccupationCategory } from "./types";
 
 export interface ValidationIssue {
   field: string;
@@ -18,10 +18,15 @@ export const IDENTITY_KEYS = [
   "city",
   "postalCode",
   "country",
+  "occupationCategory",
   "occupation",
 ] as const;
 
 export type IdentityKey = (typeof IDENTITY_KEYS)[number];
+
+type IdentityInput = Omit<Partial<Identity>, "occupationCategory"> & {
+  occupationCategory?: string;
+};
 
 const IDENTITY_KEY_SET = new Set<string>(IDENTITY_KEYS);
 
@@ -34,6 +39,7 @@ const ADDRESS_RE = /^[\p{L}\p{M}0-9][\p{L}\p{M}0-9 #'’.,/\-]*$/u;
 const CITY_RE = /^[\p{L}\p{M}][\p{L}\p{M} .'’\-]*$/u;
 const POSTAL_RE = /^[A-Za-z0-9][A-Za-z0-9 -]*$/;
 const OCCUPATION_RE = /^[\p{L}\p{M}0-9][\p{L}\p{M}0-9 &'’.,()\-]*$/u;
+const OCCUPATION_CATEGORY_SET = new Set<string>(OCCUPATION_CATEGORIES);
 
 export const IDENTITY_LIMITS = {
   firstName: { min: 1, max: 80 },
@@ -102,14 +108,17 @@ export function parseIdentity(input: unknown): Identity {
 
   const addressLine2 = readString(input, "addressLine2", "addressLine2" in input);
   if (addressLine2) identity.addressLine2 = addressLine2;
+  const occupationCategory = readString(input, "occupationCategory", "occupationCategory" in input);
   const occupation = readString(input, "occupation", "occupation" in input);
-  if (occupation) identity.occupation = occupation;
+  const draft: IdentityInput = { ...identity };
+  if (occupationCategory) draft.occupationCategory = occupationCategory;
+  if (occupation) draft.occupation = occupation;
 
-  const issues = validateIdentity(identity);
+  const issues = validateIdentity(draft);
   if (issues.length > 0) {
     throw new IdentitySchemaError(issues.map((issue) => `${issue.field}: ${issue.message}`).join("; "));
   }
-  return identity;
+  return draft as Identity;
 }
 
 /** Drop unknown keys when reading a stored record. Does not invent missing fields. */
@@ -135,8 +144,17 @@ export function sanitizeStoredIdentity(value: unknown): Identity | null {
   if (typeof value.addressLine2 === "string" && value.addressLine2.trim()) {
     identity.addressLine2 = value.addressLine2;
   }
+  if (typeof value.occupationCategory === "string" && OCCUPATION_CATEGORY_SET.has(value.occupationCategory)) {
+    identity.occupationCategory = value.occupationCategory as OccupationCategory;
+  }
   if (typeof value.occupation === "string" && value.occupation.trim()) {
-    identity.occupation = value.occupation;
+    identity.occupation = value.occupation.trim();
+  }
+  if (!identity.occupationCategory && identity.occupation) {
+    identity.occupationCategory = "Other";
+  }
+  if (identity.occupationCategory && identity.occupationCategory !== "Other") {
+    delete identity.occupation;
   }
   return identity;
 }
@@ -171,7 +189,7 @@ function checkBounded(
   }
 }
 
-export function validateIdentity(identity: Partial<Identity>): ValidationIssue[] {
+export function validateIdentity(identity: IdentityInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   if (typeof identity.firstName !== "string" || !identity.firstName.trim()) {
@@ -347,22 +365,51 @@ export function validateIdentity(identity: Partial<Identity>): ValidationIssue[]
     );
   }
 
-  if (identity.occupation !== undefined && identity.occupation !== "") {
-    if (typeof identity.occupation !== "string") {
-      issues.push({ field: "occupation", message: "Occupation must be a string." });
+  issues.push(...occupationIssues(identity));
+
+  return issues;
+}
+
+function occupationIssues(identity: IdentityInput): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const category = identity.occupationCategory;
+  const detail = identity.occupation;
+  const hasCategory = category !== undefined && category !== "";
+  const hasDetail = detail !== undefined && detail !== "";
+
+  if (hasCategory && (typeof category !== "string" || !OCCUPATION_CATEGORY_SET.has(category))) {
+    issues.push({
+      field: "occupationCategory",
+      message: "Occupation category must be one of the allowed values.",
+    });
+    return issues;
+  }
+  if (!hasCategory && hasDetail) {
+    issues.push({ field: "occupationCategory", message: "Choose an occupation category." });
+  }
+  if (hasCategory && category !== "Other" && hasDetail) {
+    issues.push({
+      field: "occupation",
+      message: "Occupation detail is only allowed when the category is Other.",
+    });
+  }
+  if (category === "Other") {
+    if (typeof detail !== "string" || !detail) {
+      issues.push({ field: "occupation", message: "Describe the occupation when you choose Other." });
     } else if (
-      identity.occupation.length < IDENTITY_LIMITS.occupation.min ||
-      identity.occupation.length > IDENTITY_LIMITS.occupation.max
+      detail.length < IDENTITY_LIMITS.occupation.min ||
+      detail.length > IDENTITY_LIMITS.occupation.max
     ) {
       issues.push({ field: "occupation", message: "Occupation must be 2–80 characters." });
-    } else if (!OCCUPATION_RE.test(identity.occupation)) {
+    } else if (!OCCUPATION_RE.test(detail)) {
       issues.push({
         field: "occupation",
         message: "Occupation may contain only letters, numbers, spaces, and & ' . , ( ) -.",
       });
     }
+  } else if (hasDetail && typeof detail !== "string") {
+    issues.push({ field: "occupation", message: "Occupation must be a string." });
   }
-
   return issues;
 }
 

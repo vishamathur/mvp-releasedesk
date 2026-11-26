@@ -1,4 +1,4 @@
-import { authorize, jsonError, NO_STORE } from "@/lib/gate";
+import { authorize, bodyLimitResponse, jsonError, NO_STORE } from "@/lib/gate";
 import { seedStore } from "@/lib/seed";
 import { NextResponse } from "next/server";
 
@@ -10,7 +10,9 @@ export const runtime = "nodejs";
  * The response lists references only — not identity fields.
  */
 export async function POST(request: Request) {
-  const gate = authorize(request, "analyst");
+  const limited = bodyLimitResponse(request);
+  if (limited) return limited;
+  const gate = await authorize(request, "analyst");
   if (!gate.ok) return gate.response;
   if (process.env.NODE_ENV === "production") {
     return jsonError("Seed is disabled in production.", 403);

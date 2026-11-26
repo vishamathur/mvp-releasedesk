@@ -1,10 +1,20 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { listApplications } from "./store";
 
 export type KycRole = "customer" | "analyst";
 
 export interface AuthActor {
   role: KycRole;
   actorId: string;
+}
+
+/** Shared intake session. It can start a case. It does not own any case. */
+export const INTAKE_ACTOR_ID = "customer:intake";
+
+export interface ApplicantCredential {
+  token: string;
+  actorId: string;
+  credentialHash: string;
 }
 
 /** HttpOnly session cookie set by POST /api/auth/session. Value is the bearer token. */
@@ -52,19 +62,28 @@ export function assertAuthConfigured(): { customer: string; analyst: string } {
   return { customer, analyst };
 }
 
-function actorIdFor(role: KycRole): string {
-  const configured =
-    role === "analyst" ? process.env.KYC_ANALYST_ACTOR_ID : process.env.KYC_CUSTOMER_ACTOR_ID;
-  const fallback = role === "analyst" ? "analyst:northwind-demo" : "customer:northwind-demo";
-  const value = configured?.trim() || fallback;
+function analystActorId(): string {
+  const value = process.env.KYC_ANALYST_ACTOR_ID?.trim() || "analyst:northwind-demo";
   if (!ACTOR_RE.test(value)) {
-    throw new AuthConfigError(
-      role === "analyst"
-        ? "KYC_ANALYST_ACTOR_ID must be 1–64 characters from [A-Za-z0-9:._-]."
-        : "KYC_CUSTOMER_ACTOR_ID must be 1–64 characters from [A-Za-z0-9:._-].",
-    );
+    throw new AuthConfigError("Analyst actor id is invalid.");
   }
   return value;
+}
+
+export function hashApplicantCredential(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+/** One random credential per case. Only the hash is stored. */
+export function generateApplicantCredential(): ApplicantCredential {
+  const token = randomBytes(32).toString("base64url");
+  const actorId = `applicant:${randomBytes(8).toString("hex")}`;
+  return { token, actorId, credentialHash: hashApplicantCredential(token) };
+}
+
+function hashesMatch(stored: string, computed: string): boolean {
+  if (!/^[a-f0-9]{64}$/.test(stored) || stored.length !== computed.length) return false;
+  return timingSafeEqual(Buffer.from(stored, "hex"), Buffer.from(computed, "hex"));
 }
 
 /**
@@ -79,8 +98,29 @@ export function authenticateCredential(credential: string | null | undefined): A
   if (!presented) return null;
   const customerOk = safeEqual(presented, customer);
   const analystOk = safeEqual(presented, analyst);
-  if (analystOk) return { role: "analyst", actorId: actorIdFor("analyst") };
-  if (customerOk) return { role: "customer", actorId: actorIdFor("customer") };
+  if (analystOk) return { role: "analyst", actorId: analystActorId() };
+  if (customerOk) return { role: "customer", actorId: INTAKE_ACTOR_ID };
+  return null;
+}
+
+/**
+ * Env tokens resolve first. Any other credential is matched to a single case
+ * by the stored SHA-256 of the applicant token issued at creation.
+ */
+export async function resolveActor(credential: string | null | undefined): Promise<AuthActor | null> {
+  const direct = authenticateCredential(credential);
+  if (direct || !credential?.trim()) return direct;
+  const hash = hashApplicantCredential(credential.trim());
+  const applications = await listApplications();
+  for (const application of applications) {
+    if (
+      application.applicantCredentialHash &&
+      application.createdBy &&
+      hashesMatch(application.applicantCredentialHash, hash)
+    ) {
+      return { role: "customer", actorId: application.createdBy };
+    }
+  }
   return null;
 }
 

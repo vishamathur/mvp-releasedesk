@@ -148,7 +148,7 @@ See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.m
 
 - Statuses: `draft` → `submitted` → `in_review` → `approved` | `rejected` | `needs_info`
 - Required docs to submit: one government ID (`passport` \| `national_id` \| `drivers_license`) + `proof_of_address`
-- Persistence: `apps/kyc/data/store.json` (gitignored AES-256-GCM ciphertext; recreated by seed). Requires `KYC_DATA_KEY`. See [apps/kyc/docs/PII.md](./apps/kyc/docs/PII.md).
+- Persistence: `apps/kyc/data/store.json` (gitignored AES-256-GCM ciphertext; synthetic demo data only; recreated by seed). Requires `KYC_DATA_KEY`. Refuses `NODE_ENV=production` unless `KYC_ALLOW_LOCAL_STORE=true`. See [apps/kyc/docs/PII.md](./apps/kyc/docs/PII.md).
 
 ## GPL-3.0
 

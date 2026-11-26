@@ -1,5 +1,12 @@
-import { authenticateCredential, AuthConfigError, SESSION_COOKIE_NAME } from "@/lib/auth";
-import { jsonError, NO_STORE } from "@/lib/gate";
+import { resolveActor, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { readJsonBody } from "@/lib/body";
+import { bodyLimitResponse, configFailure, jsonError, NO_STORE } from "@/lib/gate";
+import {
+  clearSessionFailures,
+  recordSessionFailure,
+  sessionClientKeys,
+  sessionIsLocked,
+} from "@/lib/session-lockout";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -21,18 +28,33 @@ function sessionCookie(token: string, maxAge: number) {
 }
 
 export async function POST(request: Request) {
+  const limited = bodyLimitResponse(request);
+  if (limited) return limited;
   let token = "";
   try {
-    const body = (await request.json()) as { token?: unknown };
+    const body = (await readJsonBody(request)) as { token?: unknown };
     if (typeof body.token === "string") token = body.token;
-  } catch {
+  } catch (err) {
+    const failure = configFailure(err);
+    if (failure) return failure;
     return jsonError("Authentication required", 401);
   }
   if (!token || token.length > 256) return jsonError("Authentication required", 401);
 
+  const keys = sessionClientKeys(request, token);
+  if (sessionIsLocked(keys)) {
+    return jsonError("Too many sign-in attempts. Try again later.", 429);
+  }
+
   try {
-    const actor = authenticateCredential(token);
-    if (!actor) return jsonError("Authentication required", 401);
+    const actor = await resolveActor(token);
+    if (!actor) {
+      if (recordSessionFailure(keys)) {
+        return jsonError("Too many sign-in attempts. Try again later.", 429);
+      }
+      return jsonError("Authentication required", 401);
+    }
+    clearSessionFailures(keys);
     const response = NextResponse.json(
       { role: actor.role, actorId: actor.actorId },
       { headers: NO_STORE },
@@ -41,7 +63,8 @@ export async function POST(request: Request) {
     response.cookies.set(cookie.name, cookie.value, cookie.options);
     return response;
   } catch (err) {
-    if (err instanceof AuthConfigError) return jsonError(err.message, 503);
+    const failure = configFailure(err);
+    if (failure) return failure;
     throw err;
   }
 }

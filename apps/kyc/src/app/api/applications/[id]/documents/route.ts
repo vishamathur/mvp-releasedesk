@@ -1,7 +1,8 @@
 import { addDocument } from "@/lib/domain/application";
 import type { DocumentType } from "@/lib/domain/types";
-import { customerOwns } from "@/lib/access";
-import { authorize, jsonError, NO_STORE } from "@/lib/gate";
+import { customerOwns, publicApplication } from "@/lib/access";
+import { readJsonBody } from "@/lib/body";
+import { authorize, bodyLimitResponse, configFailure, jsonError, NO_STORE } from "@/lib/gate";
 import { getApplication, saveApplication } from "@/lib/store";
 import { NextResponse } from "next/server";
 
@@ -23,7 +24,9 @@ const DOCUMENT_TYPES = new Set<DocumentType>([
  * Filenames are metadata. Do not send raw government ID numbers.
  */
 export async function POST(request: Request, ctx: Ctx) {
-  const gate = authorize(request, "customer");
+  const limited = bodyLimitResponse(request);
+  if (limited) return limited;
+  const gate = await authorize(request, "customer");
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
   const existing = await getApplication(id);
@@ -32,7 +35,7 @@ export async function POST(request: Request, ctx: Ctx) {
   }
 
   try {
-    const body = (await request.json()) as {
+    const body = (await readJsonBody(request)) as {
       type?: DocumentType;
       fileName?: string;
     };
@@ -50,7 +53,7 @@ export async function POST(request: Request, ctx: Ctx) {
     await saveApplication(application);
     return NextResponse.json(
       {
-        application,
+        application: publicApplication(application),
         mock: {
           note: "Document upload is mocked. Filename recorded only; OCR summary is fabricated locally.",
         },
@@ -58,6 +61,8 @@ export async function POST(request: Request, ctx: Ctx) {
       { status: 201, headers: NO_STORE },
     );
   } catch (err) {
+    const failure = configFailure(err);
+    if (failure) return failure;
     return jsonError(err instanceof Error ? err.message : "Document add failed", 400);
   }
 }

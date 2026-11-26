@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DemoStoreNotice } from "@/components/DemoStoreNotice";
 import { LogoutButton } from "@/components/LogoutButton";
 import type { KycRole } from "@/lib/auth";
 
@@ -50,6 +51,7 @@ export function AppShell({
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-6 py-10">
+        <DemoStoreNotice />
         <div className="animate-rise mb-8">
           <h1 className="font-display text-4xl text-[color:var(--nw-ink)]">{title}</h1>
           {subtitle ? (

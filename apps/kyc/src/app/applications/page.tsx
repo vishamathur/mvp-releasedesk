@@ -15,7 +15,7 @@ export default async function ApplicationsPage() {
     <AppShell
       role={actor.role}
       title="KYC applications"
-      subtitle="Analyst queue. Customer identity is encrypted at rest. Records are eligible for deletion 90 days after the last update."
+      subtitle="Analyst queue. Synthetic demo store, encrypted at rest. Abandoned drafts and rejected cases age out after 90 days. Approved cases follow the longer KYC retention period."
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <SeedButton />
@@ -58,7 +58,9 @@ export default async function ApplicationsPage() {
                       : "—"}
                   </td>
                   <td className="px-4 py-3 text-[color:var(--nw-ink)]">
-                    {app.identity?.occupation || "—"}
+                    {app.identity?.occupationCategory === "Other"
+                      ? app.identity.occupation || "Other"
+                      : app.identity?.occupationCategory || "—"}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={app.status} />

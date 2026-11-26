@@ -63,9 +63,11 @@ describe("KYC application lifecycle", () => {
 
   it("stores optional occupation and rejects unknown identity keys", () => {
     const app = createDraftApplication({
-      identity: { ...identity, occupation: "  Teacher  " },
+      identity: { ...identity, occupationCategory: "Other", occupation: "  Teacher  " },
     });
+    expect(app.identity?.occupationCategory).toBe("Other");
     expect(app.identity?.occupation).toBe("Teacher");
+    expect(app.applicantCredentialHash).toBeNull();
     expect(app.createdBy).toBeNull();
     expect(app.decidedBy).toBeNull();
     expect(Object.keys(app.identity ?? {})).not.toContain("passportNumber");

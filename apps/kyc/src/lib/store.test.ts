@@ -1,11 +1,12 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeDataKey, decryptUtf8, encryptUtf8 } from "./at-rest";
 import { createDraftApplication } from "./domain/application";
 import type { Identity } from "./domain/types";
 import {
+  DEFAULT_APPROVED_RETENTION_DAYS,
   deleteApplication,
   getApplication,
   isPastRetention,
@@ -13,6 +14,7 @@ import {
   PII_RETENTION_DAYS,
   purgeExpiredApplications,
   readStore,
+  replaceAllApplications,
   saveApplication,
 } from "./store";
 
@@ -42,14 +44,16 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   delete process.env.KYC_STORE_WRITE_DELAY_MS;
+  delete process.env.KYC_ALLOW_LOCAL_STORE;
   await fs.rm(dir, { recursive: true, force: true });
 });
 
 describe("encrypted store", () => {
   it("encrypts PII at rest and round-trips occupation when present", async () => {
     const app = createDraftApplication({
-      identity: { ...identity, occupation: "Teacher" },
+      identity: { ...identity, occupationCategory: "Other", occupation: "Teacher" },
     });
     await saveApplication(app);
     const raw = await fs.readFile(path.join(dir, "store.json"), "utf8");
@@ -60,6 +64,7 @@ describe("encrypted store", () => {
 
     const loaded = await getApplication(app.id);
     expect(loaded?.identity?.email).toBe(identity.email);
+    expect(loaded?.identity?.occupationCategory).toBe("Other");
     expect(loaded?.identity?.occupation).toBe("Teacher");
     expect(loaded?.createdBy).toBeNull();
     expect(loaded?.decidedBy).toBeNull();
@@ -135,13 +140,79 @@ describe("encrypted store", () => {
     expect(await getApplication(stale.id)).toBeNull();
     expect(await getApplication(fresh.id)).not.toBeNull();
 
-    expect(await deleteApplication(fresh.id, "analyst:northwind-demo")).toBe(true);
-    expect(await deleteApplication(fresh.id, "analyst:northwind-demo")).toBe(false);
+    expect(await deleteApplication(fresh.id, "analyst:northwind-demo")).toEqual({ deleted: true });
+    expect(await deleteApplication(fresh.id, "analyst:northwind-demo")).toEqual({
+      deleted: false,
+      reason: "missing",
+    });
     const store = await readStore();
     expect(store.applications).toEqual([]);
     expect(store.retentionLog.map((event) => event.action)).toEqual(["purge", "delete"]);
     expect(store.retentionLog.every((event) => event.actorId === "analyst:northwind-demo")).toBe(true);
     expect(JSON.stringify(store.retentionLog)).not.toContain("example.com");
+  });
+
+  it("keeps approved records for the regulatory window and still purges old drafts and rejections", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const old = new Date(Date.now() - (PII_RETENTION_DAYS + 2) * day).toISOString();
+    const approved = createDraftApplication({ identity: { ...identity, email: "approved@example.com" } });
+    approved.status = "approved";
+    approved.updatedAt = old;
+    const rejected = createDraftApplication({ identity: { ...identity, email: "rejected@example.com" } });
+    rejected.status = "rejected";
+    rejected.updatedAt = old;
+    const submitted = createDraftApplication({ identity: { ...identity, email: "submitted@example.com" } });
+    submitted.status = "submitted";
+    submitted.updatedAt = old;
+    expect(isPastRetention(approved)).toBe(false);
+    expect(isPastRetention(rejected)).toBe(true);
+    expect(isPastRetention(submitted)).toBe(false);
+
+    const agedOut = createDraftApplication({ identity: { ...identity, email: "aged@example.com" } });
+    agedOut.status = "approved";
+    agedOut.updatedAt = new Date(Date.now() - (DEFAULT_APPROVED_RETENTION_DAYS + 1) * day).toISOString();
+    expect(isPastRetention(agedOut)).toBe(true);
+
+    await saveApplication(approved);
+    await saveApplication(rejected);
+    await saveApplication(submitted);
+    const purged = await purgeExpiredApplications("analyst:northwind-demo");
+    expect(purged).toEqual([rejected.id]);
+    expect(await getApplication(approved.id)).not.toBeNull();
+    expect(await getApplication(submitted.id)).not.toBeNull();
+
+    expect(await deleteApplication(approved.id, "analyst:northwind-demo")).toEqual({
+      deleted: false,
+      reason: "approved",
+    });
+    expect(await getApplication(approved.id)).not.toBeNull();
+    expect(await deleteApplication(approved.id, "analyst:northwind-demo", { approvedOverride: true })).toEqual({
+      deleted: true,
+    });
+    const store = await readStore();
+    expect(store.retentionLog.some((event) => event.action === "delete-approved-override")).toBe(true);
+  });
+
+  it("appends a seed event onto the existing retention log", async () => {
+    const app = createDraftApplication({ identity: { ...identity, email: "log@example.com" } });
+    await saveApplication(app);
+    await deleteApplication(app.id, "analyst:seed");
+    await replaceAllApplications([], new Date().toISOString(), "analyst:seed");
+    const store = await readStore();
+    expect(store.retentionLog.map((event) => event.action)).toEqual(["delete", "seed-replace"]);
+  });
+
+  it("refuses the local store in production unless the demo flag is set", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    delete process.env.KYC_ALLOW_LOCAL_STORE;
+    const app = createDraftApplication({ identity });
+    await expect(saveApplication(app)).rejects.toThrow(/Local demo store is disabled/);
+    vi.stubEnv("KYC_ALLOW_LOCAL_STORE", "true");
+    await saveApplication(app);
+    expect(await getApplication(app.id)).not.toBeNull();
+    vi.unstubAllEnvs();
+    process.env.KYC_DATA_KEY = TEST_ONLY_KYC_DATA_KEY;
+    process.env.KYC_DATA_DIR = dir;
   });
 
   it("decodes a 32-byte hex key and round-trips ciphertext", () => {

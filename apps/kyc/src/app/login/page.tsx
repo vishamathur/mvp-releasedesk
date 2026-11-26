@@ -1,16 +1,10 @@
 import { AppShell } from "@/components/AppShell";
 import { LoginForm } from "@/components/LoginForm";
+import { safeNext } from "@/lib/safe-next";
 
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ next?: string; reason?: string }> };
-
-function safeNext(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("://")) {
-    return "/";
-  }
-  return value;
-}
 
 export default async function LoginPage({ searchParams }: Props) {
   const params = await searchParams;
@@ -25,8 +19,7 @@ export default async function LoginPage({ searchParams }: Props) {
       <div className="max-w-lg rounded-lg border border-[color:var(--nw-sand)] bg-white/80 p-6 sm:p-8">
         {reason === "config" ? (
           <p className="mb-4 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            KYC auth is not configured. Set KYC_CUSTOMER_TOKEN and KYC_ANALYST_TOKEN in
-            apps/kyc/.env.local. Each token must be at least 16 characters, and they must differ.
+            Sign-in is not configured. An operator must finish demo auth setup before this app can accept a session.
           </p>
         ) : null}
         {reason === "analyst" ? (

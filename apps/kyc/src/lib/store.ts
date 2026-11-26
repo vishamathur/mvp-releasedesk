@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { decryptUtf8, encryptUtf8, loadDataKey, StoreDataError } from "./at-rest";
+import { decryptUtf8, encryptUtf8, loadDataKey, StoreConfigError, StoreDataError } from "./at-rest";
 import { sanitizeStoredIdentity } from "./domain/validation";
 import type {
   ApplicationStatus,
@@ -15,15 +15,21 @@ import type {
 
 /**
  * northwind-data-retention R-1.
- * Operational KYC PII is eligible for deletion 90 days after `updatedAt`
- * (last customer edit, submit, or analyst decision). Analysts may delete
- * sooner via DELETE /api/applications/:id.
+ * Abandoned drafts and rejected applications are eligible 90 days after `updatedAt`.
+ * Approved records follow KYC_APPROVED_RETENTION_DAYS (default 5 years), a demo
+ * assumption pending compliance confirmation. In-flight cases are not auto-purged.
  */
 export const PII_RETENTION_DAYS = 90;
 export const PII_RETENTION_MS = PII_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+/** 5 * 365 days. Demo assumption, not a confirmed regulatory period. */
+export const DEFAULT_APPROVED_RETENTION_DAYS = 5 * 365;
 export const PII_RETENTION_POLICY = "northwind-data-retention";
 
-export type RetentionAction = "delete" | "purge" | "seed-replace";
+export type RetentionAction = "delete" | "purge" | "seed-replace" | "delete-approved-override";
+
+export type DeleteResult =
+  | { deleted: true }
+  | { deleted: false; reason: "missing" | "approved" };
 
 export interface RetentionEvent {
   at: string;
@@ -78,8 +84,17 @@ function storePath(): string {
 
 let chain: Promise<void> = Promise.resolve();
 
+export function assertLocalStoreAllowed(): void {
+  if (process.env.NODE_ENV === "production" && process.env.KYC_ALLOW_LOCAL_STORE !== "true") {
+    throw new StoreConfigError("Local demo store is disabled.");
+  }
+}
+
 function withStoreLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = chain.then(() => fn());
+  const run = chain.then(async () => {
+    assertLocalStoreAllowed();
+    return fn();
+  });
   chain = run.then(
     () => undefined,
     () => undefined,
@@ -166,6 +181,10 @@ function sanitizeApplication(value: unknown): KycApplication {
     submittedAt: typeof app.submittedAt === "string" ? app.submittedAt : null,
     notes: Array.isArray(app.notes) ? app.notes.filter((note): note is string => typeof note === "string") : [],
     createdBy: typeof app.createdBy === "string" ? app.createdBy : null,
+    applicantCredentialHash:
+      typeof app.applicantCredentialHash === "string" && /^[a-f0-9]{64}$/.test(app.applicantCredentialHash)
+        ? app.applicantCredentialHash
+        : null,
     decidedBy: typeof app.decidedBy === "string" ? app.decidedBy : null,
   };
 }
@@ -262,10 +281,29 @@ function remember(store: StoreData, event: RetentionEvent): void {
   store.retentionLog = [...store.retentionLog, event].slice(-RETENTION_LOG_CAP);
 }
 
+export function approvedRetentionMs(): number {
+  const raw = process.env.KYC_APPROVED_RETENTION_DAYS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_APPROVED_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const days = Number(raw);
+  if (!Number.isInteger(days) || days < 1 || days > 36500) {
+    throw new StoreConfigError("Approved retention period is invalid.");
+  }
+  return days * 24 * 60 * 60 * 1000;
+}
+
+/** Automatic purge window. Null means the case is kept until a decision or the approved period. */
+export function retentionWindowMs(app: KycApplication): number | null {
+  if (app.status === "approved") return approvedRetentionMs();
+  if (app.status === "draft" || app.status === "rejected") return PII_RETENTION_MS;
+  return null;
+}
+
 export function isPastRetention(app: KycApplication, now = new Date()): boolean {
+  const windowMs = retentionWindowMs(app);
+  if (windowMs === null) return false;
   const updated = new Date(app.updatedAt).getTime();
   if (Number.isNaN(updated)) return false;
-  return now.getTime() - updated >= PII_RETENTION_MS;
+  return now.getTime() - updated >= windowMs;
 }
 
 export async function readStore(): Promise<StoreData> {
@@ -299,20 +337,27 @@ export async function saveApplication(app: KycApplication): Promise<KycApplicati
   });
 }
 
-export async function deleteApplication(id: string, actorId: string): Promise<boolean> {
+export async function deleteApplication(
+  id: string,
+  actorId: string,
+  options?: { approvedOverride?: boolean },
+): Promise<DeleteResult> {
   return withStoreLock(async () => {
     const store = await readStoreUnlocked();
-    const exists = store.applications.some((application) => application.id === id);
-    if (!exists) return false;
+    const existing = store.applications.find((application) => application.id === id);
+    if (!existing) return { deleted: false, reason: "missing" };
+    if (existing.status === "approved" && !options?.approvedOverride) {
+      return { deleted: false, reason: "approved" };
+    }
     store.applications = store.applications.filter((application) => application.id !== id);
     remember(store, {
       at: new Date().toISOString(),
       actorId,
       applicationIds: [id],
-      action: "delete",
+      action: existing.status === "approved" ? "delete-approved-override" : "delete",
     });
     await writeStoreUnlocked(store);
-    return true;
+    return { deleted: true };
   });
 }
 
@@ -340,26 +385,19 @@ export async function replaceAllApplications(
   actorId: string,
 ): Promise<StoreData> {
   return withStoreLock(async () => {
-    let previousIds: string[] = [];
-    try {
-      const existing = await readStoreUnlocked();
-      previousIds = existing.applications.map((application) => application.id);
-    } catch (err) {
-      if (err instanceof StoreDataError) throw err;
-      throw err;
-    }
+    const existing = await readStoreUnlocked();
+    const previousIds = existing.applications.map((application) => application.id);
     const next: StoreData = {
       applications,
       seededAt,
-      retentionLog: [
-        {
-          at: seededAt,
-          actorId,
-          applicationIds: previousIds,
-          action: "seed-replace",
-        },
-      ],
+      retentionLog: existing.retentionLog,
     };
+    remember(next, {
+      at: seededAt,
+      actorId,
+      applicationIds: previousIds,
+      action: "seed-replace",
+    });
     await writeStoreUnlocked(next);
     return next;
   });

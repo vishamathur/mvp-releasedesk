@@ -58,6 +58,7 @@ export function createDraftApplication(
     submittedAt: null,
     notes: ["Application created"],
     createdBy: owner,
+    applicantCredentialHash: null,
     decidedBy: null,
   };
 }

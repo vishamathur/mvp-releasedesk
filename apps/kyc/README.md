@@ -2,7 +2,7 @@
 
 Northwind Bank Know Your Customer onboarding demo (Release Desk Milestone 1).
 
-Customer identity and analyst review are separate sign-ins. The JSON store is AES-256-GCM encrypted. Field rules, the `occupation` classification, and the 90-day retention window are in [docs/PII.md](./docs/PII.md).
+**Demo only.** The local file store is for synthetic applicants. Do not enter real customer personal data. It is AES-256-GCM encrypted and refuses to run in production unless `KYC_ALLOW_LOCAL_STORE=true`, which is still a demo override. Field rules, the occupation classification (personal data, not special category, KYC due-diligence data under KYC retention), and retention windows are in [docs/PII.md](./docs/PII.md).
 
 Prefer running from the repo root:
 

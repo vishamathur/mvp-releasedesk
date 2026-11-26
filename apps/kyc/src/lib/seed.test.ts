@@ -9,7 +9,8 @@ describe("synthetic seed", () => {
     for (const app of apps) {
       expect(app.identity).toBeTruthy();
       expect(validateIdentity(app.identity!)).toEqual([]);
-      expect(app.identity?.occupation).toBeTruthy();
+      expect(app.identity?.occupationCategory).toBeTruthy();
+      expect(app.applicantCredentialHash).toBeNull();
       expect(app.identity?.email).toMatch(/@example\.|@temp\.test$/);
       expect(app.createdBy).toBeNull();
       expect(JSON.stringify(app.documents)).not.toMatch(/base64|data:/i);

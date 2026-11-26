@@ -1,7 +1,8 @@
+import { publicApplication, customerOwns } from "@/lib/access";
+import { readJsonBody } from "@/lib/body";
 import { advanceReview, updateIdentity } from "@/lib/domain/application";
 import type { ApplicationStatus } from "@/lib/domain/types";
-import { authorize, jsonError, NO_STORE } from "@/lib/gate";
-import { customerOwns } from "@/lib/access";
+import { authorize, authorizeAny, bodyLimitResponse, configFailure, jsonError, NO_STORE } from "@/lib/gate";
 import { deleteApplication, getApplication, saveApplication } from "@/lib/store";
 import { NextResponse } from "next/server";
 
@@ -12,15 +13,22 @@ type Ctx = { params: Promise<{ id: string }> };
 const REVIEW_STATUSES = new Set<ApplicationStatus>(["in_review", "approved", "rejected", "needs_info"]);
 
 export async function GET(request: Request, ctx: Ctx) {
-  const gate = authorize(request, "analyst");
+  const limited = bodyLimitResponse(request);
+  if (limited) return limited;
+  const gate = await authorizeAny(request, ["analyst", "customer"]);
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
   const application = await getApplication(id);
   if (!application) return jsonError("Not found", 404);
-  return NextResponse.json({ application }, { headers: NO_STORE });
+  if (gate.actor.role === "customer" && !customerOwns(application, gate.actor)) {
+    return jsonError("Not found", 404);
+  }
+  return NextResponse.json({ application: publicApplication(application) }, { headers: NO_STORE });
 }
 
 export async function PATCH(request: Request, ctx: Ctx) {
+  const limited = bodyLimitResponse(request);
+  if (limited) return limited;
   const { id } = await ctx.params;
   let body: {
     identity?: unknown;
@@ -30,8 +38,10 @@ export async function PATCH(request: Request, ctx: Ctx) {
     decidedBy?: unknown;
   };
   try {
-    body = (await request.json()) as typeof body;
-  } catch {
+    body = (await readJsonBody(request)) as typeof body;
+  } catch (err) {
+    const failure = configFailure(err);
+    if (failure) return failure;
     return jsonError("Invalid JSON body", 400);
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -48,7 +58,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
   }
 
   if (hasStatus) {
-    const gate = authorize(request, "analyst");
+    const gate = await authorize(request, "analyst");
     if (!gate.ok) return gate.response;
     if (!REVIEW_STATUSES.has(body.status as ApplicationStatus)) {
       return jsonError("status is not an analyst decision", 400);
@@ -69,30 +79,38 @@ export async function PATCH(request: Request, ctx: Ctx) {
         typeof body.note === "string" ? body.note : undefined,
       );
       await saveApplication(next);
-      return NextResponse.json({ application: next }, { headers: NO_STORE });
+      return NextResponse.json({ application: publicApplication(next) }, { headers: NO_STORE });
     } catch (err) {
       return jsonError(err instanceof Error ? err.message : "Update failed", 400);
     }
   }
 
-  const gate = authorize(request, "customer");
+  const gate = await authorize(request, "customer");
   if (!gate.ok) return gate.response;
   const existing = await getApplication(id);
   if (!existing || !customerOwns(existing, gate.actor)) return jsonError("Not found", 404);
   try {
     const next = updateIdentity(existing, body.identity);
     await saveApplication(next);
-    return NextResponse.json({ application: next }, { headers: NO_STORE });
+    return NextResponse.json({ application: publicApplication(next) }, { headers: NO_STORE });
   } catch (err) {
+    const failure = configFailure(err);
+    if (failure) return failure;
     return jsonError(err instanceof Error ? err.message : "Update failed", 400);
   }
 }
 
 export async function DELETE(request: Request, ctx: Ctx) {
-  const gate = authorize(request, "analyst");
+  const limited = bodyLimitResponse(request);
+  if (limited) return limited;
+  const gate = await authorize(request, "analyst");
   if (!gate.ok) return gate.response;
   const { id } = await ctx.params;
-  const removed = await deleteApplication(id, gate.actor.actorId);
-  if (!removed) return jsonError("Not found", 404);
+  const override = new URL(request.url).searchParams.get("override") === "approved-retention";
+  const result = await deleteApplication(id, gate.actor.actorId, { approvedOverride: override });
+  if (!result.deleted && result.reason === "approved") {
+    return jsonError("Approved KYC records are kept for the regulatory retention period.", 403);
+  }
+  if (!result.deleted) return jsonError("Not found", 404);
   return NextResponse.json({ deleted: true, id }, { headers: NO_STORE });
 }

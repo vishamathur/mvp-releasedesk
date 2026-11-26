@@ -32,11 +32,27 @@ export interface Identity {
   postalCode: string;
   country: string; // ISO 3166-1 alpha-2
   /**
-   * Optional job title. Ordinary personal data, not a special-category attribute.
+   * Optional occupation category. KYC due-diligence data.
    * Omitted on records captured before the field existed.
+   */
+  occupationCategory?: OccupationCategory;
+  /**
+   * Free-text job title, only when occupationCategory is Other.
+   * Personal data, not special category.
    */
   occupation?: string;
 }
+
+export const OCCUPATION_CATEGORIES = [
+  "Employed",
+  "Self-employed",
+  "Student",
+  "Retired",
+  "Homemaker",
+  "Other",
+] as const;
+
+export type OccupationCategory = (typeof OCCUPATION_CATEGORIES)[number];
 
 export interface KycDocument {
   id: string;
@@ -70,8 +86,13 @@ export interface KycApplication {
   updatedAt: string;
   submittedAt: string | null;
   notes: string[];
-  /** Customer actor id that created the case. Null for synthetic seed samples. */
+  /** Per-applicant actor id. Null for synthetic seed samples. */
   createdBy: string | null;
+  /**
+   * SHA-256 hex of the applicant credential. Null for seed samples and on public responses.
+   * The plaintext credential is never stored.
+   */
+  applicantCredentialHash: string | null;
   /** Analyst actor id for the latest review decision. Never taken from the client. */
   decidedBy: string | null;
 }

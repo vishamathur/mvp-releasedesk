@@ -35,22 +35,38 @@ describe("validateIdentity", () => {
     expect(issues.some((i) => i.field === "dateOfBirth")).toBe(true);
   });
 
-  it("accepts a missing occupation and a normal job title", () => {
+  it("accepts a missing occupation and a category or Other detail", () => {
     expect(validateIdentity(valid)).toEqual([]);
-    expect(validateIdentity({ ...valid, occupation: "R&D Manager" })).toEqual([]);
-    const parsed = parseIdentity({ ...valid, occupation: "" });
+    expect(validateIdentity({ ...valid, occupationCategory: "Student" })).toEqual([]);
+    expect(validateIdentity({ ...valid, occupationCategory: "Other", occupation: "R&D Manager" })).toEqual([]);
+    const parsed = parseIdentity({ ...valid, occupationCategory: "Employed", occupation: "" });
+    expect(parsed.occupationCategory).toBe("Employed");
     expect(parsed.occupation).toBeUndefined();
   });
 
-  it("rejects occupation that is too short, too long, or outside the charset", () => {
-    expect(validateIdentity({ ...valid, occupation: "A" }).some((issue) => issue.field === "occupation")).toBe(
-      true,
-    );
+  it("rejects occupation detail that is too short, too long, outside the charset, or missing a category", () => {
     expect(
-      validateIdentity({ ...valid, occupation: "N".repeat(81) }).some((issue) => issue.field === "occupation"),
+      validateIdentity({ ...valid, occupationCategory: "Other", occupation: "A" }).some(
+        (issue) => issue.field === "occupation",
+      ),
     ).toBe(true);
     expect(
-      validateIdentity({ ...valid, occupation: "Title <script>" }).some((issue) => issue.field === "occupation"),
+      validateIdentity({ ...valid, occupationCategory: "Other", occupation: "N".repeat(81) }).some(
+        (issue) => issue.field === "occupation",
+      ),
+    ).toBe(true);
+    expect(
+      validateIdentity({ ...valid, occupationCategory: "Other", occupation: "Title <script>" }).some(
+        (issue) => issue.field === "occupation",
+      ),
+    ).toBe(true);
+    expect(
+      validateIdentity({ ...valid, occupation: "Teacher" }).some((issue) => issue.field === "occupationCategory"),
+    ).toBe(true);
+    expect(
+      validateIdentity({ ...valid, occupationCategory: "Student", occupation: "Teacher" }).some(
+        (issue) => issue.field === "occupation",
+      ),
     ).toBe(true);
   });
 
@@ -84,8 +100,10 @@ describe("validateIdentity", () => {
     const stored = sanitizeStoredIdentity({
       ...valid,
       passportNumber: "SHOULD-NOT-SURVIVE",
+      occupationCategory: "Other",
       occupation: "Nurse (RN)",
     });
+    expect(stored?.occupationCategory).toBe("Other");
     expect(stored?.occupation).toBe("Nurse (RN)");
     expect(stored && "passportNumber" in stored).toBe(false);
     expect(sanitizeStoredIdentity({ ...valid, occupation: undefined })?.occupation).toBeUndefined();
