@@ -12,12 +12,15 @@
 import {
   assertGrokChatStatus,
   buildGrokChatCompletionBody,
+  buildGrokTelemetry,
   GROK_API_KEY_ENV,
   GROK_CHAT_COMPLETIONS_URL,
   GROK_REQUEST_TIMEOUT_MS,
   GrokGuidelineError,
   MissingCredentialError,
   resolveAgentGrokApiKey,
+  resolveGrokModel,
+  type GrokTelemetry,
 } from "@releasedesk/core";
 
 export type GrokIntelMode = "live";
@@ -42,7 +45,14 @@ export type GrokReleaseIntelResult = {
   label: "LIVE";
   /** Whether RELEASEDESK_GROK_API_KEY_LEAD was present for this call. */
   keyPresent: boolean;
+  /** The model the response reported. Falls back to the requested model only when `modelReported` is false. */
   model: string;
+  /** The model slug the request asked for (GROK_MODEL, default grok-4.3). */
+  requestedModel: string;
+  /** False when the API response carried no `model` field. */
+  modelReported: boolean;
+  /** Token usage, latency and an estimated cost for this one call. */
+  telemetry: GrokTelemetry;
   classify: { category: string; confidence: number };
   extract: string[];
   score: { level: "low" | "medium" | "high" | "critical"; rationale: string };
@@ -54,8 +64,10 @@ export type GrokReleaseIntelResult = {
   rawPreview?: string;
 };
 
-/** Default model: grok-2-latest is retired/404 for many teams — prefer grok-3. */
-const MODEL = process.env.GROK_MODEL?.trim() || "grok-3";
+/** Completion budget for one report. A reply cut off at this limit fails visibly. */
+export const RELEASE_INTEL_MAX_TOKENS = 2000;
+/** Findings (changed file paths for a PR) sent to Grok per call. */
+export const RELEASE_INTEL_FINDINGS_LIMIT = 40;
 const INTEL_ROLE = "lead" as const;
 const INTEL_KEY_ENV = GROK_API_KEY_ENV[INTEL_ROLE];
 
@@ -183,12 +195,14 @@ export async function runGrokReleaseIntel(
   const env = (opts?.env ?? process.env) as NodeJS.ProcessEnv;
   const apiKey = resolveAgentGrokApiKey(INTEL_ROLE, env);
   if (!apiKey) throw new MissingCredentialError(INTEL_KEY_ENV);
+  const requestedModel = resolveGrokModel(env);
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const system =
     "You are Release Desk Grok intel. Return ONLY JSON matching the schema: classify{category,confidence 0-1}, summarize, riskTier low|medium|high, blockers string[], extract string[], score{level,rationale}. Do not approve merges.";
 
   try {
+    const startedAt = performance.now();
     const res = await fetchImpl(GROK_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
@@ -197,8 +211,9 @@ export async function runGrokReleaseIntel(
       },
       body: JSON.stringify(
         buildGrokChatCompletionBody({
-          model: MODEL,
+          model: requestedModel,
           temperature: 0.1,
+          max_tokens: RELEASE_INTEL_MAX_TOKENS,
           safetySource: `lead:${input.repository}`,
           response_format: {
             type: "json_schema",
@@ -215,7 +230,7 @@ export async function runGrokReleaseIntel(
               content: JSON.stringify({
                 repository: input.repository,
                 goal: input.goal,
-                findings: input.findings.slice(0, 40),
+                findings: input.findings.slice(0, RELEASE_INTEL_FINDINGS_LIMIT),
               }),
             },
           ],
@@ -230,8 +245,19 @@ export async function runGrokReleaseIntel(
     }
 
     const body = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      model?: string;
+      choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
     };
+    const telemetry = buildGrokTelemetry({
+      requestedModel,
+      body,
+      latencyMs: performance.now() - startedAt,
+    });
+    if (body.choices?.[0]?.finish_reason === "length") {
+      throw new Error(
+        `Grok response was cut off at max_tokens=${RELEASE_INTEL_MAX_TOKENS}. Raise RELEASE_INTEL_MAX_TOKENS in grok-release-intel.ts or shorten the input.`,
+      );
+    }
     const text = body.choices?.[0]?.message?.content?.trim() ?? "";
     const parsed = parseIntelJson(text);
     const trusted = parsed
@@ -261,7 +287,10 @@ export async function runGrokReleaseIntel(
       mode: "live",
       label: "LIVE",
       keyPresent: true,
-      model: MODEL,
+      model: telemetry.servedModel ?? requestedModel,
+      requestedModel,
+      modelReported: telemetry.servedModel !== null,
+      telemetry,
       classify: {
         category: String(parsed.classify!.category),
         confidence: trusted.confidence,

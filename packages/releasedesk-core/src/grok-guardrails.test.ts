@@ -4,8 +4,10 @@ import {
   assertGrokChatStatus,
   buildGrokChatCompletionBody,
   GROK_GUIDELINES,
+  GROK_MODEL_DEFAULT,
   GrokGuidelineError,
   hashSafetyIdentifier,
+  resolveGrokModel,
 } from "./grok-guardrails.js";
 import { buildGuardrailProbeBody, GROK_GUARDRAIL_PROBES } from "./ai-red-teaming/grok-guardrails-provider.js";
 
@@ -20,7 +22,7 @@ describe("Grok chat completion guardrails", () => {
 
   it("puts guidelines and a hashed safety_identifier on the body and omits stop and n", () => {
     const body = buildGrokChatCompletionBody({
-      model: "grok-3",
+      model: "grok-4.3",
       safetySource: "lead:vishamathur/mvp-releasedesk",
       temperature: 0.1,
       messages: [
@@ -60,7 +62,7 @@ describe("Grok chat completion guardrails", () => {
       const body = buildGuardrailProbeBody(probe, "security:northwind");
       expect(body.guidelines).toEqual(GROK_GUIDELINES);
       expect(body.safety_identifier).toBe(hashSafetyIdentifier("security:northwind"));
-      expect(body.model).toBe("grok-3");
+      expect(body.model).toBe("grok-4.3");
       expect(body).not.toHaveProperty("stop");
       expect(body).not.toHaveProperty("n");
     }
@@ -70,5 +72,24 @@ describe("Grok chat completion guardrails", () => {
       "policy-bypass",
       "unsafe-content",
     ]);
+  });
+});
+
+describe("resolveGrokModel", () => {
+  it("defaults to grok-4.3, not a retired slug", () => {
+    expect(GROK_MODEL_DEFAULT).toBe("grok-4.3");
+    expect(resolveGrokModel({})).toBe("grok-4.3");
+  });
+
+  it("reads GROK_MODEL, trims it, and treats an empty value as unset", () => {
+    expect(resolveGrokModel({ GROK_MODEL: "  grok-4.7 " })).toBe("grok-4.7");
+    expect(resolveGrokModel({ GROK_MODEL: "" })).toBe("grok-4.3");
+    expect(resolveGrokModel({ GROK_MODEL: "   " })).toBe("grok-4.3");
+  });
+
+  it("feeds the red-team probe body by default and by override", () => {
+    const probe = GROK_GUARDRAIL_PROBES[0]!;
+    expect(buildGuardrailProbeBody(probe, "security:x").model).toBe("grok-4.3");
+    expect(buildGuardrailProbeBody(probe, "security:x", "grok-4.7").model).toBe("grok-4.7");
   });
 });
