@@ -13,7 +13,7 @@
     title: "title", description: "description (20+ characters)", urgency: "urgency", desiredBy: "needed-by date", customerBudgetInr: "budget",
     artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
     siteName: "site or brand name", purpose: "purpose of the site", audience: "audience", pages: "pages needed", mustHaveFeatures: "must-have features",
-    brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band",
+    brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band", inspirationStyle: "inspiration photo style (upload the photo again)",
     catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
 
   // One random id per page load: the server hashes it into Grok's safety_identifier and rejects chat without it.
@@ -75,6 +75,58 @@
     } catch { typing.remove(); say("assistant", "Network problem. Please try again or use the form."); }
   });
 
+  // ---- inspiration photo (website route): the server asks Grok for the visual style; only the style text is submitted.
+  const STYLE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const STYLE_MAX = 4 * 1024 * 1024;
+  const clearStyle = () => {
+    form.elements.inspirationStyle.value = ""; form.elements.inspirationStyleSig.value = "";
+    $("#inspiration-result").hidden = true; $("#inspiration-swatches").replaceChildren(); $("#inspiration-text").textContent = "";
+  };
+  // Large photos are redrawn in the browser as a JPEG about 1600 px wide before upload: enough to read a style, and quick
+  // for the server. If the browser cannot redraw it, the original file is sent (the server still enforces 4 MB).
+  const shrinkPhoto = async (file) => {
+    if (file.size <= 1024 * 1024 || typeof createImageBitmap !== "function") return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width * scale); cv.height = Math.round(bmp.height * scale);
+      cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+      const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
+      return blob && blob.size < file.size ? blob : file;
+    } catch { return file; }
+  };
+  const photo = $("#inspiration-photo");
+  if (photo) {
+    $("#inspiration-clear").addEventListener("click", () => { clearStyle(); photo.value = ""; $("#inspiration-status").textContent = ""; });
+    photo.addEventListener("change", async () => {
+      const st = $("#inspiration-status"); st.className = "hint"; clearStyle();
+      const file = photo.files && photo.files[0];
+      if (!file) { st.textContent = ""; return; }
+      if (!STYLE_TYPES.includes(file.type)) { st.className = "hint error"; st.textContent = "Please choose a JPEG, PNG or WebP image."; photo.value = ""; return; }
+      if (file.size > STYLE_MAX) { st.className = "hint error"; st.textContent = "That image is over 4 MB. Please choose a smaller one."; photo.value = ""; return; }
+      st.textContent = "Reading the style of your photo…"; photo.disabled = true;
+      try {
+        const upload = await shrinkPhoto(file);
+        const r = await fetch("api/style.php", { method: "POST", headers: { "content-type": upload.type, "x-session-id": sessionId }, body: upload });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ok) {
+          st.className = "hint error";
+          st.textContent = r.status === 429 ? "Too many requests. Please wait a few minutes and try again."
+            : r.status === 413 ? "That image is over 4 MB." : r.status === 415 ? "Please choose a JPEG, PNG or WebP image."
+            : (d.message || "Could not read the style of this photo.") + " You can still submit without it.";
+          photo.value = ""; return;
+        }
+        form.elements.inspirationStyle.value = d.styleText; form.elements.inspirationStyleSig.value = d.styleSig;
+        const sw = $("#inspiration-swatches");
+        for (const c of d.style.palette) { const s = el("div", null, "swatch"); const chip = el("span"); chip.style.backgroundColor = c.hex; s.append(chip, el("small", `${c.hex} ${c.name}`)); sw.append(s); }
+        $("#inspiration-text").textContent = d.styleText;
+        $("#inspiration-result").hidden = false;
+        st.textContent = "This style text will go with your request. Check it before you submit.";
+      } catch { st.className = "hint error"; st.textContent = "Network error while reading the photo. You can still submit without it."; photo.value = ""; }
+      finally { photo.disabled = false; }
+    });
+  }
+
   // ---- submit
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -91,7 +143,8 @@
     if (route === "er") Object.assign(body, { customerId: f.customerId.value, projectRef: f.projectRef.value, changeType: f.changeType.value, desiredBy: f.desiredBy.value });
     else if (route === "website") Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, sponsor: f.sponsor.value, desiredBy: f.desiredBy.value,
       siteName: f.siteName.value, purpose: f.purpose.value, audience: f.audience.value, pages: f.pages.value, mustHaveFeatures: f.mustHaveFeatures.value,
-      brandAssets: f.brandAssets.value, domainHosting: f.domainHosting.value, budgetBand: f.budgetBand.value });
+      brandAssets: f.brandAssets.value, domainHosting: f.domainHosting.value, budgetBand: f.budgetBand.value,
+      inspirationStyle: f.inspirationStyle.value, inspirationStyleSig: f.inspirationStyleSig.value });
     else Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, intendedProduct: f.intendedProduct.value, sponsor: f.sponsor.value });
     const btn = $("#submit"); btn.disabled = true; btn.textContent = "Sending…";
     try {

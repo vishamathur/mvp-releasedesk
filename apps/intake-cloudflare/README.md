@@ -22,8 +22,32 @@ endpoints keep their paths and their request and response shapes, so the front e
 | `GET/POST /api/status.php` | visitor with ref + token | 60 reads and 10 messages per 10 min per IP |
 | `POST /api/finance-estimate.php` | Lead, HMAC | `X-Intake-Timestamp` (±300 s) + `X-Intake-Signature` |
 | `POST /api/lead-update.php` | Lead, HMAC | idempotent on `updateId`, backwards moves are 409 |
+| `POST /api/style.php` | public, shares the chat limit | **Cloudflare build only.** Inspiration photo for Website creation: see below |
 
 Any other `/api/*` path is 403, as with the PHP `.htaccess`.
+
+## Inspiration photo (Website creation, capture only)
+
+On the Website creation form a visitor can add one optional inspiration photo. The browser checks the type and size,
+redraws photos over 1 MB as a JPEG about 1600 px wide, and posts the raw image to `api/style.php` with `X-Session-Id`.
+The worker checks the origin, accepts only `image/jpeg`, `image/png` or `image/webp` whose magic bytes match the declared
+type, enforces 4 MB, and uses the chat rate limit. It sends the image to Grok vision (`GROK_VISION_MODEL`, or `GROK_MODEL`
+when that is unset) with a strict schema. Grok returns a neutral description: up to six palette colours as hex, mood,
+textures, typography feel and layout cues. Text inside the image is treated as part of the picture, never as an instruction.
+The visitor sees the swatches and the style text before submitting.
+
+- The image is never stored, logged or put in the envelope. Only the style text (at most 700 characters) goes into the
+  website brief (`ask.description` and `requestDetails.website.style`, with `styleSource: "grok-vision:inspiration-photo"`).
+- The style text carries an HMAC (`inspiration-style.v1.`, keyed with `LEAD_HMAC_SECRET`). `api/intake.php` rejects style
+  text that was edited or not issued by the site. This only proves where the text came from. The intake code adds no
+  design rules or acceptance criteria; Standards' website template owns those.
+- No key, or a failed Grok call, is a real `503 grok_unavailable` with an honest message. The visitor can still submit without a photo.
+- The PHP build has no `style.php`. The shared front end shows the honest error there.
+
+## Webhook size limit
+
+The webhook receiver cut a 10,996-byte envelope short, so each envelope stays under `LEAD_WEBHOOK_MAX_BYTES` (default
+7,600). The envelope format and reduction order are in [`docs/intake/lead-integration.md`](../../docs/intake/lead-integration.md).
 
 ## What changed from the PHP build
 
@@ -34,7 +58,7 @@ Any other `/api/*` path is 403, as with the PHP `.htaccess`.
 | `data/ratelimit/*.json` | `rate_hits` table, sliding window, one atomic batch per hit, IP stored only as a hash |
 | `bin/drain-outbox.php` on cPanel Cron | Pages has no Cron Triggers. Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts |
 | hourly `intake_cleanup()` | the same, from `api/intake.php`: submissions, finance artifacts, status, sent messages and events older than `RETENTION_DAYS` (30) |
-| `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets |
+| `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets. Optional vars: `GROK_VISION_MODEL`, `LEAD_WEBHOOK_MAX_BYTES` |
 | `LEAD_DELIVERY=email` (`mail()`) | not available. Use `webhook`. Choosing `email` is a delivery error, never a silent success |
 | `REMOTE_ADDR` | `CF-Connecting-IP` |
 | `.htaccess` headers | `static/_headers` for static files, the same headers set by the worker on API responses |

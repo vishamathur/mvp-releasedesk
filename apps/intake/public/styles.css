@@ -31,3 +31,6 @@ button{font:inherit;font-weight:600;padding:10px 16px;border-radius:8px;border:0
 .messages{list-style:none;padding:0;display:grid;gap:8px}.messages li{background:#f7f8fa;padding:10px;border-radius:8px}
 [hidden]{display:none!important}
 @media(max-width:800px){.options,.grid2,.grid{grid-template-columns:1fr}.grid .wide{grid-column:auto}}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.swatch{display:grid;gap:3px;font-size:.75rem;color:var(--muted);text-align:center;width:72px}.swatch span{display:block;height:36px;border-radius:6px;border:1px solid var(--line)}
+.style-text{white-space:pre-wrap;background:#f7f8fa;padding:10px;border-radius:8px;font-size:.9rem;margin:6px 0}#inspiration-status.error{color:var(--err)}
+button.secondary{background:#eef1f7;color:inherit}

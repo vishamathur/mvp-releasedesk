@@ -85,6 +85,18 @@
           <label class="wide">Must-have features (optional)<textarea name="mustHaveFeatures" rows="2" maxlength="600" placeholder="e.g. contact form, blog, multi-language"></textarea></label>
           <label class="wide">Content and brand assets (optional)<textarea name="brandAssets" rows="2" maxlength="400" placeholder="Logo, colours, copy, photos: what exists and what is missing?"></textarea></label>
           <label class="wide">Domain and hosting notes (optional)<input name="domainHosting" maxlength="300" placeholder="Existing domain? Preferred host?" /></label>
+          <div class="wide" id="inspiration">
+            <label>Inspiration photo (optional: JPEG, PNG or WebP, up to 4 MB)<input type="file" id="inspiration-photo" accept="image/jpeg,image/png,image/webp" /></label>
+            <p class="hint">Grok reads only the visual style (colours, mood, textures, type and layout). The photo is not stored or sent to Release Desk Lead; only the style text below goes with your request.</p>
+            <p id="inspiration-status" class="hint" role="status" aria-live="polite"></p>
+            <div id="inspiration-result" hidden>
+              <div id="inspiration-swatches" class="swatches"></div>
+              <p id="inspiration-text" class="style-text"></p>
+              <button type="button" id="inspiration-clear" class="secondary">Remove style</button>
+            </div>
+            <input type="hidden" name="inspirationStyle" />
+            <input type="hidden" name="inspirationStyleSig" />
+          </div>
           <label>Budget band
             <select name="budgetBand">
               <option value="not_sure">Not sure yet</option>
