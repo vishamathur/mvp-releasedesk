@@ -442,8 +442,9 @@ export {
 
 export {
   OWASP_DIFF_TOKEN_BUDGET,
-  UNTRUSTED_BEGIN,
-  UNTRUSTED_END,
+  DIFF_DATA_BEGIN,
+  DIFF_DATA_END,
+  neutralizeDiffMarkers,
   addedLines,
   addedPatch,
   changedTexts,

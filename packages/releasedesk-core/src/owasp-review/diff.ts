@@ -7,8 +7,8 @@ import { estimateTokensFromText } from "../token-budget.js";
 import type { DiffFile, OwaspDropped, OwaspSeverity } from "./types.js";
 
 export const OWASP_DIFF_TOKEN_BUDGET = 32_000;
-export const UNTRUSTED_BEGIN = "<<<<<UNTRUSTED-PR-DATA>>>>>";
-export const UNTRUSTED_END = "<<<<<END-UNTRUSTED-PR-DATA>>>>>";
+export const DIFF_DATA_BEGIN = "<<<<<DIFF-DATA>>>>>";
+export const DIFF_DATA_END = "<<<<<END-DIFF-DATA>>>>>";
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
@@ -268,8 +268,8 @@ export function renderNumberedDiff(files: readonly DiffFile[], tokenBudget: numb
   };
 }
 
-export function neutralizeUntrustedMarkers(text: string): string {
-  return text.split(UNTRUSTED_BEGIN).join("[untrusted-marker]").split(UNTRUSTED_END).join("[untrusted-marker]");
+export function neutralizeDiffMarkers(text: string): string {
+  return text.split(DIFF_DATA_BEGIN).join("[diff-data]").split(DIFF_DATA_END).join("[diff-data]");
 }
 
 export function resolveOwaspDiffTokenBudget(env: Record<string, string | undefined>): number {

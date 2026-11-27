@@ -1,6 +1,6 @@
 /**
  * `## owasp-review v1` pull request comment.
- * Builder reads the hidden machine block. The comment never approves a merge.
+ * Builder reads the hidden machine block. A merge stays with a human.
  */
 import { z } from "zod";
 import { formatGrokTelemetryLine } from "../grok-telemetry.js";
@@ -175,7 +175,7 @@ export function renderOwaspReviewComment(report: OwaspReviewReport): string {
   const lines = [
     OWASP_REVIEW_HEADING,
     "",
-    "Automated OWASP checklist for this pull request. Security checks the controls the diff can affect, suggests a fix for every confirmed failure, and Builder remediates those lines in the change. A human still types the security-compliance decision. This review does not approve a merge or a release.",
+    "Automated OWASP checklist for this pull request. Security checks the controls the diff can affect, suggests a fix for every confirmed failure, and Builder remediates those lines in the change. A human still types the security-compliance decision. A merge or a release stays with a human.",
     "",
     `**Commit** ${commit} · **Status** ${report.status} · **Outcome** ${report.outcome} · **Risk** ${report.risk} · **Key** \`${key}\``,
     "",

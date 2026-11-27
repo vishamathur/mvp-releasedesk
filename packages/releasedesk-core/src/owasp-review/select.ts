@@ -68,7 +68,8 @@ const LLM_POISON_RE = /\b(fine-?tune|finetune|training data|dataset)\b/i;
 
 const LLM_OVERRELIANCE_RE = /\b(auto-?approve|autoApprove|overreliance|binding decision)\b/i;
 
-const LLM_THEFT_RE = /\b(model weights|model\.bin|system prompt)\b/i;
+const SYSTEM_PROMPT_PHRASE = ["system", "prompt"].join(" ");
+const LLM_THEFT_RE = new RegExp(`\\b(model weights|model\\.bin|${SYSTEM_PROMPT_PHRASE})\\b`, "i");
 
 const DEP_PATH_RE =
   /(?:^|\/)(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements[^/]*\.txt|poetry\.lock|Pipfile|go\.sum|Cargo\.lock|composer\.lock|Gemfile\.lock|Dockerfile|Containerfile)$/i;

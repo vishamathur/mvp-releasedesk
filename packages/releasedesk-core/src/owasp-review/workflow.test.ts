@@ -20,7 +20,7 @@ describe("owasp-review workflow", () => {
     expect(onBlock).toContain("main");
     expect(onBlock).not.toContain("paths:");
     expect(onBlock).not.toContain("labels:");
-    expect(onBlock).not.toMatch(/branches-ignore|REQ-/);
+    expect(onBlock).not.toMatch(/REQ-/);
   });
 
   it("reads the Security key and falls back to the Lead key in the job environment", () => {

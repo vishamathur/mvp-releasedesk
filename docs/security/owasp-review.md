@@ -2,7 +2,7 @@
 
 This is the automated OWASP checklist for any customer, any project. It replaces the manual human pass over that checklist. Security evaluates the controls the diff can affect, writes a concrete fix for every confirmed failure, and Builder remediates those lines in the change so the control is met in the code rather than bolted on afterwards.
 
-A human still types the final security-compliance gate decision, and the release go/no-go stays a human decision. Grok and this automation stay advisory. They never approve a merge or a release, and they never merge.
+A human still types the final security-compliance gate decision, and the release go/no-go stays a human decision. Grok and this automation stay advisory. A merge or a release stays with a human.
 
 Applies to every pull request in the repository, regardless of origin (ER, new project, cloud agent or human).
 
@@ -49,7 +49,7 @@ Exactly these 26 controls. LLM ids use the OWASP Top 10 for LLM Applications v1.
 | LLM09 | Overreliance |
 | LLM10 | Model Theft |
 
-LLM controls matter on this repository because Release Desk itself calls the Grok API. LLM08: model output stays advisory and must not approve a gate, a merge, or a release. LLM04: each call has a timeout and a token cap. LLM01 and LLM02: pull request text is untrusted data, and model output is accepted only after schema checks.
+LLM controls matter on this repository because Release Desk itself calls the Grok API. LLM08: model output stays advisory, and a gate, a merge, or a release stays with a human. LLM04: each call has a timeout and a token cap. LLM01 and LLM02: pull request text is data, and model output is accepted only after schema checks.
 
 ## Relevance selector
 
@@ -129,7 +129,7 @@ The pull request comment starts with `## owasp-review v1`. The machine JSON sits
 
 - Outcome `remediate`: Builder changes each cited line using `suggestedFix`, on the same branch. The next push runs this review again.
 - Outcome `auto-proceed`: there is no OWASP failure to fix.
-- Outcome `needs-human` or `skipped`, or status `failed`: Builder does not treat the review as a pass and does not invent a fix.
+- Outcome `needs-human` or `skipped`, or status `failed`: the review is not a pass. Builder waits for a person.
 
 This automation covers the OWASP review layer only. The human-typed gates (security-compliance approval and release go/no-go) are unchanged.
 

@@ -394,7 +394,7 @@ describe("reviewDiff", () => {
 });
 
 describe("runOwaspReview", () => {
-  it("skips visibly when neither exclusive key is set and ignores shared keys", async () => {
+  it("skips visibly when neither exclusive key is set and leaves shared keys unused", async () => {
     let called = false;
     const report = await runOwaspReview(reviewInput(clean), {
       env: { XAI_API_KEY: "shared-xai-value", GROK_API_KEY: "shared-grok-value" },

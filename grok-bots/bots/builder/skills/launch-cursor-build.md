@@ -18,6 +18,6 @@ Skill: launch-cursor-build
 7. OWASP review (additive; `docs/security/owasp-review.md`). Read the comment that starts with `## owasp-review v1`. The machine JSON is between `<!-- owasp-review-json:v1` and `-->`. schema is `owasp-review.v1`. Compare headSha with the PR head.
    - outcome `remediate`: apply each `failures[]` item at path:line using `suggestedFix` (`what`, `where`, `why`, `owaspId`). The review runs again on the new head.
    - outcome `auto-proceed`: no OWASP failure to fix.
-   - outcome `needs-human`: do not treat the review as a pass and do not invent a fix. `exceptions[]` has type, control id, path:line, and reason.
+   - outcome `needs-human`: this outcome is not a pass. A person reads `exceptions[]` (type, control id, path:line, reason) before a code change.
    - outcome `skipped` or status `failed`: risk was not assessed. This is not a pass and not auto-proceed.
-   This layer never approves a merge or a release. The human still types security-compliance-approval and the release go/no-go. If you dispute a fix, post `<!-- owasp-builder-dispute:v1 { "disputes": [{ "id", "disputed": true, "reason", "path", "line" }] } -->`.
+   A merge or a release stays with a human, who still types security-compliance-approval and the release go/no-go. A dispute is a comment `<!-- owasp-builder-dispute:v1 { "disputes": [{ "id", "disputed": true, "reason", "path", "line" }] } -->`.

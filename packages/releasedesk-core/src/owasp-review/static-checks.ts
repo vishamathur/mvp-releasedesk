@@ -72,7 +72,7 @@ const RULES: readonly Rule[] = [
     test: (line) =>
       /\b(?:exec|execSync|spawn)\s*\(/.test(line) &&
       /req\.|request\.|`[^`]*\$\{/.test(line),
-    what: "Run a fixed command with an argument array. Do not interpolate request data into a shell string.",
+    what: "Run a fixed command with an argument array and keep request data out of the shell string.",
     why: "A shell string built from request data is command injection.",
   },
   {
@@ -102,7 +102,7 @@ const RULES: readonly Rule[] = [
       /\bpickle\.loads\s*\(/.test(line) ||
       /\bunserialize\s*\(/.test(line) ||
       (/\byaml\.load\s*\(/.test(line) && !/safeLoad|FAILSAFE_SCHEMA|JSON_SCHEMA/.test(line)),
-    what: "Use a safe loader that rejects unexpected types. Do not deserialize untrusted bytes with a general loader.",
+    what: "Use a safe loader that rejects unexpected types.",
     why: "Insecure deserialization can run attacker-controlled objects.",
   },
   {
