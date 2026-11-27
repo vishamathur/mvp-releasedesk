@@ -17,7 +17,7 @@ export const XAI_MANAGEMENT_API_BASE = "https://management-api.x.ai";
 export const XAI_MANAGEMENT_KEY_ENV = "XAI_MANAGEMENT_API_KEY";
 export const XAI_TEAM_ID_ENV = "XAI_TEAM_ID";
 /** Check-run names in a repo created from the template (caller job / reusable job). */
-export const DEFAULT_REQUIRED_CHECKS = ["ci", "grok-review / review", "owasp-review / review"];
+export const DEFAULT_REQUIRED_CHECKS = ["ci", "grok-review / review", "owasp-review / review", "acceptance / review"];
 /** Least privilege for the per-repo Grok key: chat endpoint and the harness default model. */
 export const DEFAULT_KEY_ACLS = ["api-key:endpoint:chat", "api-key:model:grok-4.3"];
 const GITHUB_REPO_NAME_MAX = 100;
@@ -145,7 +145,7 @@ export function branchProtectionBody(requiredChecks: string[]) {
     required_status_checks: { strict: true, contexts: requiredChecks },
     enforce_admins: false,
     required_pull_request_reviews: {
-      // No human GitHub approvals: review is the required Grok release-intel and OWASP checks
+      // No human GitHub approvals: review is the required Grok release-intel, OWASP and acceptance checks
       // plus the typed Release Desk gates.
       required_approving_review_count: 0,
       dismiss_stale_reviews: true,
