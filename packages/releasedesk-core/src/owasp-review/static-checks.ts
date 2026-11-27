@@ -84,10 +84,12 @@ export function isObviousFixtureSecret(line: string): boolean {
  */
 export function isSuppressedReviewFinding(id: string, path: string, evidence: string, lineText = ""): boolean {
   if (id === "A03") {
-    const detector = isDetectorPatternLine(evidence) || isDetectorPatternLine(lineText);
-    const quoted =
-      isTestFixturePath(path) && (isQuotedSinkFixture(evidence) || isQuotedSinkFixture(lineText));
-    return detector || quoted;
+    return (
+      isDetectorPatternLine(evidence) ||
+      isDetectorPatternLine(lineText) ||
+      isQuotedSinkFixture(evidence) ||
+      isQuotedSinkFixture(lineText)
+    );
   }
   if (id === "X01" && isTestFixturePath(path)) {
     return isObviousFixtureSecret(evidence) || isObviousFixtureSecret(lineText);
@@ -196,9 +198,7 @@ export function runStaticChecks(files: readonly DiffFile[], selected: ReadonlySe
     for (const line of addedLines(file)) {
       for (const rule of RULES) {
         if (!selected.has(rule.id)) continue;
-        if (rule.id === "A03" && (isDetectorPatternLine(line.text) || (isTestFixturePath(line.path) && isQuotedSinkFixture(line.text)))) {
-          continue;
-        }
+        if (rule.id === "A03" && (isDetectorPatternLine(line.text) || isQuotedSinkFixture(line.text))) continue;
         if (rule.id === "X01" && isTestFixturePath(line.path) && isObviousFixtureSecret(line.text)) continue;
         if (!rule.test(line.text)) continue;
         const key = `${rule.id}:${line.path}:${line.line}`;

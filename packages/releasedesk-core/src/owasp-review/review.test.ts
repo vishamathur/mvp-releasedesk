@@ -865,5 +865,9 @@ describe("runOwaspReview", () => {
     const selfFiles = [file(selfPath, [quotedEval, quotedFixture])];
     const selfReview = reviewDiff(reviewInput(selfFiles), modelOf(selfFiles), OWASP_REVIEW_KEY_ENV_LEAD);
     expect(selfReview.failures.filter((failure) => failure.id === "A03" || failure.id === "X01")).toEqual([]);
+
+    const prose = [file("src/login.ts", ["export function login(password: string) { return password; }"]), file("docs/security/note.md", ['a fixture such as "eval(input)" is quoted'])];
+    const proseReview = reviewDiff(reviewInput(prose), modelOf(prose), OWASP_REVIEW_KEY_ENV_LEAD);
+    expect(proseReview.failures.filter((failure) => failure.id === "A03")).toEqual([]);
   });
 });
