@@ -13,8 +13,11 @@
     title: "title", description: "description (20+ characters)", urgency: "urgency", desiredBy: "needed-by date", customerBudgetInr: "budget",
     artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
     siteName: "site or brand name", purpose: "purpose of the site", audience: "audience", pages: "pages needed", mustHaveFeatures: "must-have features",
-    brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band",
+    brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band", inspirationStyle: "inspiration photo style (upload the photo again)",
     catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
+
+  // One random id per page load: the server hashes it into Grok's safety_identifier and rejects chat without it.
+  const sessionId = "s_" + crypto.randomUUID();
 
   // ---- route selection
   const TITLES = { website: "Website creation", er: "Enhance an existing service", new_customer: "New application" };
@@ -39,6 +42,7 @@
     if (erOpt) erOpt.required = r === "er";
     if (ncTpl) ncTpl.required = r === "new_customer" || r === "website";
     $("#form-title").textContent = TITLES[r];
+    $("#form-pid").textContent = r === "er" ? "PID-ER · Enhancement" : "PID-NC · New build";
     $("#description-label").textContent = r === "website" ? "Anything else we should know (optional)" : "Description";
     if (catalogue) fillTemplates();
     renderEstimate();
@@ -53,6 +57,7 @@
     chat.push({ role, content: text });
     const m = el("div", text, "msg " + role);
     $("#chat-log").appendChild(m);
+    $("#chat-empty").hidden = true;
     $("#chat-log").scrollTop = 1e9;
   };
   $("#chat-form").addEventListener("submit", async (e) => {
@@ -62,7 +67,7 @@
     input.value = ""; say("user", text);
     const typing = el("div", "…", "msg assistant typing"); $("#chat-log").appendChild(typing);
     try {
-      const [r, d] = await post("api/chat.php", { route, messages: chat.slice(-12) });
+      const [r, d] = await post("api/chat.php", { route, sessionId, messages: chat.slice(-12) });
       typing.remove();
       if (!r.ok) { say("assistant", d.message || "Sorry, I couldn't respond. Please use the form."); return; }
       say("assistant", d.reply);
@@ -71,6 +76,58 @@
       if (d.suggestedServices?.length) say("assistant", "Possibly relevant services (EXAMPLE list prices): " + d.suggestedServices.map((s) => `${s.name} ${inr(s.unitPriceInr)}/${s.unit}`).join("; "));
     } catch { typing.remove(); say("assistant", "Network problem. Please try again or use the form."); }
   });
+
+  // ---- inspiration photo (website route): the server asks Grok for the visual style; only the style text is submitted.
+  const STYLE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const STYLE_MAX = 4 * 1024 * 1024;
+  const clearStyle = () => {
+    form.elements.inspirationStyle.value = ""; form.elements.inspirationStyleSig.value = "";
+    $("#inspiration-result").hidden = true; $("#inspiration-swatches").replaceChildren(); $("#inspiration-text").textContent = "";
+  };
+  // Large photos are redrawn in the browser as a JPEG about 1600 px wide before upload: enough to read a style, and quick
+  // for the server. If the browser cannot redraw it, the original file is sent (the server still enforces 4 MB).
+  const shrinkPhoto = async (file) => {
+    if (file.size <= 1024 * 1024 || typeof createImageBitmap !== "function") return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width * scale); cv.height = Math.round(bmp.height * scale);
+      cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+      const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
+      return blob && blob.size < file.size ? blob : file;
+    } catch { return file; }
+  };
+  const photo = $("#inspiration-photo");
+  if (photo) {
+    $("#inspiration-clear").addEventListener("click", () => { clearStyle(); photo.value = ""; $("#inspiration-status").textContent = ""; });
+    photo.addEventListener("change", async () => {
+      const st = $("#inspiration-status"); st.className = "hint"; clearStyle();
+      const file = photo.files && photo.files[0];
+      if (!file) { st.textContent = ""; return; }
+      if (!STYLE_TYPES.includes(file.type)) { st.className = "hint error"; st.textContent = "Please choose a JPEG, PNG or WebP image."; photo.value = ""; return; }
+      if (file.size > STYLE_MAX) { st.className = "hint error"; st.textContent = "That image is over 4 MB. Please choose a smaller one."; photo.value = ""; return; }
+      st.textContent = "Reading the style of your photo…"; photo.disabled = true;
+      try {
+        const upload = await shrinkPhoto(file);
+        const r = await fetch("api/style.php", { method: "POST", headers: { "content-type": upload.type, "x-session-id": sessionId }, body: upload });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ok) {
+          st.className = "hint error";
+          st.textContent = r.status === 429 ? "Too many requests. Please wait a few minutes and try again."
+            : r.status === 413 ? "That image is over 4 MB." : r.status === 415 ? "Please choose a JPEG, PNG or WebP image."
+            : (d.message || "Could not read the style of this photo.") + " You can still submit without it.";
+          photo.value = ""; return;
+        }
+        form.elements.inspirationStyle.value = d.styleText; form.elements.inspirationStyleSig.value = d.styleSig;
+        const sw = $("#inspiration-swatches");
+        for (const c of d.style.palette) { const s = el("div", null, "swatch"); const chip = el("span"); chip.style.backgroundColor = c.hex; s.append(chip, el("small", `${c.hex} ${c.name}`)); sw.append(s); }
+        $("#inspiration-text").textContent = d.styleText;
+        $("#inspiration-result").hidden = false;
+        st.textContent = "This style text will go with your request. Check it before you submit.";
+      } catch { st.className = "hint error"; st.textContent = "Network error while reading the photo. You can still submit without it."; photo.value = ""; }
+      finally { photo.disabled = false; }
+    });
+  }
 
   // ---- submit
   form.addEventListener("submit", async (e) => {
@@ -88,7 +145,8 @@
     if (route === "er") Object.assign(body, { customerId: f.customerId.value, projectRef: f.projectRef.value, changeType: f.changeType.value, desiredBy: f.desiredBy.value });
     else if (route === "website") Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, sponsor: f.sponsor.value, desiredBy: f.desiredBy.value,
       siteName: f.siteName.value, purpose: f.purpose.value, audience: f.audience.value, pages: f.pages.value, mustHaveFeatures: f.mustHaveFeatures.value,
-      brandAssets: f.brandAssets.value, domainHosting: f.domainHosting.value, budgetBand: f.budgetBand.value });
+      brandAssets: f.brandAssets.value, domainHosting: f.domainHosting.value, budgetBand: f.budgetBand.value,
+      inspirationStyle: f.inspirationStyle.value, inspirationStyleSig: f.inspirationStyleSig.value });
     else Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, intendedProduct: f.intendedProduct.value, sponsor: f.sponsor.value });
     const btn = $("#submit"); btn.disabled = true; btn.textContent = "Sending…";
     try {
@@ -196,35 +254,142 @@
     if (!(app?.addOns || []).length) box.appendChild(el("p", "No add-ons for this template.", "hint"));
     renderEstimate();
   };
+  // ---- catalogue cards: grouped by application, searchable, "Select" pre-fills the request form
+  const days = (n) => `${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 1 })} days`;
+  const routeForTemplate = (id) => id === "NC-WEBSITE" ? "website" : "new_customer";
+  const selectItem = (kind, id) => {
+    if (kind === "er") {
+      const app = catalogue.enhancements.find((a) => a.options.some((o) => o.id === id));
+      if (!app) return;
+      $("#er-app").value = app.id; fillErOptions();
+      $("#er-option").value = id; paintOption($("#er-option-desc"), selectedOption());
+      setRoute("er");
+    } else {
+      setRoute(routeForTemplate(id));
+      $("#nc-template").value = id; fillAddOns();
+    }
+    renderEstimate();
+    $$(".item").forEach((c) => c.classList.toggle("is-selected", c.dataset.id === id));
+    $$(".item [data-select]").forEach((btn) => btn.setAttribute("aria-pressed", String(btn.dataset.select === id)));
+    $("#intake-form").querySelector(kind === "er" ? "#er-option" : "#nc-template").focus({ preventScroll: true });
+  };
+  const facts = (est) => {
+    const dl = el("dl", null, "facts");
+    const eff = el("div"); eff.append(el("dt", "Effort"), el("dd", days(est.effortDays)));
+    const pr = el("div"); const dd = el("dd", inr(est.totalInr));
+    dd.append(el("small", `range ${inr(est.budgetBandsInr.low)}–${inr(est.budgetBandsInr.high)}, ${est.taxNote}`));
+    pr.append(el("dt", "Example price"), dd);
+    dl.append(eff, pr); return dl;
+  };
+  const card = (kind, o, groupName) => {
+    const c = el("article", null, "item"); c.dataset.id = o.id; c.dataset.kind = kind;
+    const est = o.exampleEstimate;
+    c.dataset.search = [o.name, o.description, groupName, ...(est.lines || []).map((l) => l.name), ...(o.addOns || []).map((x) => x.name)].join(" ").toLowerCase();
+    const h = el("h4"); if (o.showcase45) h.append(el("span", "Showcase", "badge showcase")); h.append(document.createTextNode(o.name));
+    c.append(h, el("p", o.description || "", "item-desc"));
+    c.append(el("p", "What you get", "item-sub"));
+    const inc = el("ul", null, "includes");
+    for (const l of est.lines) inc.append(el("li", l.qty > 1 ? `${l.name} × ${l.qty}` : l.name));
+    c.append(inc);
+    if (o.addOns?.length) {
+      c.append(el("p", "Optional add-ons", "item-sub"));
+      const ul = el("ul", null, "addon-list");
+      for (const x of o.addOns) {
+        const li = el("li"); li.append(el("strong", x.name), document.createTextNode(". " + x.description + " "));
+        const sub = x.lines.reduce((t, l) => t + l.unitPriceInr * l.qty, 0);
+        li.append(el("span", `(from ${inr(sub)} list, ${days(x.lines.reduce((t, l) => t + l.effortDays * l.qty, 0))})`, "addon-price"));
+        ul.append(li);
+      }
+      c.append(ul);
+    }
+    c.append(facts(est));
+    const foot = el("div", null, "item-foot");
+    const btn = el("button", "Select"); btn.type = "button"; btn.dataset.select = o.id; btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-label", `Select ${o.name}${groupName ? " (" + groupName + ")" : ""}`);
+    btn.addEventListener("click", () => selectItem(kind, o.id));
+    foot.append(btn, el("span", "EXAMPLE DATA", "badge"));
+    c.append(foot);
+    return c;
+  };
+  const group = (filter, title, kindLabel, desc) => {
+    const g = el("section", null, "cat-group"); g.dataset.filter = filter;
+    const head = el("div", null, "group-head");
+    head.append(el("h3", title), el("span", kindLabel, "kind"));
+    if (desc) head.append(el("p", desc));
+    g.append(head); return g;
+  };
+  const renderCatalogue = (d) => {
+    const list = $("#cat-options"); list.replaceChildren();
+    for (const app of d.enhancements) {
+      const g = group("er", app.name, "PID-ER · Enhance", app.description);
+      const cards = el("div", null, "cards");
+      for (const o of app.options) cards.append(card("er", o, app.name));
+      g.append(cards); list.append(g);
+    }
+    const ng = group("nc", "New applications and websites", "PID-NC · New build", "Start from a template. Add-ons can be chosen on the request form.");
+    const ncards = el("div", null, "cards");
+    for (const a of d.newApplications) ncards.append(card("nc", a, ""));
+    ng.append(ncards); list.append(ng);
+    const sg = group("svc", "Rate card", "Building blocks", "The individual services every option above is priced from. Select an option above to request work.");
+    const t = el("table", null, "rate-table");
+    const th = el("thead"); const hr = el("tr");
+    for (const [txt, cls] of [["Service"], ["Unit"], ["List price", "num"], ["Typical effort", "num"], ["Risk factor", "num"]]) hr.append(el("th", txt, cls));
+    th.append(hr); t.append(th);
+    const tb = el("tbody");
+    for (const sv of d.services) {
+      const tr = el("tr"); tr.className = "item-row"; tr.dataset.search = (sv.name + " " + sv.description + " rate card").toLowerCase();
+      const name = el("td"); name.append(el("strong", sv.name), el("div", sv.description, "hint"));
+      const cell = (k, v, cls) => { const td = el("td", v, cls); td.dataset.k = k; return td; };
+      tr.append(name, cell("Unit", "per " + sv.unit), cell("List price", inr(sv.unitPriceInr), "num"), cell("Typical effort", days(sv.effortDays), "num"), cell("Risk factor", "×" + sv.riskMultiplier, "num"));
+      tb.append(tr);
+    }
+    t.append(tb); sg.append(t); list.append(sg);
+    applyFilter();
+  };
+  let catFilter = "all";
+  const applyFilter = () => {
+    const q = $("#cat-search").value.trim().toLowerCase();
+    let shown = 0;
+    for (const g of $$(".cat-group")) {
+      const groupOn = catFilter === "all" || g.dataset.filter === catFilter;
+      let n = 0;
+      for (const it of $$(".item, .item-row", g)) { const on = groupOn && (!q || it.dataset.search.includes(q)); it.hidden = !on; if (on) n++; }
+      g.hidden = n === 0; shown += g.dataset.filter === "svc" ? 0 : n;
+    }
+    const anyVisible = $$(".cat-group").some((g) => !g.hidden);
+    $("#cat-empty").hidden = anyVisible;
+    $("#cat-count").textContent = catFilter === "svc" ? "" : `${shown} option${shown === 1 ? "" : "s"} shown`;
+  };
+  $("#cat-search").addEventListener("input", applyFilter);
+  $$(".chip[data-filter]").forEach((b) => b.addEventListener("click", () => {
+    catFilter = b.dataset.filter;
+    $$(".chip[data-filter]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    applyFilter();
+  }));
+
+  // ---- assistant drawer (non-modal; Escape closes and focus returns to the button that opened it)
+  const drawer = $("#assistant"); let opener = null;
+  const openAssistant = (from) => {
+    opener = from || null; drawer.hidden = false;
+    $$("[aria-controls=assistant]").forEach((b) => b.setAttribute("aria-expanded", "true"));
+    $("#assistant-open").hidden = true; $("#chat-text").focus();
+  };
+  const closeAssistant = () => {
+    drawer.hidden = true;
+    $$("[aria-controls=assistant]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+    $("#assistant-open").hidden = false; (opener || $("#assistant-open")).focus();
+  };
+  $("#assistant-open").addEventListener("click", (e) => openAssistant(e.currentTarget));
+  $("#assistant-open-2").addEventListener("click", (e) => openAssistant(e.currentTarget));
+  $("#assistant-close").addEventListener("click", closeAssistant);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !drawer.hidden) closeAssistant(); });
+
   (async () => {
     try {
       const d = await (await fetch("api/catalogue.php")).json();
       catalogue = d;
       $("#cat-label").textContent = `${d.label}. ${d.taxNote}`;
-      const tb = $("#cat-table tbody");
-      for (const s of d.services) {
-        const tr = document.createElement("tr");
-        const name = el("td"); name.appendChild(el("strong", s.name)); name.appendChild(el("div", s.description, "hint"));
-        tr.append(name, el("td", "per " + s.unit), el("td", inr(s.unitPriceInr), "num"), el("td", s.effortDays + " days", "num"), el("td", "×" + s.riskMultiplier, "num"));
-        tb.appendChild(tr);
-      }
-      const list = $("#cat-options");
-      for (const app of d.enhancements) {
-        list.appendChild(el("h3", "Enhance: " + app.name));
-        for (const opt of app.options) {
-          const p = el("p", null, "hint");
-          if (opt.showcase45) p.append(el("span", "Showcase", "badge showcase"), document.createTextNode(" "));
-          p.append(document.createTextNode(`${opt.name} — example ${inr(opt.exampleEstimate.totalInr)}`));
-          list.appendChild(p);
-        }
-      }
-      for (const app of d.newApplications) {
-        list.appendChild(el("h3", "New: " + app.name));
-        const p = el("p", null, "hint");
-        if (app.showcase45) p.append(el("span", "Showcase", "badge showcase"), document.createTextNode(" "));
-        p.append(document.createTextNode(`${app.description} Example ${inr(app.exampleEstimate.totalInr)}.`));
-        list.appendChild(p);
-      }
+      renderCatalogue(d);
       $("#er-app").replaceChildren(...d.enhancements.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
       $("#er-app").addEventListener("change", fillErOptions);
       $("#er-option").addEventListener("change", () => {
@@ -235,7 +400,7 @@
       form.elements.urgency.addEventListener("change", renderEstimate);
       fillErOptions();
       fillTemplates();
-    } catch { $("#cat-label").textContent = "Service list unavailable."; }
+    } catch { $("#cat-label").textContent = "The catalogue is unavailable right now. Please try again later."; }
   })();
 
   // ---- status (key kept in the URL fragment, which is never sent to the server logs)

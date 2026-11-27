@@ -1,5 +1,7 @@
 # Public intake agent for intake.vishalmathur.org (GoDaddy cPanel, PHP) — NOT DEPLOYED
 
+The live site at https://intake.vishalmathur.org runs the Cloudflare Pages build in [`apps/intake-cloudflare`](../intake-cloudflare/README.md): same endpoints, the same front end, D1 storage. This PHP version is not deployed.
+
 Three entry options (Website creation → PID-NC, New customer → PID-NC, Enhancement Request acceptance → PID-ER), a Grok chat assistant that fills the form,
 an EXAMPLE service catalogue, a finance estimation model (deterministic catalogue math + Grok recommendation), and a
 two-way relay with Release Desk Lead. See `docs/intake/lead-integration.md`.
