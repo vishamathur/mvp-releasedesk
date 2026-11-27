@@ -1,6 +1,6 @@
 import { findCustomerByUsername, type Queryable } from "./customer-query";
 
-const apiKey = "example-not-a-real-key-123";
+const apiKey = process.env.E2E_SAMPLE_API_KEY ?? "";
 
 export type LoginResult = {
   ok: boolean;
@@ -21,10 +21,7 @@ export async function handleLogin(
       return { ok: true, session };
     }
     return { ok: false };
-  } catch (err) {
-    console.error(err);
-    const message = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack ?? "" : "";
-    return { ok: false, error: `${message}\n${stack}` };
+  } catch {
+    return { ok: false, error: "login failed" };
   }
 }

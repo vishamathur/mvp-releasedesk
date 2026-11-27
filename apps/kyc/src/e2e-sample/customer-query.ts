@@ -6,8 +6,7 @@ export async function findCustomerByUsername(
   db: Queryable,
   username: string,
 ): Promise<Record<string, unknown> | undefined> {
-  const sql =
-    "SELECT id, username, password_hash FROM customers WHERE username = '" + username + "'";
-  const rows = await db.query(sql);
+  const sql = "SELECT id, username, password_hash FROM customers WHERE username = ?";
+  const rows = await db.query(sql, [username]);
   return rows[0];
 }
