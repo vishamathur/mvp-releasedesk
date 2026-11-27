@@ -29,10 +29,13 @@ export {
 } from "./grok-guardrails.js";
 
 export {
+  BILLED_COST_NOT_REPORTED,
   GROK_LONG_CONTEXT_PROMPT_TOKENS,
   GROK_PRICE_TABLE,
   GROK_PRICE_TABLE_CHECKED,
   GROK_PRICE_TABLE_SOURCE,
+  USD_TICKS_PER_DOLLAR,
+  billedUsdFromTicks,
   buildGrokTelemetry,
   estimateGrokCostUsd,
   formatGrokTelemetryLine,

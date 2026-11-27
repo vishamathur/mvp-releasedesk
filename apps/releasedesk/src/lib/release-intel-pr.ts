@@ -81,6 +81,7 @@ export async function releaseIntelForPullRequest(opts?: {
     {
       repository,
       goal: title,
+      pullRequest,
       findings: changedPaths
         .slice(0, RELEASE_INTEL_FINDINGS_LIMIT)
         .map((filePath) => ({ source: "github", text: filePath })),

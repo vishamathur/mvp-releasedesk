@@ -3,6 +3,7 @@ import { MissingCredentialError } from "@releasedesk/core";
 import {
   describeGrokIntelKeyStatus,
   RELEASE_INTEL_MAX_TOKENS,
+  releaseIntelPromptCacheKey,
   runGrokReleaseIntel,
   trustCheckGrokIntelPayload,
 } from "./grok-release-intel";
@@ -115,9 +116,15 @@ const INTEL_CONTENT = JSON.stringify({
 
 type GrokReply = Record<string, unknown>;
 
-function grokFetch(reply: GrokReply, seen?: { body?: Record<string, unknown> }): typeof fetch {
+function grokFetch(
+  reply: GrokReply,
+  seen?: { body?: Record<string, unknown>; headers?: Headers },
+): typeof fetch {
   return async (_input, init) => {
-    if (seen) seen.body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    if (seen) {
+      seen.body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      seen.headers = new Headers(init?.headers);
+    }
     return new Response(JSON.stringify(reply), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -150,7 +157,46 @@ describe("runGrokReleaseIntel model, max_tokens and telemetry", () => {
     expect(result.telemetry.promptTokens).toBe(900);
     expect(result.telemetry.completionTokens).toBe(210);
     expect(result.telemetry.estUsd).toBeCloseTo((900 * 1.25 + 210 * 2.5) / 1_000_000, 8);
+    expect(result.telemetry.billedCostUsd).toBeNull();
+    expect(result.telemetry.billedNote).toBe("billed cost not reported");
     expect(result.telemetry.latencyMs).toBeGreaterThanOrEqual(0);
+    const cacheKey = releaseIntelPromptCacheKey(INPUT.repository);
+    expect(seen.body?.prompt_cache_key).toBe(cacheKey);
+    expect(seen.headers?.get("x-grok-conv-id")).toBe(cacheKey);
+  });
+
+  it("reads cost_in_usd_ticks as the billed cost and keeps the estimate separate", async () => {
+    const result = await runGrokReleaseIntel(
+      { ...INPUT, pullRequest: 41 },
+      {
+        env: LEAD_ENV,
+        fetchImpl: grokFetch({
+          model: "grok-4.3",
+          choices: [{ finish_reason: "stop", message: { content: INTEL_CONTENT } }],
+          usage: {
+            prompt_tokens: 199,
+            completion_tokens: 1,
+            total_tokens: 200,
+            cost_in_usd_ticks: 37_756_000,
+            prompt_tokens_details: { cached_tokens: 128 },
+          },
+        }),
+      },
+    );
+    expect(result.telemetry.costInUsdTicks).toBe(37_756_000);
+    expect(result.telemetry.billedCostUsd).toBeCloseTo(0.0037756, 10);
+    expect(result.telemetry.cachedPromptTokens).toBe(128);
+    expect(result.telemetry.estUsd).not.toBe(result.telemetry.billedCostUsd);
+    expect(result.telemetry.estNote).toMatch(/estimate/);
+  });
+
+  it("uses one stable prompt cache key for the same pull request", () => {
+    expect(releaseIntelPromptCacheKey("vishamathur/mvp-releasedesk", 41)).toBe(
+      releaseIntelPromptCacheKey("vishamathur/mvp-releasedesk", 41),
+    );
+    expect(releaseIntelPromptCacheKey("vishamathur/mvp-releasedesk", 41)).not.toBe(
+      releaseIntelPromptCacheKey("vishamathur/mvp-releasedesk", 43),
+    );
   });
 
   it("reads GROK_MODEL from the environment and treats an empty value as unset", async () => {

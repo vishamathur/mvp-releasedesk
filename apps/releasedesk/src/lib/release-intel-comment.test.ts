@@ -42,6 +42,10 @@ function report(over: Partial<ReleaseIntelPrReport> = {}, summarize = "Adds a KY
         latencyMs: 4120,
         estUsd: 0.002345,
         estNote: "estimate from the public price table of 2026-11-26, not a bill",
+        cachedPromptTokens: null,
+        costInUsdTicks: null,
+        billedCostUsd: null,
+        billedNote: "billed cost not reported",
       },
       classify: { category: "security_review", confidence: 0.85 },
       extract: ["apps/kyc/a.ts"],
@@ -72,7 +76,7 @@ describe("renderReleaseIntelComment", () => {
     expect(body).toContain(SHA);
     expect(body).toContain("**risk** high");
     expect(body).toContain(
-      "> grok-4.3 · 1234 prompt / 321 completion tokens · 4120 ms · est. cost $0.0023 (estimate, not a bill)",
+      "> grok-4.3 · 1234 prompt / 321 completion tokens · 4120 ms · billed cost not reported · est. cost $0.0023 (estimate, not a bill)",
     );
     expect(body).toMatch(/Grok never approves/);
   });
@@ -130,6 +134,7 @@ describe("renderReleaseIntelComment", () => {
     const body = renderReleaseIntelComment(r);
     expect(body).toContain("response did not report a model");
     expect(body).toContain("token usage not reported");
+    expect(body).toContain("billed cost not reported");
     expect(body).toContain("est. cost n/a");
   });
 

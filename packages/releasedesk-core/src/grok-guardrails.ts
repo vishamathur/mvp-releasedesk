@@ -87,6 +87,12 @@ export function buildGrokChatCompletionBody(input: {
   temperature?: number;
   max_tokens?: number;
   response_format?: unknown;
+  /**
+   * Stable prompt-cache routing key (`prompt_cache_key`).
+   * Callers also send the same value as the `x-grok-conv-id` header.
+   * https://docs.x.ai/developers/advanced-api-usage/prompt-caching
+   */
+  promptCacheKey?: string;
 }): Record<string, unknown> {
   const model = input.model.trim();
   if (!model) throw new Error("Grok model is empty");
@@ -107,6 +113,8 @@ export function buildGrokChatCompletionBody(input: {
   if (input.temperature !== undefined) body.temperature = input.temperature;
   if (input.max_tokens !== undefined) body.max_tokens = input.max_tokens;
   if (input.response_format !== undefined) body.response_format = input.response_format;
+  const promptCacheKey = input.promptCacheKey?.trim();
+  if (promptCacheKey) body.prompt_cache_key = promptCacheKey;
   return body;
 }
 

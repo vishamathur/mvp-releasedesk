@@ -29,7 +29,19 @@ export type GrokReleaseIntelInput = {
   repository: string;
   goal: string;
   findings: Array<{ source: string; text: string; severity?: string }>;
+  /** Pull request number, when this call is about one. Used only as a stable cache key. */
+  pullRequest?: number | null;
 };
+
+/** Stable across re-runs of the same repo (and PR). Not a secret. */
+export function releaseIntelPromptCacheKey(repository: string, pullRequest?: number | null): string {
+  const repo = repository.trim() || "unknown";
+  const pr =
+    typeof pullRequest === "number" && Number.isInteger(pullRequest) && pullRequest > 0
+      ? `:pr:${pullRequest}`
+      : "";
+  return `release-intel:v2:${repo}${pr}`;
+}
 
 export type GrokIntelTrustCheck = {
   schemaValid: boolean;
@@ -198,6 +210,7 @@ export async function runGrokReleaseIntel(
   const requestedModel = resolveGrokModel(env);
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
+  const promptCacheKey = releaseIntelPromptCacheKey(input.repository, input.pullRequest);
   const system =
     "You are Release Desk Grok intel. Return ONLY JSON matching the schema: classify{category,confidence 0-1}, summarize, riskTier low|medium|high, blockers string[], extract string[], score{level,rationale}. Do not approve merges.";
 
@@ -208,12 +221,14 @@ export async function runGrokReleaseIntel(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "x-grok-conv-id": promptCacheKey,
       },
       body: JSON.stringify(
         buildGrokChatCompletionBody({
           model: requestedModel,
           temperature: 0.1,
           max_tokens: RELEASE_INTEL_MAX_TOKENS,
+          promptCacheKey,
           safetySource: `lead:${input.repository}`,
           response_format: {
             type: "json_schema",
