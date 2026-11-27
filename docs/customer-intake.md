@@ -36,6 +36,8 @@ The canonical `customerId` is `cust_` plus a slug: `/^cust_[a-z0-9][a-z0-9_-]*$/
 
 Upsert keeps `createdAt` and sets `updatedAt` to the current time. Requests are stored on the same interface and listed by `customerId`.
 
+Customer repo naming rule: a customer repo is named `<customer>-ER` or `<customer>-<request>` (lowercase words joined by dashes), for example `acme-ER` or `acme-kyc-occupation`. Northwind Bank's `DEMO_PORTFOLIO` entry targets `vishamathur/northwind-bank-kyc-identity` (base `main`). Existing repos are not renamed.
+
 Demo customers are opt-in and idempotent. `seedDemoCustomers(store, { enabled: true })`, or `RELEASEDESK_SEED_DEMO_CUSTOMERS=1`, inserts the three `DEMO_PORTFOLIO` apps (Northwind Bank, Contoso Retail, Fabrikam Logistics) when those ids are missing. Each row has `metadata.demo = true` and the repo `MockMeta` label. A second seed leaves existing rows alone, including a real customer that already uses one of those ids.
 
 ```bash
