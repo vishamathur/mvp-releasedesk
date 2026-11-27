@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac, createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, call, count, blockNetwork, ER } from "./helpers.mjs";
+import { testEnv, jsonReq, call, count, blockNetwork, ER, testKey } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 let restore;
@@ -51,10 +51,11 @@ test("payloadJson is printable ASCII with no short escapes, parses to the same c
   assert.ok(!/(^|[^\\])(\\\\)*\\[nrtbf]/.test(t), "no short escapes");
   assert.deepEqual(JSON.parse(t), card);
   assert.ok(t.includes("\\\\n literal"), "an escaped backslash before n stays a backslash and the letter n");
-  const env = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: "k".repeat(64) }, "intake-card", "REQ-20261127-000001", card, 1795813322);
+  const secret = testKey();
+  const env = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: secret }, "intake-card", "REQ-20261127-000001", card, 1795813322);
   assert.equal(env.payloadJson, t);
-  assert.equal(env.signature.hex, createHmac("sha256", "k".repeat(64)).update(`${env.signature.ts}.${env.payloadJson}`).digest("hex"));
-  const env2 = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: "k".repeat(64) }, "intake-card", "REQ-20261127-000001", { d: "Line one\nLine two\r\nLine three" }, 1795813322);
+  assert.equal(env.signature.hex, createHmac("sha256", secret).update(`${env.signature.ts}.${env.payloadJson}`).digest("hex"));
+  const env2 = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: secret }, "intake-card", "REQ-20261127-000001", { d: "Line one\nLine two\r\nLine three" }, 1795813322);
   assert.ok(!JSON.stringify(env2).includes("\\\\n") && !env2.payloadJson.includes("\\n"), "a multi-line brief has no newline escape in payloadJson or the body");
 });
 

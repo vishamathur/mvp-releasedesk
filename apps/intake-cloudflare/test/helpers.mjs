@@ -45,6 +45,9 @@ export function createD1() {
   };
 }
 
+/** Random per-run test value, so no credential-shaped literal sits in the tests. */
+export function testKey() { return randomBytes(32).toString("hex"); }
+
 export function testEnv(overrides = {}) {
   return {
     DB: createD1(),
