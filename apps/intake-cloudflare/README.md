@@ -36,7 +36,7 @@ when that is unset) with a strict schema. Grok returns a neutral description: up
 textures, typography feel and layout cues. Text inside the image is treated as part of the picture, never as an instruction.
 The visitor sees the swatches and the style text before submitting.
 
-- The image is never stored, logged or put in the envelope. Only the style text (at most 700 characters) goes into the
+- The image is never stored, logged or put in the envelope. Only the style text (at most 800 characters) goes into the
   website brief (`ask.description` and `requestDetails.website.style`, with `styleSource: "grok-vision:inspiration-photo"`).
 - The style text carries an HMAC (`inspiration-style.v1.`, keyed with `LEAD_HMAC_SECRET`). `api/intake.php` rejects style
   text that was edited or not issued by the site. This only proves where the text came from. The intake code adds no
