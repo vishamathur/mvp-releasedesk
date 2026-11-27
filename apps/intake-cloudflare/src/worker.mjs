@@ -1308,6 +1308,17 @@ export async function appRun(handler, request, env, ctx) {
   return res;
 }
 
+/**
+ * Static files served by the worker itself. Empty in the normal build (Pages serves dist/ from its asset store).
+ * `build.mjs --inline-static` fills it for API-only Direct Upload, where the asset store cannot be written.
+ */
+const INLINE_STATIC = {}; // replaced by scripts/build.mjs --inline-static
+
+export function inlineStaticFile(pathname, files = INLINE_STATIC) {
+  const key = pathname === "/" ? "/index.html" : pathname;
+  return hasOwn(files, key) ? files[key] : null;
+}
+
 function withSecurityHeaders(res) {
   const out = new Response(res.body, res);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) out.headers.set(k, v);
@@ -1325,6 +1336,11 @@ export default {
       const handler = hasOwn(ROUTES, url.pathname) ? ROUTES[url.pathname] : null;
       if (!handler) return withSecurityHeaders(new Response("Forbidden", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } }));
       return appRun(handler, request, env, ctx);
+    }
+    const inline = inlineStaticFile(url.pathname);
+    if (inline) {
+      if (request.method !== "GET" && request.method !== "HEAD") return withSecurityHeaders(new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } }));
+      return withSecurityHeaders(new Response(request.method === "HEAD" ? null : inline.body, { headers: { "Content-Type": inline.type, "Cache-Control": "public, max-age=300" } }));
     }
     if (!env.ASSETS) return withSecurityHeaders(new Response("Not configured", { status: 503 }));
     return withSecurityHeaders(await env.ASSETS.fetch(request));

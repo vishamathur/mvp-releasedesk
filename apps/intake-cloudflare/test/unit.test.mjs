@@ -209,3 +209,16 @@ test("php helpers: trim, round, number_format, (int), is_numeric, app_clean", ()
   assert.equal(W.appClean(42), "42"); assert.equal(W.appClean(["x"]), ""); assert.equal(W.appClean("😀😀😀", 2), "😀😀");
   assert.equal(W.appLen("😀a"), 2);
 });
+
+test("inline static: build --inline-static serves the front end from the worker, normal build serves nothing", async () => {
+  const { inlineStatic } = await import("../scripts/build.mjs");
+  assert.equal(W.inlineStaticFile("/"), null);
+  assert.equal(W.inlineStaticFile("/app.js"), null);
+  const src = readFileSync(join(import.meta.dirname, "..", "src", "worker.mjs"), "utf8");
+  const out = inlineStatic(src, { "index.html": "<h1>x</h1>", "app.js": "1", "styles.css": "a{}" });
+  assert.ok(out.includes('"/index.html":{"type":"text/html; charset=utf-8","body":"<h1>x</h1>"}'));
+  assert.throws(() => inlineStatic("no marker", {}), /INLINE_STATIC/);
+  const files = { "/index.html": { type: "text/html", body: "i" } };
+  assert.equal(W.inlineStaticFile("/", files).body, "i");
+  assert.equal(W.inlineStaticFile("/api/chat.php", files), null);
+});
