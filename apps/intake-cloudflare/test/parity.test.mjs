@@ -33,10 +33,10 @@ test("build: one front end, advanced-mode _worker.js, routes only /api/*", async
   } finally { rmSync(out, { recursive: true, force: true }); }
 });
 
-test("same six endpoints as apps/intake/public/api, plus the Cloudflare-only style endpoint", async () => {
+test("same six endpoints as apps/intake/public/api, plus the Cloudflare-only style and envelope endpoints", async () => {
   const { ROUTES } = await import("../src/worker.mjs");
   const php = readdirSync(join(PHP_APP, "public", "api")).filter((f) => f.endsWith(".php")).map((f) => "/api/" + f);
-  assert.deepEqual(Object.keys(ROUTES).sort(), [...php, "/api/style.php"].sort());
+  assert.deepEqual(Object.keys(ROUTES).sort(), [...php, "/api/style.php", "/api/envelope.php"].sort());
 });
 
 test("wrangler.toml holds no secret values; schema.sql matches the first migration", () => {

@@ -23,6 +23,7 @@ endpoints keep their paths and their request and response shapes, so the front e
 | `POST /api/finance-estimate.php` | Lead, HMAC | `X-Intake-Timestamp` (±300 s) + `X-Intake-Signature` |
 | `POST /api/lead-update.php` | Lead, HMAC | idempotent on `updateId`, backwards moves are 409 |
 | `POST /api/style.php` | public, shares the chat limit | **Cloudflare build only.** Inspiration photo for Website creation: see below |
+| `GET /api/envelope.php` | Lead, `Bearer LEAD_FETCH_KEY`, 120 per 10 min per IP | **Cloudflare build only.** The full envelope named in a webhook notice, kept 24 h |
 
 Any other `/api/*` path is 403, as with the PHP `.htaccess`.
 
@@ -44,10 +45,12 @@ The visitor sees the swatches and the style text before submitting.
 - No key, or a failed Grok call, is a real `503 grok_unavailable` with an honest message. The visitor can still submit without a photo.
 - The PHP build has no `style.php`. The shared front end shows the honest error there.
 
-## Webhook size limit
+## Webhook notice and fetch-back
 
-The webhook receiver cut a 10,996-byte envelope short, so each envelope stays under `LEAD_WEBHOOK_MAX_BYTES` (default
-7,600). The envelope format and reduction order are in [`docs/intake/lead-integration.md`](../../docs/intake/lead-integration.md).
+Lead's routine run sees only the webhook's wake text, cut at about 5 KB. So the webhook carries a small signed notice
+`{source, kind, requestId, ts, payloadSha256, sig}`, and Lead fetches the full envelope from `GET /api/envelope.php`
+with `Authorization: Bearer <LEAD_FETCH_KEY>`. Envelopes can be fetched for 24 hours. Details are in
+[`docs/intake/lead-integration.md`](../../docs/intake/lead-integration.md).
 
 ## What changed from the PHP build
 
@@ -58,7 +61,7 @@ The webhook receiver cut a 10,996-byte envelope short, so each envelope stays un
 | `data/ratelimit/*.json` | `rate_hits` table, sliding window, one atomic batch per hit, IP stored only as a hash |
 | `bin/drain-outbox.php` on cPanel Cron | Pages has no Cron Triggers. Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts |
 | hourly `intake_cleanup()` | the same, from `api/intake.php`: submissions, finance artifacts, status, sent messages and events older than `RETENTION_DAYS` (30) |
-| `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets. Optional vars: `GROK_VISION_MODEL`, `LEAD_WEBHOOK_MAX_BYTES` |
+| `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets. Optional var: `GROK_VISION_MODEL`. Fifth secret: `LEAD_FETCH_KEY` |
 | `LEAD_DELIVERY=email` (`mail()`) | not available. Use `webhook`. Choosing `email` is a delivery error, never a silent success |
 | `REMOTE_ADDR` | `CF-Connecting-IP` |
 | `.htaccess` headers | `static/_headers` for static files, the same headers set by the worker on API responses |

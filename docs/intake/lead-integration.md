@@ -33,13 +33,26 @@ Intake-card additions for request types: `requestType` (`website-creation`, `new
 Envelope: `{source, kind: intake-card|visitor-message, requestId, to, leadBotId, sentAt, untrusted: true, note, payload, payloadJson, signature{alg, ts, over, hex}}`.
 `signature.hex = HMAC-SHA256(LEAD_HMAC_SECRET, ts + "." + payloadJson)` lets Lead verify origin even if the webhook URL leaks.
 
-Cloudflare build (`apps/intake-cloudflare`, the live site): the envelope is `{source, kind, requestId, to, leadBotId, sentAt, untrusted, note, signature, payloadJson}`. There is no separate `payload` object: verify the signature over `payloadJson`, then parse it. `payloadJson` is printable ASCII with no short escapes: line breaks, tabs and other control characters are written as `\u000a`-style escapes, and non-ASCII characters as `\uXXXX`. Parsing gives the same values. The two website cards that arrived cut were the only envelopes with `\n` inside `payloadJson`; the multi-line website brief put it there. `signature` comes before `payloadJson`, so a body cut short still carries its signature and fails verification instead of arriving unsigned. Each envelope stays under `LEAD_WEBHOOK_MAX_BYTES` (default 7,600 bytes) because the webhook receiver cut a 10,996-byte envelope short. When a card would be larger, the delivered copy is reduced in this order. Every step is listed in `payload.deliveryTrimmed`, inside the signed bytes:
-1. `ask.notes` when it only repeats `ask.description`.
-2. Finance lines down to `serviceId`, `qty` and `lineTotalInr`.
-3. The fixed `leadInstructions` and `finance.notice` text.
-4. A shortened description, then the long website brief fields, then the handoff summary.
+Cloudflare build (`apps/intake-cloudflare`, the live site): notice plus fetch-back. Lead's routine run sees only the
+webhook's wake text, cut at about 5 KB, with no raw body. So the webhook carries only a small signed notice (a few hundred
+bytes, always under 2 KB) for both `intake-card` and `visitor-message`:
 
-The full card stays in D1 `submissions`.
+`{source, kind, requestId, ts, payloadSha256, sig}`
+- `payloadSha256` = hex SHA-256 of the envelope's `payloadJson`.
+- `sig` = hex HMAC-SHA256(`LEAD_HMAC_SECRET`, `ts + "." + requestId + "." + payloadSha256`). `LEAD_HMAC_SECRET` is the same secret as intake-site-lead-hmac-secret.
+
+Lead then fetches the full envelope:
+
+`GET https://intake.vishalmathur.org/api/envelope.php?requestId=<id>[&kind=intake-card|visitor-message][&payloadSha256=<hex>]`, with `Authorization: Bearer <fetch key>`
+- The fetch key is the Pages secret `LEAD_FETCH_KEY`. On the box it is in `/workspace/releasedesk-secrets/intake-site-fetch-key`.
+- The key is compared in constant time and never logged.
+- Responses: 401 for a bad key, 404 for an unknown id or one older than 24 hours, 429 when rate limited (120 per 10 minutes per IP).
+- The response is the stored envelope exactly as written: `{source, kind, requestId, to, leadBotId, sentAt, untrusted, note, signature, payloadJson}`. Verify `signature.hex` over `ts + "." + payloadJson` as before, check that SHA-256 of `payloadJson` equals the notice's `payloadSha256`, then parse it.
+- Passing `payloadSha256` picks the exact message when a request has several.
+- Sent envelopes are deleted after 24 hours. The full card also stays in D1 `submissions` for `RETENTION_DAYS`.
+
+`payloadJson` is printable ASCII with no short escapes: line breaks, tabs and other control characters are written as
+`\u000a`-style escapes, and non-ASCII characters as `\uXXXX`. Parsing gives the same values.
 
 ## Lead -> Site (outbound)
 Lead runs `curl` from its computer with the shared secret from its vault (skills `finance-estimate`, `public-status-update`).

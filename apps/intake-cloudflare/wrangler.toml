@@ -5,6 +5,7 @@
 #   LEAD_HMAC_SECRET   >= 32 chars (openssl rand -hex 32); the same value as Lead's vault entry intake-site-hmac
 #   LEAD_WEBHOOK_KEY   the Lead intake routine's webhook secret key
 #   LEAD_WEBHOOK_URL   the Lead intake routine's webhook URL (https)
+#   LEAD_FETCH_KEY     32-byte hex key Lead sends as Bearer to GET /api/envelope.php
 name = "vishalmathur-intake"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-01"
