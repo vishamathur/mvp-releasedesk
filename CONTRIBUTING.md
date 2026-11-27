@@ -6,7 +6,7 @@
 2. Branch from `main`: `cursor/<topic>` for harness work, or `cursor/req-<requestId>-<slug>` when a request drives it. Keep it short-lived, ideally under 2 days of work.
 3. Commit in small steps with conventional commits.
 4. Open a pull request into `main` early (draft is fine). Fill in the template.
-5. The required checks `test` (ci), `intel` (release-intel) and `review` (owasp-review) must pass. One human review is required.
+5. The required checks `test` (ci), `intel` (release-intel) and `review` (owasp-review) must pass. Review means the required Grok release-intel (`intel` (release-intel)) and OWASP review (`review` (owasp-review)) checks plus the typed Release Desk gates (security-compliance and release). No human GitHub approval is required.
 6. Merge with a merge commit after the release gate. No squash, no rebase, no force-push. Delete the branch after merge.
 
 `main` stays releasable. If `main` breaks, fixing it is the team's first priority.
@@ -35,4 +35,4 @@ Examples:
 
 - One request or story per PR. Aim for under 400 changed lines; split bigger work.
 - Link the request id, tick the acceptance criteria and the Definition of Done, paste test evidence.
-- Respond to review comments within the review SLA in the [working agreement](./docs/WORKING_AGREEMENT.md).
+- Resolve every Grok release-intel blocker and OWASP failure the checks report, or explain it in the PR, within the SLA in the [working agreement](./docs/WORKING_AGREEMENT.md).

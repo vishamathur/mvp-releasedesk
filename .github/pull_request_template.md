@@ -22,7 +22,7 @@
 - [ ] No secrets, real personal data or production credentials committed
 - [ ] Docs, `.env.example` and `CHANGELOG.md` updated where relevant
 - [ ] MOCK / EXAMPLE DATA labels kept on deliberate demo integrations
-- [ ] One human review approved
+- [ ] Review: Grok release-intel and OWASP review checks green, findings resolved (no human GitHub approval required)
 
 ## Test evidence
 

@@ -1,6 +1,8 @@
-# Default owner for everything in this customer repo.
+# Ownership for routing and notification only. Code-owner approval is NOT required:
+# review is the Grok release-intel and OWASP review checks plus the Release Desk gates.
+# Default owner.
 * @vishamathur
 
-# Process and CI files need the owner's review.
+# Process and CI files: owner is notified.
 /.github/ @vishamathur
 /SECURITY.md @vishamathur

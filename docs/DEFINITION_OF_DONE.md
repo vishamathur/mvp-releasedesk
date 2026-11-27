@@ -16,7 +16,7 @@ A story or request is **done** only when every item holds:
 - [ ] `review` (owasp-review) shows no failed control, or each exception is resolved by a human.
 
 ## Review and release
-- [ ] One human review approved; review comments resolved.
+- [ ] Review passed: the Grok release-intel and OWASP review checks are green with their findings resolved. No human GitHub approval is required.
 - [ ] Docs, `.env.example` and `CHANGELOG.md` updated where relevant.
 - [ ] Security-compliance gate and release gate decided by Vishal (typed in the gate owner's chat).
 - [ ] Merged with a merge commit by a human; branch deleted; `main` still green.
