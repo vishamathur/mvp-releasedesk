@@ -12,28 +12,37 @@
     changeType: "change type", legalName: "legal name", jurisdiction: "jurisdiction", intendedProduct: "intended product", sponsor: "sponsor",
     title: "title", description: "description (20+ characters)", urgency: "urgency", desiredBy: "needed-by date", customerBudgetInr: "budget",
     artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
+    siteName: "site or brand name", purpose: "purpose of the site", audience: "audience", pages: "pages needed", mustHaveFeatures: "must-have features",
+    brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band",
     catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
 
   // ---- route selection
+  const TITLES = { website: "Website creation", er: "Enhance an existing service", new_customer: "New application" };
+  const HELLO = {
+    website: "Hi! Tell me about the website: what it is for, who it is for, the pages you need, any must-have features, your content and brand assets, and when you need it. I'll fill in the form as we go.",
+    er: "Hi! Pick the application and the change, then tell me anything the notes should say. I'll fill in the form as we go.",
+    new_customer: "Hi! Pick a template and any add-ons, then tell me about your organisation. I'll fill in the form as we go.",
+  };
+  // Catalogue templates a website request may pick. Same ids as WEBSITE_TEMPLATE_IDS in private/lib/intake.php.
+  const WEBSITE_TEMPLATES = ["NC-WEBSITE", "SX-LANDING-PAGE"];
   let route = null;
   const form = $("#intake-form");
   const setRoute = (r) => {
     route = r;
     $$(".option").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.route === r)));
     $("#start").hidden = false;
-    $$(".route-er").forEach((x) => (x.hidden = r !== "er"));
-    $$(".route-nc").forEach((x) => (x.hidden = r !== "new_customer"));
-    ["customerId", "projectRef"].forEach((n) => (form.elements[n].required = r === "er"));
-    ["legalName", "jurisdiction", "intendedProduct", "sponsor"].forEach((n) => (form.elements[n].required = r === "new_customer"));
+    // Blocks and fields name the routes they belong to. Hidden fields are never required.
+    $$("[data-routes]").forEach((x) => (x.hidden = !x.dataset.routes.split(" ").includes(r)));
+    $$("[data-required-for]").forEach((x) => (x.required = x.dataset.requiredFor.split(" ").includes(r)));
     const erApp = $("#er-app"); const erOpt = $("#er-option"); const ncTpl = $("#nc-template");
     if (erApp) erApp.required = r === "er";
     if (erOpt) erOpt.required = r === "er";
-    if (ncTpl) ncTpl.required = r === "new_customer";
-    $("#form-title").textContent = r === "er" ? "Enhance an existing service" : "New application";
+    if (ncTpl) ncTpl.required = r === "new_customer" || r === "website";
+    $("#form-title").textContent = TITLES[r];
+    $("#description-label").textContent = r === "website" ? "Anything else we should know (optional)" : "Description";
+    if (catalogue) fillTemplates();
     renderEstimate();
-    if (!chat.length) say("assistant", r === "er"
-      ? "Hi! Pick the application and the change, then tell me anything the notes should say. I'll fill in the form as we go."
-      : "Hi! Pick a template and any add-ons, then tell me about your organisation. I'll fill in the form as we go.");
+    if (!chat.length) say("assistant", HELLO[r]);
     $("#start").scrollIntoView({ behavior: "smooth" });
   };
   $$(".option").forEach((b) => b.addEventListener("click", () => setRoute(b.dataset.route)));
@@ -58,7 +67,7 @@
       if (!r.ok) { say("assistant", d.message || "Sorry, I couldn't respond. Please use the form."); return; }
       say("assistant", d.reply);
       if (d.route && d.route !== "unknown" && d.route !== route) setRoute(d.route);
-      for (const [k, v] of Object.entries(d.draft || {})) if (form.elements[k] && !form.elements[k].value) form.elements[k].value = v;
+      for (const [k, v] of Object.entries(d.draft || {})) if (form.elements[k] && (!form.elements[k].value || (k === "budgetBand" && form.elements[k].value === "not_sure"))) form.elements[k].value = v;
       if (d.suggestedServices?.length) say("assistant", "Possibly relevant services (EXAMPLE list prices): " + d.suggestedServices.map((s) => `${s.name} ${inr(s.unitPriceInr)}/${s.unit}`).join("; "));
     } catch { typing.remove(); say("assistant", "Network problem. Please try again or use the form."); }
   });
@@ -74,9 +83,12 @@
     if (!picked) { st.className = "error"; st.textContent = "Choose a catalogue option first."; return; }
     const body = { route, pid: route === "er" ? "PID-ER" : "PID-NC", catalogueOptionId: picked.id, addOns: selectedAddOns(),
       contactName: f.contactName.value, email: f.email.value, company: f.company.value, urgency: f.urgency.value,
-      title: f.title.value, description: f.description.value, customerBudgetInr: f.customerBudgetInr.value || null,
+      title: f.title.value, description: f.description.value, customerBudgetInr: route === "website" ? null : (f.customerBudgetInr.value || null),
       artifactLinks: f.artifactLinks.value.split(/\s+/).filter(Boolean), website: f.website.value, consent: f.consent.checked };
     if (route === "er") Object.assign(body, { customerId: f.customerId.value, projectRef: f.projectRef.value, changeType: f.changeType.value, desiredBy: f.desiredBy.value });
+    else if (route === "website") Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, sponsor: f.sponsor.value, desiredBy: f.desiredBy.value,
+      siteName: f.siteName.value, purpose: f.purpose.value, audience: f.audience.value, pages: f.pages.value, mustHaveFeatures: f.mustHaveFeatures.value,
+      brandAssets: f.brandAssets.value, domainHosting: f.domainHosting.value, budgetBand: f.budgetBand.value });
     else Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, intendedProduct: f.intendedProduct.value, sponsor: f.sponsor.value });
     const btn = $("#submit"); btn.disabled = true; btn.textContent = "Sending…";
     try {
@@ -109,7 +121,7 @@
     }
     return catalogue.newApplications.find((a) => a.id === $("#nc-template").value) || null;
   };
-  const selectedAddOns = () => route === "new_customer"
+  const selectedAddOns = () => (route === "new_customer" || route === "website")
     ? $$("#nc-addons input:checked").map((i) => i.value) : [];
   const priceLines = (lines, urgency) => {
     const p = catalogue.pricing;
@@ -159,8 +171,17 @@
     paintOption($("#er-option-desc"), chosen);
     renderEstimate();
   };
+  const templatesFor = () => catalogue.newApplications.filter((a) => route === "website" ? WEBSITE_TEMPLATES.includes(a.id) : a.id !== "NC-WEBSITE");
+  const fillTemplates = () => {
+    const sel = $("#nc-template");
+    const keep = sel.value;
+    const list = templatesFor();
+    sel.replaceChildren(...list.map((a) => { const o = el("option", optionLabel(a)); o.value = a.id; return o; }));
+    if (list.some((a) => a.id === keep)) sel.value = keep;
+    fillAddOns();
+  };
   const fillAddOns = () => {
-    const app = catalogue.newApplications.find((a) => a.id === $("#nc-template").value) || catalogue.newApplications[0];
+    const app = catalogue.newApplications.find((a) => a.id === $("#nc-template").value) || templatesFor()[0];
     paintOption($("#nc-template-desc"), app);
     const box = $("#nc-addons");
     box.replaceChildren(el("legend", "Add-ons"));
@@ -205,7 +226,6 @@
         list.appendChild(p);
       }
       $("#er-app").replaceChildren(...d.enhancements.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
-      $("#nc-template").replaceChildren(...d.newApplications.map((a) => { const o = el("option", optionLabel(a)); o.value = a.id; return o; }));
       $("#er-app").addEventListener("change", fillErOptions);
       $("#er-option").addEventListener("change", () => {
         paintOption($("#er-option-desc"), selectedOption());
@@ -214,7 +234,7 @@
       $("#nc-template").addEventListener("change", fillAddOns);
       form.elements.urgency.addEventListener("change", renderEstimate);
       fillErOptions();
-      fillAddOns();
+      fillTemplates();
     } catch { $("#cat-label").textContent = "Service list unavailable."; }
   })();
 
