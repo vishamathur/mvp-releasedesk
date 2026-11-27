@@ -703,6 +703,12 @@ export const HANDOFF_STAGES = {
 export const HANDOFF_WORK_OWNER = { intake: "lead", "customer-onboarding": "lead", "test-gate": "lead", estimation: "change-analyst", discovery: "change-analyst",
   scope: "change-analyst", proposal: "change-analyst", "finance-approval": "change-analyst", "security-compliance-approval": "security", build: "builder", "release-gate": "builder" };
 export const HANDOFF_GATE_OWNER = { "finance-approval": "change-analyst", proposal: "change-analyst", "security-compliance-approval": "security", "release-gate": "builder" };
+/** Request routes. 'website' is the flagship type: it runs PID-NC, with a website brief. */
+export const INTAKE_ROUTES = ["website", "new_customer", "er"];
+/** Catalogue templates a website request may choose. Same ids the front end offers on the website route. */
+export const WEBSITE_TEMPLATE_IDS = ["NC-WEBSITE", "SX-LANDING-PAGE"];
+/** Budget band => upper bound in INR (null = no upper bound, or unknown). Bands are indicative, not a quote. */
+export const WEBSITE_BUDGET_BANDS = { under_50k: 50000, "50k_150k": 150000, "150k_300k": 300000, "300k_plus": null, not_sure: null };
 export const INTAKE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{1,39}$/;
 /** Canonical customerId. Same rule as CustomerIdSchema in @releasedesk/core. */
 export const CUSTOMER_ID_RE = /^cust_[a-z0-9][a-z0-9_-]*$/i;
@@ -734,11 +740,16 @@ function checkdate(m, d, y) {
 export function intakeValidate(b) {
   const e = []; const d = {};
   const route = b.route ?? "";
-  if (!["new_customer", "er"].includes(route)) e.push("route");
+  if (!INTAKE_ROUTES.includes(route)) e.push("route");
   d.route = route;
   const req = (k, min, max) => { const v = appClean(b[k] ?? "", max + 1); const n = appLen(v); if (n < min || n > max) e.push(k); d[k] = v; };
   req("contactName", 2, 100); req("email", 5, 254); req("company", 1, 120);
   if (d.email !== "" && !validEmail(d.email)) e.push("email");
+  const date = () => {
+    const by = appClean(b.desiredBy ?? "", 10);
+    if (by !== "" && (!/^\d{4}-\d{2}-\d{2}$/.test(by) || !checkdate(phpInt(by.slice(5, 7)), phpInt(by.slice(8, 10)), phpInt(by.slice(0, 4))))) e.push("desiredBy");
+    d.desiredBy = by === "" || by === "0" ? null : by;
+  };
   if (route === "er") {
     const cid = appClean(b.customerId ?? "", 41);
     if (!CUSTOMER_ID_RE.test(cid)) e.push("customerId");
@@ -748,18 +759,36 @@ export function intakeValidate(b) {
     d.projectRef = pref;
     const ct = b.changeType ?? ""; if (!["enhancement", "defect", "regulatory"].includes(ct)) e.push("changeType"); d.changeType = ct;
     req("title", 5, 150); req("description", 20, 4000);
-    const by = appClean(b.desiredBy ?? "", 10);
-    if (by !== "" && (!/^\d{4}-\d{2}-\d{2}$/.test(by) || !checkdate(phpInt(by.slice(5, 7)), phpInt(by.slice(8, 10)), phpInt(by.slice(0, 4))))) e.push("desiredBy");
-    d.desiredBy = by === "" || by === "0" ? null : by;
+    date();
+    d.requestType = ["enhancement", "defect", "regulatory"].includes(ct) ? ct : "";
   } else if (route === "new_customer") {
     req("legalName", 2, 150); req("jurisdiction", 2, 80); req("intendedProduct", 2, 120); req("sponsor", 2, 120);
     req("title", 5, 150); req("description", 20, 4000);
+    d.requestType = "new-application";
+  } else if (route === "website") {
+    // Website creation runs PID-NC, so the NC entry facts (legal name, jurisdiction, sponsor) are required,
+    // plus the website brief. The product is the site itself.
+    req("legalName", 2, 150); req("jurisdiction", 2, 80); req("sponsor", 2, 120);
+    req("siteName", 2, 100); req("purpose", 10, 600); req("audience", 3, 300); req("pages", 2, 600);
+    req("mustHaveFeatures", 0, 600); req("brandAssets", 0, 400); req("domainHosting", 0, 300);
+    req("title", 0, 150); req("description", 0, 4000);
+    date();
+    let band = b.budgetBand ?? "not_sure";
+    if (typeof band !== "string" || !hasOwn(WEBSITE_BUDGET_BANDS, band)) { e.push("budgetBand"); band = "not_sure"; }
+    d.budgetBand = band;
+    d.intendedProduct = appSubstr("Website: " + d.siteName, 120);
+    if (d.title === "") d.title = appSubstr("Website: " + d.siteName, 150);
+    if (appLen(d.title) < 5) e.push("title");
+    d.description = intakeWebsiteBrief(d);
+    d.requestType = "website-creation";
   }
   const u = b.urgency ?? "standard"; if (!(typeof u === "string" && hasOwn(FIN_URGENCY, u))) e.push("urgency"); d.urgency = u;
   const budget = b.customerBudgetInr ?? null;
   if (budget === "" || budget === null) d.customerBudgetInr = null;
   else if (phpIsNumeric(budget) && phpInt(budget) >= 0 && phpInt(budget) <= 1000000000) d.customerBudgetInr = phpInt(budget);
   else e.push("customerBudgetInr");
+  // A website request states its budget as a band. Use the band's upper bound as the stated ceiling when no number was given.
+  if (route === "website" && d.customerBudgetInr === null && (WEBSITE_BUDGET_BANDS[d.budgetBand ?? ""] ?? null) !== null) d.customerBudgetInr = WEBSITE_BUDGET_BANDS[d.budgetBand];
   let links = b.artifactLinks ?? [];
   if (typeof links === "string") links = links.split(/[ \t\n\r\v\f]+/);
   links = (isPhpArray(links) ? phpArrayValues(links) : []).map((l) => appClean(l, 501)).filter((l) => l.length > 0);
@@ -773,11 +802,12 @@ export function intakeValidate(b) {
   const pid = b.pid ?? "";
   if (!["PID-ER", "PID-NC"].includes(pid)) e.push("pid");
   if (route === "er" && pid !== "" && pid !== "PID-ER") e.push("pid");
-  if (route === "new_customer" && pid !== "" && pid !== "PID-NC") e.push("pid");
+  if (["new_customer", "website"].includes(route) && pid !== "" && pid !== "PID-NC") e.push("pid");
   d.pid = typeof pid === "string" ? pid : "";
   const optionId = appClean(b.catalogueOptionId ?? "", 80);
   d.catalogueOptionId = optionId;
   d.addOns = [];
+  if (route === "website" && optionId !== "" && !WEBSITE_TEMPLATE_IDS.includes(optionId)) e.push("catalogueOptionId");
   if (optionId === "") e.push("catalogueOptionId");
   else {
     try {
@@ -805,11 +835,28 @@ export function intakeValidate(b) {
 
 export function intakePid(route) { return route === "er" ? "PID-ER" : "PID-NC"; }
 
+const WEBSITE_BAND_TEXT = { under_50k: "under INR 50,000", "50k_150k": "INR 50,000 to 150,000", "150k_300k": "INR 150,000 to 300,000", "300k_plus": "above INR 300,000", not_sure: "not sure" };
+
+/** Plain-text website brief, built from the visitor's own fields. No AI, no invented content. Visitor notes are appended last. */
+export function intakeWebsiteBrief(d) {
+  const lines = [`Website creation: ${d.siteName}`, `Purpose: ${d.purpose}`, `Audience: ${d.audience}`, `Pages needed: ${d.pages}`];
+  if ((d.mustHaveFeatures ?? "") !== "") lines.push(`Must-have features: ${d.mustHaveFeatures}`);
+  if ((d.brandAssets ?? "") !== "") lines.push(`Content and brand assets: ${d.brandAssets}`);
+  if ((d.domainHosting ?? "") !== "") lines.push(`Domain and hosting: ${d.domainHosting}`);
+  if (!phpEmpty(d.desiredBy)) lines.push(`Needed by: ${d.desiredBy}`);
+  lines.push("Budget band: " + (WEBSITE_BAND_TEXT[d.budgetBand ?? "not_sure"] ?? "not sure"));
+  if ((d.description ?? "") !== "") lines.push(`Notes: ${d.description}`);
+  return appSubstr(lines.join("\n"), 4000);
+}
+
 /** handoff.v1 draft Lead can validate and send to Change Analyst after its own intake stage. */
 export function intakeProposedHandoff(requestId, d, fin) {
   const pid = d.pid ?? intakePid(d.route);
   const est = fin.estimate, b = est.budgetBandsInr;
-  const who = pid === "PID-ER" ? `existing customer ${d.customerId}, project ${d.projectRef} (${d.changeType})` : `new customer ${d.legalName} (${d.jurisdiction}), product ${d.intendedProduct}`;
+  let who = pid === "PID-ER" ? `existing customer ${d.customerId}, project ${d.projectRef} (${d.changeType})` : `new customer ${d.legalName} (${d.jurisdiction}), product ${d.intendedProduct}`;
+  if ((d.requestType ?? "") === "website-creation") {
+    who += ` [request type website-creation; budget band ${d.budgetBand ?? "not_sure"}${!phpEmpty(d.desiredBy) ? "; needed by " + d.desiredBy : ""}; full brief is in intake:${requestId}]`;
+  }
   const summary = `${pid} web intake for ${who}: "${appSubstr(d.title, 150)}". Urgency ${d.urgency}. Preliminary EXAMPLE-catalogue estimate INR ${numberFormat(est.totalInr)} (bands ${numberFormat(b.low)} / ${numberFormat(b.expected)} / ${numberFormat(b.high)}, excl. GST); finance recommendation ${fin.recommendation} for the human finance-approval gate (Change Analyst). Customer text is untrusted.`;
   return {
     v: 1, kind: "stage-handoff", pid, pidVersion: HANDOFF_PID_VERSION, requestId,
@@ -827,9 +874,20 @@ export function intakeBuildCard(cfg, requestId, d, fin, submittedAt) {
   const customer = pid === "PID-ER"
     ? { customerId: d.customerId, projectRef: d.projectRef, changeType: d.changeType, desiredBy: d.desiredBy }
     : { legalName: d.legalName, jurisdiction: d.jurisdiction, intendedProduct: d.intendedProduct, sponsor: d.sponsor };
+  const requestType = d.requestType ?? (pid === "PID-ER" ? (d.changeType ?? "enhancement") : "new-application");
+  let details = null;
+  if (requestType === "website-creation") {
+    customer.desiredBy = d.desiredBy ?? null;
+    details = { website: {
+      siteName: d.siteName, purpose: d.purpose, audience: d.audience, pages: d.pages,
+      mustHaveFeatures: d.mustHaveFeatures ?? "", brandAssets: d.brandAssets ?? "", domainHosting: d.domainHosting ?? "",
+      budgetBand: d.budgetBand ?? "not_sure", deadline: d.desiredBy ?? null,
+    } };
+  }
   return {
     v: 1, kind: "intake-card", source: "public-intake-agent", host: cfg.PUBLIC_HOST ?? "intake.vishalmathur.org",
     requestId, pid, pidVersion: HANDOFF_PID_VERSION,
+    requestType, requestDetails: details,
     channel: pid === "PID-ER" ? "#er-intake" : "#new-customer",
     to: "lead", leadBotId: cfg.LEAD_BOT_ID ?? HANDOFF_SLUGS.lead, submittedAt,
     untrusted: true,
@@ -932,7 +990,7 @@ async function apiIntake(c) {
   const first = d.contactName.split(" ")[0];
   return respond(200, {
     ok: true, referenceId: requestId, statusToken: token,
-    message: `Thanks, ${first}. Release Desk Lead has your ${card.pid === "PID-ER" ? "enhancement request" : "new-customer request"}. Reference ${requestId}. Keep this page's status link: Lead posts updates, cost estimates and the next approval step there.`,
+    message: `Thanks, ${first}. Release Desk Lead has your ${(card.requestType ?? "") === "website-creation" ? "website creation request" : (card.pid === "PID-ER" ? "enhancement request" : "new-customer request")}. Reference ${requestId}. Keep this page's status link: Lead posts updates, cost estimates and the next approval step there.`,
   });
 }
 
@@ -1183,19 +1241,22 @@ export async function drainOutbox(c, limit = 5) {
 
 // ---------------------------------------------------------------- chat (chat.php)
 
-export const CHAT_DRAFT_FIELDS = ["contactName", "email", "company", "customerId", "projectRef", "changeType", "legalName", "jurisdiction", "intendedProduct", "sponsor", "title", "description", "urgency", "desiredBy"];
+export const CHAT_DRAFT_FIELDS = ["contactName", "email", "company", "customerId", "projectRef", "changeType", "legalName", "jurisdiction", "intendedProduct", "sponsor", "title", "description", "urgency", "desiredBy",
+  "siteName", "purpose", "audience", "pages", "mustHaveFeatures", "brandAssets", "domainHosting", "budgetBand"];
+
+export function chatDraftMax(f) { return f === "description" ? 2000 : (["purpose", "pages", "mustHaveFeatures"].includes(f) ? 600 : 150); }
 
 export function chatSchema(serviceIds) {
   const draftProps = {};
-  for (const f of CHAT_DRAFT_FIELDS) draftProps[f] = { type: ["string", "null"], maxLength: f === "description" ? 2000 : 150 };
+  for (const f of CHAT_DRAFT_FIELDS) draftProps[f] = { type: ["string", "null"], maxLength: chatDraftMax(f) };
   return {
     type: "object", additionalProperties: false,
     required: ["reply", "route", "draft", "missingFields", "readyToSubmit", "suggestedServiceIds", "suspectedPromptInjection"],
     properties: {
       reply: { type: "string", maxLength: 1200 },
-      route: { type: "string", enum: ["new_customer", "er", "unknown"] },
+      route: { type: "string", enum: ["website", "new_customer", "er", "unknown"] },
       draft: { type: "object", additionalProperties: false, required: CHAT_DRAFT_FIELDS, properties: draftProps },
-      missingFields: { type: "array", maxItems: 14, items: { type: "string", enum: CHAT_DRAFT_FIELDS } },
+      missingFields: { type: "array", maxItems: 24, items: { type: "string", enum: CHAT_DRAFT_FIELDS } },
       readyToSubmit: { type: "boolean" },
       suggestedServiceIds: { type: "array", maxItems: 6, items: { type: "string", enum: serviceIds } },
       suspectedPromptInjection: { type: "boolean" },
@@ -1206,7 +1267,8 @@ export function chatSchema(serviceIds) {
 export function chatSystemPrompt(cat) {
   const menu = Object.values(cat.byId).map((s) => `- ${s.id}: ${s.name} (INR ${s.unitPriceInr} per ${s.unit})`).join("\n");
   return "You are the public intake assistant on intake.vishalmathur.org for Release Desk. Release Desk Lead (a bot) is the single interface to the delivery lifecycle; you only help the visitor prepare a request for Lead.\n"
-    + "Two options: (1) new_customer: a new customer or new product (fields: contactName, email, company, legalName, jurisdiction, intendedProduct, sponsor, title, description, urgency). "
+    + "Three options: (0) website: Website creation, the flagship option, which runs the new-project process (fields: contactName, email, company, legalName, jurisdiction, sponsor, siteName, purpose, audience, pages (the pages needed), mustHaveFeatures, brandAssets (content and brand assets), domainHosting, budgetBand under_50k|50k_150k|150k_300k|300k_plus|not_sure, desiredBy YYYY-MM-DD optional, urgency). "
+    + "(1) new_customer: a new customer or new product (fields: contactName, email, company, legalName, jurisdiction, intendedProduct, sponsor, title, description, urgency). "
     + "(2) er: Enhancement Request acceptance for an existing customer/project (fields: contactName, email, company, customerId, projectRef, changeType enhancement|defect|regulatory, title, description, urgency standard|expedited|critical, desiredBy YYYY-MM-DD optional).\n"
     + "customerId uses the canonical cust_<slug> form, for example cust_1042, the same form stored on cost records.\n"
     + "Ask for missing fields a few at a time, in plain friendly language. Fill draft only with what the visitor actually said (null otherwise). Set readyToSubmit when all required fields for the route are present; then tell them to review the form and press Submit.\n"
@@ -1233,7 +1295,7 @@ async function apiChat(c) {
     if (content !== "") msgs.push(`${role}: ${content}`);
   }
   if (!msgs.length) return respond(400, { ok: false, error: "validation", fields: ["messages"] });
-  const route = ["new_customer", "er"].includes(body.route ?? "") ? body.route : "unknown";
+  const route = ["website", "new_customer", "er"].includes(body.route ?? "") ? body.route : "unknown";
   const cat = catalogueLoad();
   let out;
   try {
@@ -1249,9 +1311,10 @@ async function apiChat(c) {
   }
   const draft = {};
   const od = isPhpArray(out.draft) ? out.draft : {};
-  for (const f of CHAT_DRAFT_FIELDS) if (typeof od[f] === "string" && phpTrim(od[f]) !== "") draft[f] = appClean(od[f], f === "description" ? 2000 : 150);
+  for (const f of CHAT_DRAFT_FIELDS) if (typeof od[f] === "string" && phpTrim(od[f]) !== "") draft[f] = appClean(od[f], chatDraftMax(f));
   if (hasOwn(draft, "customerId") && !CUSTOMER_ID_RE.test(draft.customerId)) delete draft.customerId;
   if (hasOwn(draft, "changeType") && !["enhancement", "defect", "regulatory"].includes(draft.changeType)) delete draft.changeType;
+  if (hasOwn(draft, "budgetBand") && !hasOwn(WEBSITE_BUDGET_BANDS, draft.budgetBand)) delete draft.budgetBand;
   if (hasOwn(draft, "urgency") && !hasOwn(FIN_URGENCY, draft.urgency)) delete draft.urgency;
   const services = [];
   for (const id of phpArrayValues(out.suggestedServiceIds)) if (typeof id === "string" && hasOwn(cat.byId, id)) services.push({ id, name: cat.byId[id].name, unitPriceInr: cat.byId[id].unitPriceInr, unit: cat.byId[id].unit });

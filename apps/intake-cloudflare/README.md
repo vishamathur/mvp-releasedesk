@@ -1,7 +1,16 @@
-# Public intake site on Cloudflare Pages (free plan) — NOT DEPLOYED
+# Public intake site on Cloudflare Pages (free plan) — live at https://intake.vishalmathur.org
+
+**Status: deployed.** This build serves https://intake.vishalmathur.org from the Cloudflare Pages project
+`vishalmathur-intake` (production branch `main`, also at `vishalmathur-intake.pages.dev`). The D1 database
+`vishalmathur-intake` is bound as `DB`. Intake cards and visitor messages are delivered to Release Desk Lead by webhook
+(`LEAD_DELIVERY=webhook`, `Authorization: Bearer`), signed with HMAC-SHA256. Lead's `public-intake` routine checks the
+signature and treats cards marked TEST as tests: it logs them and opens nothing. Secret values live only in Pages secrets,
+never in this repo.
 
 A port of [`apps/intake`](../intake) (PHP for GoDaddy cPanel) to Cloudflare Pages in advanced mode. The visitor
-front end is the same file set (`apps/intake/public/index.html`, `app.js`, `styles.css`, copied at build time). The six
+front end is the same file set (`apps/intake/public/index.html`, `app.js`, `styles.css`, copied at build time). The page offers three request types: Website creation (PID-NC with a website brief, see
+[`apps/intake/README.md`](../intake/README.md#request-types)), New application (PID-NC) and Enhance an existing service (PID-ER).
+The six
 endpoints keep their paths and their request and response shapes, so the front end, Release Desk Lead's skills
 (`finance-estimate`, `public-status-update`) and the Intake routine need no change:
 
@@ -47,7 +56,10 @@ The tests port `apps/intake/tests/unit-tests.php` and `integration-tests.php` wi
 `migrations/` against in-memory SQLite, and fail on any network call. Grok is never stubbed: the Grok tests check the
 request body and the error path only.
 
-## Deploy (Vishal, from a machine logged in to Cloudflare; nothing here has been run)
+## Deploy
+
+These are the steps the live site was set up with. To redeploy after a change, run steps 1 and 8 only:
+`node scripts/build.mjs`, then `npx wrangler pages deploy dist --project-name vishalmathur-intake --branch main`.
 
 All commands run from `apps/intake-cloudflare/`. Use `npx wrangler@latest` or a local install.
 

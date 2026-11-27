@@ -169,6 +169,82 @@ test("handoff: proposed handoff passes validate-handoff (ER -> estimation, NC ->
   }
 });
 
+const web = { route: "website", pid: "PID-NC", catalogueOptionId: "NC-WEBSITE", addOns: [],
+  contactName: "Jane Doe", email: "jane@example.com", company: "Acme", legalName: "Acme Pvt Ltd", jurisdiction: "India", sponsor: "R. Rao, CFO",
+  siteName: "Acme Lending", purpose: "Explain our lending products and collect enquiries.", audience: "Small business owners in India",
+  pages: "Home, Products, About, Contact", mustHaveFeatures: "Contact form", brandAssets: "Logo and colours exist, copy is missing",
+  domainHosting: "We own acmelending.example", budgetBand: "150k_300k", desiredBy: "2027-01-31", urgency: "standard", consent: true };
+
+test("website: valid request passes with no title or description; types are derived", () => {
+  const [e, d] = W.intakeValidate(web);
+  assert.deepEqual(e, []);
+  assert.equal(d.requestType, "website-creation"); assert.equal(d.pid, "PID-NC");
+  assert.equal(d.title, "Website: Acme Lending"); assert.equal(d.intendedProduct, "Website: Acme Lending");
+  assert.ok(d.description.includes("Pages needed: Home, Products, About, Contact") && d.description.includes("Needed by: 2027-01-31"), d.description);
+  assert.equal(d.customerBudgetInr, 300000, "band ceiling becomes the stated budget");
+  const d2 = W.intakeValidate({ ...web, budgetBand: "not_sure", description: "Please call before building." })[1];
+  assert.equal(d2.customerBudgetInr, null); assert.ok(d2.description.includes("Notes: Please call before building."));
+  assert.deepEqual(W.intakeValidate({ ...web, catalogueOptionId: "SX-LANDING-PAGE" })[0], []);
+  assert.equal(W.intakeValidate({ ...web, budgetBand: undefined })[1].budgetBand, "not_sure", "band defaults to not_sure");
+  assert.equal(W.intakeValidate({ ...web, customerBudgetInr: "120000" })[1].customerBudgetInr, 120000, "a typed budget wins over the band");
+});
+
+test("website: missing brief, bad band, bad date, wrong template and wrong pid are rejected", () => {
+  const e = W.intakeValidate({ ...web, legalName: "", jurisdiction: "", sponsor: "", siteName: "", purpose: "", audience: "", pages: "" })[0];
+  assert.deepEqual([...e].sort(), ["audience", "jurisdiction", "legalName", "pages", "purpose", "siteName", "sponsor"]);
+  assert.ok(W.intakeValidate({ ...web, budgetBand: "free" })[0].includes("budgetBand"), "band");
+  assert.ok(W.intakeValidate({ ...web, budgetBand: ["under_50k"] })[0].includes("budgetBand"), "band must be a string");
+  assert.ok(W.intakeValidate({ ...web, desiredBy: "2027-02-30" })[0].includes("desiredBy"), "date");
+  assert.ok(W.intakeValidate({ ...web, catalogueOptionId: "NC-KYC" })[0].includes("catalogueOptionId"), "non-website template");
+  assert.ok(W.intakeValidate({ ...web, pid: "PID-ER" })[0].includes("pid"), "pid must be PID-NC");
+  assert.ok(W.intakeValidate({ ...web, addOns: ["ADD-NC-KYC-API"] })[0].includes("addOns"), "add-on of another template");
+  assert.deepEqual(W.intakeValidate({ ...web, addOns: ["ADD-NC-WEB-FORMS", "ADD-NC-WEB-AI"] })[0], [], "website add-ons");
+  assert.ok(W.intakeValidate({ ...web, purpose: "x".repeat(601) })[0].includes("purpose"), "purpose max 600");
+});
+
+test("website: card carries type and brief; handoff goes to change-analyst at discovery and validates", async () => {
+  const [e, d] = W.intakeValidate(web);
+  assert.deepEqual(e, []);
+  const rid = "REQ-20261127-000321";
+  const fin = await W.financeAssess(cfg, { pid: "PID-NC", text: d.description, urgency: "standard", customerBudgetInr: d.customerBudgetInr, requestId: rid, catalogueOptionId: "NC-WEBSITE", addOns: [] });
+  assert.equal(fin.source, "catalogue-option");
+  const card = W.intakeBuildCard(cfg, rid, d, fin, "2026-11-27T12:00:00Z");
+  assert.equal(card.pid, "PID-NC"); assert.equal(card.requestType, "website-creation"); assert.equal(card.channel, "#new-customer");
+  assert.deepEqual(card.requestDetails, { website: { siteName: "Acme Lending", purpose: web.purpose, audience: web.audience, pages: web.pages,
+    mustHaveFeatures: "Contact form", brandAssets: web.brandAssets, domainHosting: web.domainHosting, budgetBand: "150k_300k", deadline: "2027-01-31" } });
+  assert.deepEqual(card.customer, { legalName: "Acme Pvt Ltd", jurisdiction: "India", intendedProduct: "Website: Acme Lending", sponsor: "R. Rao, CFO", desiredBy: "2027-01-31" });
+  assert.equal(card.catalogueOptionId, "NC-WEBSITE"); assert.equal(card.to, "lead"); assert.ok(!("pidState" in card));
+  const h = card.proposedHandoff;
+  assert.deepEqual(W.handoffV1Validate(h, "lead"), []);
+  assert.equal(h.pid, "PID-NC"); assert.equal(h.stage, "discovery"); assert.equal(h.to, "change-analyst");
+  assert.ok(h.summary.includes("website-creation") && h.summary.includes(`intake:${rid}`) && h.summary.includes("needed by 2027-01-31"), h.summary);
+  assert.ok(h.artifactRefs.includes(`intake:${rid}`));
+});
+
+test("request types: ER defect/regulatory/enhancement and NC carry requestType; non-website cards have no website details", async () => {
+  for (const ct of ["enhancement", "defect", "regulatory"]) {
+    const [e, d] = W.intakeValidate({ ...base, changeType: ct });
+    assert.deepEqual(e, []); assert.equal(d.requestType, ct);
+  }
+  const fin = await W.financeAssess(cfg, { pid: "PID-ER", text: "", lines: [{ serviceId: "SVC-UI-S", qty: 1 }] });
+  const card = W.intakeBuildCard(cfg, "REQ-20261127-000322", W.intakeValidate({ ...base, changeType: "defect" })[1], fin, "2026-11-27T12:00:00Z");
+  assert.equal(card.requestType, "defect"); assert.equal(card.requestDetails, null); assert.equal(card.pid, "PID-ER");
+  const [e, d] = W.intakeValidate({ ...base, route: "new_customer", pid: "PID-NC", catalogueOptionId: "NC-KYC", legalName: "Acme Pvt Ltd", jurisdiction: "India", intendedProduct: "Lending", sponsor: "R. Rao, CFO" });
+  assert.deepEqual(e, []); assert.equal(d.requestType, "new-application");
+});
+
+test("chat: schema offers the website route, every draft field is required, budget band is enumerated", () => {
+  const cat = W.catalogueLoad();
+  const sch = W.chatSchema(Object.keys(cat.byId));
+  assert.ok(sch.properties.route.enum.includes("website"));
+  for (const f of ["siteName", "purpose", "audience", "pages", "mustHaveFeatures", "brandAssets", "domainHosting", "budgetBand", "desiredBy"]) {
+    assert.ok(f in sch.properties.draft.properties && sch.properties.draft.required.includes(f), f);
+  }
+  assert.equal(sch.properties.draft.properties.description.maxLength, 2000); assert.equal(sch.properties.draft.properties.purpose.maxLength, 600);
+  assert.ok(W.CHAT_DRAFT_FIELDS.length <= sch.properties.missingFields.maxItems);
+  assert.ok(W.chatSystemPrompt(cat).includes("website: Website creation"));
+});
+
 test("handoff validator: rejects bot approval, non-lead stage-handoff, extra fields, wrong thread", () => {
   const h = { v: 1, kind: "stage-return", pid: "PID-ER", pidVersion: "1.1.0", requestId: "REQ-20261122-000123", thread: { channel: "lead-chat", threadId: "thr_20261122000123" },
     from: "change-analyst", to: "lead", stage: "finance-approval", action: "return", summary: "s", artifactRefs: [], memoryKey: "pid.state.REQ-20261122-000123",

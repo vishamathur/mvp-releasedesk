@@ -109,6 +109,38 @@ test("showcase options are priced and can be submitted", async () => {
   assert.equal(count(env, "submissions"), before + 3);
 });
 
+test("website creation: catalogue lists it first, a submission stores the brief and runs PID-NC", async () => {
+  const env = testEnv();
+  const { json: cat } = await call(worker, env, getReq("/api/catalogue.php"));
+  const first = cat.newApplications[0];
+  assert.equal(first.id, "NC-WEBSITE"); assert.equal(first.name, "Website creation"); assert.equal(first.addOns.length, 3);
+  const est = first.exampleEstimate?.totalInr ?? 0;
+  assert.ok(est > 0 && cat.label.includes("EXAMPLE DATA - illustrative prices only"));
+  const web = { route: "website", pid: "PID-NC", catalogueOptionId: "NC-WEBSITE", addOns: ["ADD-NC-WEB-FORMS"],
+    contactName: "Jane Doe", email: "jane@example.com", company: "Acme", legalName: "Acme Pvt Ltd", jurisdiction: "India", sponsor: "R. Rao, CFO",
+    siteName: "Acme Lending", purpose: "Explain our lending products and collect enquiries.", audience: "Small business owners",
+    pages: "Home, Products, About, Contact", mustHaveFeatures: "Contact form", brandAssets: "Logo exists", domainHosting: "We own the domain",
+    budgetBand: "300k_plus", desiredBy: "2027-01-31", urgency: "standard", artifactLinks: [], website: "", consent: true };
+  const before = count(env, "submissions");
+  let r = await call(worker, env, jsonReq("/api/intake.php", web));
+  assert.equal(r.status, 200, r.text); assert.equal(r.json.ok, true); assert.ok(r.json.message.includes("website creation request"), r.json.message);
+  const card = JSON.parse(env.DB.raw.prepare("SELECT card_json FROM submissions WHERE request_id = ?").get(r.json.referenceId).card_json);
+  assert.equal(card.pid, "PID-NC"); assert.equal(card.requestType, "website-creation"); assert.equal(card.catalogueOptionId, "NC-WEBSITE"); assert.deepEqual(card.addOns, ["ADD-NC-WEB-FORMS"]);
+  assert.equal(card.requestDetails.website.pages, "Home, Products, About, Contact"); assert.equal(card.requestDetails.website.deadline, "2027-01-31");
+  assert.equal(card.finance.source, "catalogue-option"); assert.ok(card.finance.estimate.totalInr > est, "priced from the catalogue with the add-on, no Grok");
+  assert.equal(card.proposedHandoff.stage, "discovery"); assert.equal(card.proposedHandoff.to, "change-analyst"); assert.equal(card.customer.intendedProduct, "Website: Acme Lending");
+  assert.ok(card.ask.description.includes("Purpose: Explain our lending products"), "description composed from the brief");
+  const envl = JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE request_id = ?").get(r.json.referenceId).envelope_json);
+  assert.equal(JSON.parse(envl.payloadJson).requestType, "website-creation", "the signed envelope carries the type");
+  assert.equal(count(env, "submissions"), before + 1);
+  // A website request cannot use a template that is not a website template, and cannot skip the brief.
+  r = await call(worker, env, jsonReq("/api/intake.php", { ...web, catalogueOptionId: "NC-KYC" }));
+  assert.equal(r.status, 400); assert.ok(r.json.fields.includes("catalogueOptionId"), r.text);
+  r = await call(worker, env, jsonReq("/api/intake.php", { ...web, pages: "", purpose: "" }));
+  assert.equal(r.status, 400); assert.ok(r.json.fields.includes("pages") && r.json.fields.includes("purpose"), r.text);
+  assert.equal(count(env, "submissions"), before + 1, "rejected requests store nothing");
+});
+
 test("intake with an invalid catalogue option is rejected", async () => {
   const env = testEnv();
   let r = await call(worker, env, jsonReq("/api/intake.php", { ...ER, catalogueOptionId: "NO-SUCH" }));
