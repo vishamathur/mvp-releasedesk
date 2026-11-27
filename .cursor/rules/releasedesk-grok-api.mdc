@@ -1,6 +1,10 @@
 ---
 description: SpaceXAI — shipped code must call Grok API for release intel
-globs: apps/releasedesk/**/*
+globs:
+  - apps/**/*
+  - packages/**/*
+  - scripts/**/*
+  - .github/**/*
 ---
 
 # Grok API shipping rule
@@ -17,3 +21,10 @@ When implementing Builder → Cursor remediation for Release Desk:
 8. Preserve iteration gate + ATLAS/OWASP merge block behavior.
 9. Keep **Coding + Testing + Review** Cursor cloud agents: Coding ships; Testing verifies; Review reviews; **none merge**.
 10. Each Cloud Agent uses its exclusive `RELEASEDESK_CURSOR_API_KEY_{CODING,TESTING,REVIEW}` — no shared `CURSOR_API_KEY` fallback.
+11. The model comes from `resolveGrokModel(env)` in `@releasedesk/core`: `GROK_MODEL` (env or repository variable), default `grok-4.3`. Do not hard-code a model slug and do not default to a retired one (`grok-3` is served by `grok-4.3`).
+12. Keep the report's `headSha`, the served `model` (what the response reported) and `telemetry` (usage, latency, estimated cost). A missing `usage` or `model` stays null and is shown as "not reported". Never fill a value in.
+13. Keep the `## release-intel v1` heading and the hidden `<!-- release-intel-json:v1 -->` block: Builder reads them (see `docs/grok-release-intel-report.md`). The machine JSON `schema` is `release-intel.v2`. `blockers` stays a string array of `path:line` so a v1 reader does not crash. New fields are additive.
+14. Read `usage.cost_in_usd_ticks` (1 USD = 10^10 ticks) as `billedCostUsd`. When the API omits it, say `billed cost not reported`. Keep the price-table figure as a separately labelled estimate. Record cached prompt tokens only when the response includes them. Send a stable `prompt_cache_key` and the same value as `x-grok-conv-id`.
+15. Review the pull request diff, not the title. Paginate GitHub files with no 40-file cap, cap the prompt by the token budget, and report `filesSent` / `filesTotal` and truncation honestly. Fence the title and diff as untrusted data. Every blocker needs `path`, `line`, `evidence`, and `severity`. Drop any blocker the diff does not support into `droppedUngrounded`. `injectionSuspected` is advisory. Grok never approves a merge or a release.
+16. Live evals live in `evals/release-intel/` and call Grok for real. The workflow job runs only when the PR has the label `run-grok-evals`, or on `workflow_dispatch`.
+17. Do not run `gh pr merge`, `git push --force`, or `--no-verify`. `.cursor/hooks.json` blocks those, and obvious secret values on a command line.

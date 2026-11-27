@@ -13,6 +13,22 @@ import { createHash } from "node:crypto";
 export const GROK_CHAT_COMPLETIONS_URL = "https://api.x.ai/v1/chat/completions";
 export const GROK_REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * The one default Grok model for Release Desk TypeScript callers.
+ * grok-4.3 is listed as current at https://docs.x.ai/developers/models (checked 26 Nov 2026).
+ * Retired slugs such as grok-3 still resolve, but xAI serves them with grok-4.3,
+ * so a retired default would report a model name that did not answer.
+ * Override with the GROK_MODEL environment variable, or the GROK_MODEL repository variable in CI.
+ */
+export const GROK_MODEL_DEFAULT = "grok-4.3";
+
+/** GROK_MODEL (trimmed) when set and non-empty, otherwise GROK_MODEL_DEFAULT. */
+export function resolveGrokModel(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return env.GROK_MODEL?.trim() || GROK_MODEL_DEFAULT;
+}
+
 export const GROK_GUIDELINES = [
   { type: "policy", category: "nsfw", behavior: "decline" },
   { type: "policy", category: "violence", behavior: "decline" },
@@ -71,6 +87,12 @@ export function buildGrokChatCompletionBody(input: {
   temperature?: number;
   max_tokens?: number;
   response_format?: unknown;
+  /**
+   * Stable prompt-cache routing key (`prompt_cache_key`).
+   * Callers also send the same value as the `x-grok-conv-id` header.
+   * https://docs.x.ai/developers/advanced-api-usage/prompt-caching
+   */
+  promptCacheKey?: string;
 }): Record<string, unknown> {
   const model = input.model.trim();
   if (!model) throw new Error("Grok model is empty");
@@ -91,6 +113,8 @@ export function buildGrokChatCompletionBody(input: {
   if (input.temperature !== undefined) body.temperature = input.temperature;
   if (input.max_tokens !== undefined) body.max_tokens = input.max_tokens;
   if (input.response_format !== undefined) body.response_format = input.response_format;
+  const promptCacheKey = input.promptCacheKey?.trim();
+  if (promptCacheKey) body.prompt_cache_key = promptCacheKey;
   return body;
 }
 

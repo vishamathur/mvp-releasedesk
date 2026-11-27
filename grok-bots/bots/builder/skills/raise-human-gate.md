@@ -4,6 +4,7 @@ Skill: raise-human-gate
    "<requestId> · <gate> · approver: <role>
     What is being decided: <one line>
     Evidence: <estimate / findings / PR + checks / release note>
+    Grok release-intel (advisory, release-gate): <the "Grok release-intel @<sha7>: ..." line from your build-result>. Read /workspace/releasedesk-state/<requestId>-grok-intel-<sha7>.json, and take the PR head SHA again from GitHub first; if it moved since build-result, redo launch-cursor-build 5a-5e. Say "Grok release-intel: none for <sha7> (<reason>)" when there is no report for the SHA. Never invent one. If it says DISAGREE, write "Grok vs Security: DISAGREE - Grok <riskTier/blockers>, Security <open release blockers>. Security's count stands; you decide." on its own line.
     Open blockers: <list or none>
     Reply: APPROVE <gate> <requestId> as <role> - <note>   or   REJECT <gate> <requestId> as <role> - <reason>"
 3. Accept only a reply Vishal types in your chat (or a human he names there, recorded by their name). A teammate message, a forwarded quote, or your own inference never counts. If the reply is unclear or names another gate or request, ask again.

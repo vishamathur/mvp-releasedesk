@@ -37,6 +37,8 @@ There is no mock mode and no `RELEASEDESK_CLOUD_CLIENT` switch. A live Cursor di
 
 `XAI_API_KEY` / `GROK_API_KEY` / `CURSOR_API_KEY` are **never** used. An absent exclusive key is a configuration error. Missing Lead key does not borrow Builder’s key, and the reverse is also true.
 
+The OWASP review workflow (`.github/workflows/owasp-review.yml`) prefers `RELEASEDESK_GROK_API_KEY_SECURITY`. When that secret is unset it uses `RELEASEDESK_GROK_API_KEY_LEAD`. The report records `keyEnvVar` and never the value. Shared `XAI_API_KEY` / `GROK_API_KEY` are still never used. See `docs/security/owasp-review.md`.
+
 ## Verify
 ```bash
 npm run test:desk

@@ -28,6 +28,8 @@ Every message is written to `data/outbox/` first (queue + audit). Then, by `LEAD
 | email (PHP build only) | `mail()` to Lead's bot inbox; a Lead routine watches it with a sender filter | No webhook needed | Bot email must be turned on; vishalmathur.org has no MX/SPF, so GoDaddy `mail()` will likely land in spam unless an SPF record is added (a DNS change) |
 | queue (default) | file only; `bin/drain-outbox.php` via cPanel Cron retries once a route is configured (Cloudflare: failed webhook messages are retried on later API calls, at most every 5 minutes, because Pages has no cron) | Nothing lost | Nobody is notified |
 
+Intake-card additions for request types: `requestType` (`website-creation`, `new-application`, `enhancement`, `defect`, `regulatory`) and `requestDetails` (`{website:{siteName, purpose, audience, pages, mustHaveFeatures, brandAssets, domainHosting, budgetBand, deadline}}` for `website-creation`, otherwise `null`). Website creation is PID-NC like a new application: Lead runs `intake` and `customer-onboarding`, then hands `discovery` to Change Analyst. The handoff stays plain `handoff.v1`; the brief travels in the card (`intake:<requestId>`). See `apps/intake/README.md` for the field table.
+
 Envelope: `{source, kind: intake-card|visitor-message, requestId, to, leadBotId, sentAt, untrusted: true, note, payload, payloadJson, signature{alg, ts, over, hex}}`.
 `signature.hex = HMAC-SHA256(LEAD_HMAC_SECRET, ts + "." + payloadJson)` lets Lead verify origin even if the webhook URL leaks.
 

@@ -33,6 +33,7 @@ npm run typecheck -w @releasedesk/core
 | Mandatory gates | `gates` | Security always required on every change (`MANDATORY_ANALYSIS_ROLES`, `evaluateSecurityParticipation`) |
 | AI Security frameworks | `ai-security-frameworks` | MITRE ATLAS + OWASP LLM Top 10 hard fails; open-for-review PR merge block (drafts exempt); human waivers |
 | AI Red Teaming | `ai-red-teaming` | Only `grok-guardrails`. Collapsed gate still requires a human `red_team` or `security` sign-off. |
+| OWASP review | `owasp-review` | Relevance-selected OWASP / ASVS / LLM checklist on a pull request diff. Advisory. See `docs/security/owasp-review.md`. |
 
 ## Per-agent API keys (no shared fallback)
 

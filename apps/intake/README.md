@@ -1,12 +1,23 @@
 # Public intake agent for intake.vishalmathur.org (GoDaddy cPanel, PHP) — NOT DEPLOYED
 
-A Cloudflare Pages build with the same endpoints, D1 storage and the same front end is in [`apps/intake-cloudflare`](../intake-cloudflare/README.md).
+The live site at https://intake.vishalmathur.org runs the Cloudflare Pages build in [`apps/intake-cloudflare`](../intake-cloudflare/README.md): same endpoints, the same front end, D1 storage. This PHP version is not deployed.
 
-Two entry options (New customer → PID-NC, Enhancement Request acceptance → PID-ER), a Grok chat assistant that fills the form,
+Three entry options (Website creation → PID-NC, New customer → PID-NC, Enhancement Request acceptance → PID-ER), a Grok chat assistant that fills the form,
 an EXAMPLE service catalogue, a finance estimation model (deterministic catalogue math + Grok recommendation), and a
 two-way relay with Release Desk Lead. See `docs/intake/lead-integration.md`.
 
 Enhancement requests ask for a customer id in the canonical `cust_<slug>` form (for example `cust_1042`), matching `CustomerIdSchema` in `@releasedesk/core`.
+
+## Request types
+The page offers three option cards, Website creation first. There is no free-form type list: the type is the card plus, for an enhancement, the change type.
+
+| Card (`route`) | PID | `requestType` on the card | Required facts | Catalogue option |
+|---|---|---|---|---|
+| Website creation (`website`) | PID-NC | `website-creation` | legal entity, jurisdiction, sponsor, site name, purpose, audience, pages needed. Optional: must-have features, content and brand assets, domain and hosting notes, needed-by date, budget band, notes | `NC-WEBSITE` or `SX-LANDING-PAGE`, plus add-ons |
+| New application (`new_customer`) | PID-NC | `new-application` | legal entity, jurisdiction, intended product, sponsor, title, description | any other template, plus add-ons |
+| Enhance an existing service (`er`) | PID-ER | `enhancement`, `defect` or `regulatory` (the change type) | customer id (`cust_…`), project reference, change type, title, description, optional needed-by date | an enhancement option |
+
+For a website request the product is the site (`Website: <site name>`), and title and description are optional: the server builds the description from the brief, so Lead and Change Analyst read the visitor's own words, not a model's. The budget band is carried as chosen. When it has an upper bound (under 50k, 50k to 150k, 150k to 300k), that bound is also used as the stated budget for the finance model, which only recommends. The intake card carries `requestType` and `requestDetails.website` (`siteName, purpose, audience, pages, mustHaveFeatures, brandAssets, domainHosting, budgetBand, deadline`); `requestDetails` is `null` for the other types. The proposed handoff is the same PID-NC `discovery` handoff to Change Analyst, with the type and a pointer to the full brief in its summary.
 
 ## Upload map
 | Local | Server |

@@ -18,7 +18,7 @@ export const DEMO_PORTFOLIO: PortfolioCustomerApp[] = [
     customerId: "cust_northwind",
     customerName: "Northwind Bank",
     application: "KYC Onboarding",
-    repository: "vishamathur/mvp-releasedesk",
+    repository: "vishamathur/northwind-bank-kyc-identity",
     baseRef: "main",
     headRef: "HEAD",
   },
