@@ -54,7 +54,7 @@ Runners implement `@releasedesk/lead`’s `AgentRunner`. They **must not** mutat
 | Agent | Behavior |
 | --- | --- |
 | **Change Analyst** | Local `git diff` / `git log` for `base...head`; impact heuristics; release-notes draft. An empty git range throws. |
-| **Standards** | Loads in-repo Northwind policy markdown; evaluates deviations with evidence (`policy_ref`). |
+| **Standards** | Loads in-repo Northwind policy markdown and the website-creation template; evaluates deviations with evidence (`policy_ref`). |
 | **Security** | Discovers npm components from workspace `package.json`s; correlates + release-blocking flags. A live advisory API is required when advisory hints are present. |
 | **Builder** | Turns Lead remediation goals into implementation instructions, then dispatches **Coding → Testing ∥ Review** via Cursor Cloud Agents. Tracks `proposedBranch`, `testsPassed`, `proposedPrUrl`. Never auto-merges. |
 
@@ -90,7 +90,7 @@ Tracked fields on Builder output:
 
 ```
 fixtures/
-  policies/           # Northwind KYC / retention / auth standards
+  policies/           # Northwind KYC / retention / auth standards; website-creation template
   release-notes/      # sample notes; an empty git range throws
 ```
 

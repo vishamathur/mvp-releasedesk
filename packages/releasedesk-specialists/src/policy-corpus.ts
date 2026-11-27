@@ -71,6 +71,44 @@ export function selectPolicies(
   return matched.length > 0 ? matched : corpus;
 }
 
+
+export function isWebsiteCreationContext(opts: {
+  changeSummary?: string;
+  requestType?: string;
+  catalogueOptionId?: string;
+}): boolean {
+  if (opts.requestType === "website-creation") return true;
+  const option = (opts.catalogueOptionId ?? "").toUpperCase();
+  if (option === "NC-WEBSITE" || option === "SX-LANDING-PAGE") return true;
+  const text = (opts.changeSummary ?? "").toLowerCase();
+  return (
+    text.includes("website-creation") ||
+    text.includes("inspiration style") ||
+    text.includes("nc-website") ||
+    text.includes("sx-landing-page")
+  );
+}
+
+/** Default and request-aware policy refs for the Standards runner. */
+export function resolveStandardsPolicyRefs(opts: {
+  policyRefs?: string[];
+  changeSummary?: string;
+  requestType?: string;
+  catalogueOptionId?: string;
+}): string[] {
+  const website = isWebsiteCreationContext(opts);
+  const incoming = (opts.policyRefs ?? []).map((r) => r.trim()).filter(Boolean);
+  if (incoming.length > 0) {
+    const refs = [...incoming];
+    const hasWebsite = refs.some((r) => r.toLowerCase().includes("website-creation"));
+    if (website && !hasWebsite) refs.push("website-creation-template");
+    return refs;
+  }
+  const refs = ["northwind-kyc-baseline"];
+  if (website) refs.push("website-creation-template");
+  return refs;
+}
+
 /**
  * Evaluate Northwind policies against change text / repo signals.
  * Returns evidence-backed deviations (heuristic; Grok may enrich later).
@@ -157,6 +195,112 @@ export function evaluatePolicyDeviations(opts: {
           severity: "high",
           summary: "Human merge/release approval gates not detected for regulated release flow.",
           recommendation: "Keep Lead human approval gates pending until a human decides.",
+        });
+      }
+    }
+
+    if (policy.id === "website-creation-template") {
+      const mentionsInspiration =
+        text.includes("inspiration") || text.includes("style summary") || text.includes("style cue");
+      const mentionsPalette = text.includes("palette") || text.includes("colour") || text.includes("color");
+      const waivesContrast =
+        (text.includes("wcag") || text.includes("contrast")) &&
+        (text.includes("waive") || text.includes("skip contrast") || text.includes("ignore contrast"));
+
+      if (
+        mentionsInspiration &&
+        (text.includes("reproduce the logo") ||
+          text.includes("copy the logo") ||
+          text.includes("reuse the logo") ||
+          text.includes("reproduce the wordmark") ||
+          text.includes("use the photo as a hero") ||
+          text.includes("use the photograph as a hero") ||
+          text.includes("paste the photo onto the site"))
+      ) {
+        deviations.push({
+          policyRef: `${policy.id}/6`,
+          severity: "high",
+          summary:
+            "Change text proposes reproducing logos, wordmarks or photographic imagery from an inspiration photograph.",
+          recommendation:
+            "Use only abstract style attributes from the style summary, and only assets the customer has the right to provide.",
+        });
+      }
+
+      if (waivesContrast && mentionsPalette) {
+        deviations.push({
+          policyRef: `${policy.id}/2`,
+          severity: "high",
+          summary: "Change text waives WCAG 2.2 AA contrast in order to keep a suggested palette colour.",
+          recommendation:
+            "Adjust the palette so text and essential UI meet WCAG 2.2 Level AA, and record the adjustment.",
+        });
+      }
+
+      if (
+        mentionsInspiration &&
+        (text.includes("style takes precedence over brand") ||
+          text.includes("style takes precedence over regulat") ||
+          text.includes("override brand") ||
+          text.includes("override regulatory") ||
+          text.includes("ignore brand guidelines") ||
+          text.includes("ignore regulatory"))
+      ) {
+        deviations.push({
+          policyRef: `${policy.id}/3`,
+          severity: "high",
+          summary:
+            "Change text lets inspiration style take precedence over brand or regulatory requirements.",
+          recommendation:
+            "Follow brand and regulatory requirements, and record any style cue that was adjusted.",
+        });
+      }
+
+      if (
+        mentionsInspiration &&
+        (text.includes("send the photo to the builder") ||
+          text.includes("send the photograph to the builder") ||
+          text.includes("attach the inspiration photo") ||
+          text.includes("use the raw photo") ||
+          text.includes("use the raw photograph") ||
+          text.includes("pass the photograph through"))
+      ) {
+        deviations.push({
+          policyRef: `${policy.id}/5`,
+          severity: "high",
+          summary:
+            "Change text uses the inspiration photograph as a build input instead of the extracted style summary.",
+          recommendation:
+            "Carry only the style summary (palette hex codes, mood, textures, typography feel and layout cues) in the brief.",
+        });
+      }
+
+      if (
+        mentionsInspiration &&
+        (text.includes("required style") || text.includes("required palette") || text.includes("required typography")) &&
+        (text.includes("drop") || text.includes("ignore") || text.includes("skip")) &&
+        !text.includes("record") &&
+        !text.includes("reason")
+      ) {
+        deviations.push({
+          policyRef: `${policy.id}/4`,
+          severity: "medium",
+          summary: "A required style cue appears to have been dropped without recording why.",
+          recommendation: "Record what was changed and why in the pull request or design notes.",
+        });
+      }
+
+      if (
+        (text.includes("website-creation") || text.includes("inspiration style")) &&
+        (text.includes("skip visual review") || text.includes("no visual review") || text.includes("without a visual review"))
+      ) {
+        deviations.push({
+          policyRef: `${policy.id}/7`,
+          severity: "medium",
+          summary:
+            "A website-creation change with an inspiration style summary omits the required visual review against that summary.",
+          recommendation:
+            "Include a visual review in the pull request: what was applied, what was adjusted, and why.",
         });
       }
     }

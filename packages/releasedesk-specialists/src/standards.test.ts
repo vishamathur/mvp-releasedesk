@@ -37,6 +37,7 @@ describe("StandardsRunner", () => {
         "northwind-kyc-baseline",
         "northwind-data-retention",
         "northwind-auth-standards",
+        "website-creation-template",
       ]),
     );
 

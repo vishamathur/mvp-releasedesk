@@ -13,6 +13,7 @@ import { defaultWorkspaceRoot, policiesDir } from "./paths.js";
 import {
   evaluatePolicyDeviations,
   loadPolicyCorpus,
+  resolveStandardsPolicyRefs,
   selectPolicies,
 } from "./policy-corpus.js";
 
@@ -81,7 +82,15 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
     const evidence: CreateEvidenceInput[] = [];
 
     const corpus = await loadPolicyCorpus(options.policiesDir ?? policiesDir());
-    const policies = selectPolicies(corpus, policyRefs.length ? policyRefs : ["northwind-kyc-baseline"]);
+    const requestType = asString(input.requestType);
+    const catalogueOptionId = asString(input.catalogueOptionId);
+    const selectedRefs = resolveStandardsPolicyRefs({
+      policyRefs,
+      ...(changeSummary !== undefined ? { changeSummary } : {}),
+      ...(requestType !== undefined ? { requestType } : {}),
+      ...(catalogueOptionId !== undefined ? { catalogueOptionId } : {}),
+    });
+    const policies = selectPolicies(corpus, selectedRefs);
 
     for (const policy of policies) {
       evidence.push({
