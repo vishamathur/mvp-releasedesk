@@ -13,6 +13,7 @@ import { defaultWorkspaceRoot, policiesDir } from "./paths.js";
 import {
   evaluatePolicyDeviations,
   loadPolicyCorpus,
+  resolveStandardsPolicyRefs,
   selectPolicies,
 } from "./policy-corpus.js";
 
@@ -81,7 +82,15 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
     const evidence: CreateEvidenceInput[] = [];
 
     const corpus = await loadPolicyCorpus(options.policiesDir ?? policiesDir());
-    const policies = selectPolicies(corpus, policyRefs.length ? policyRefs : ["northwind-kyc-baseline"]);
+    const requestType = asString(input.requestType);
+    const catalogueOptionId = asString(input.catalogueOptionId);
+    const selectedRefs = resolveStandardsPolicyRefs({
+      policyRefs,
+      ...(changeSummary !== undefined ? { changeSummary } : {}),
+      ...(requestType !== undefined ? { requestType } : {}),
+      ...(catalogueOptionId !== undefined ? { catalogueOptionId } : {}),
+    });
+    const policies = selectPolicies(corpus, selectedRefs);
 
     for (const policy of policies) {
       evidence.push({
@@ -105,8 +114,12 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
       },
     });
 
+    const policyList = policies.map((p) => p.id).join(", ");
+    const usesWebsiteTemplate = policies.some((p) => p.id === "website-creation-template");
     const grok = await grokComplete(
-      `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
+      usesWebsiteTemplate
+        ? `Summarize standards deviations for ${repository} against ${policyList}: ${JSON.stringify(deviations)}`
+        : `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
       {
         ...options.grok,
         agentRole: options.grok?.agentRole ?? "standards",
@@ -122,8 +135,10 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
 
     const compliant = deviations.length === 0;
     const summary = compliant
-      ? `Standards check complete — compliant (${policies.map((p) => p.id).join(", ")})`
-      : `Standards check complete — ${deviations.length} deviation(s) against Northwind policies`;
+      ? `Standards check complete — compliant (${policyList})`
+      : usesWebsiteTemplate
+        ? `Standards check complete — ${deviations.length} deviation(s) against ${policyList}`
+        : `Standards check complete — ${deviations.length} deviation(s) against Northwind policies`;
 
     if (!compliant) {
       for (const d of deviations) {

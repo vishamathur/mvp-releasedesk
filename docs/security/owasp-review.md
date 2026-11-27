@@ -94,6 +94,25 @@ When Grok returns `UNDECIDED` or confidence below 0.6 for a control the static c
 
 A FAIL is kept only when the path is a changed file, the line sits in a changed hunk, and the evidence matches a changed line in that hunk. Evidence may join consecutive changed lines in the same hunk after whitespace is collapsed, so a statement written on two lines still grounds. The cited line has to be one of those lines. A FAIL that fails that check is listed under `droppedUngrounded` and is not a pass. The control becomes `NOT_APPLICABLE` with reason `ungrounded finding dropped; not a pass`, unless another rule on this page escalates it.
 
+## Mandatory blockers
+
+Some failures block whatever severity the model gives. The code in `mandatory-blockers.ts` decides this, not the prompt. A finding is a mandatory blocker when any one of these is true:
+
+| Rule | Covers |
+| --- | --- |
+| Control A07 | Brute force, unthrottled guessing of a credential, token or one-time code, credential stuffing, a missing or bypassable lockout or rate limit on sign-in, locking out other users |
+| Control A01 or X06 | One user reaching another user's or case's data |
+| Control X01 outside test fixtures | Hard-coded secrets or credentials in production code |
+| CWE id | 259, 284, 287, 288, 306, 307, 384, 521, 613, 639, 798, 799, 862, 863. The model gives the id in `cwe`; the code also reads CWE ids written in the finding text |
+| Wording | Brute force, credential stuffing, session fixation, authentication bypass, locking out other users, or a missing or bypassable lockout or rate limit next to sign-in words, under any control id |
+| Severity | Any finding rated high or critical |
+
+The model's severity can add a blocker. It cannot remove one. Each failure carries `mandatory`, `mandatoryReasons` and `cwe`, and the report carries `mandatoryBlockers`.
+
+The `owasp-review / review` check fails (exit 1) when `mandatoryBlockers` is above zero, or when the review failed. A failure outside these rules, such as a low or medium finding in another control, still goes to Builder as `remediate` and does not fail the check. The comment lists mandatory blockers in their own section. A mandatory blocker closes when its test exists in the pull request, passes in CI and the next review no longer reports it. It is not carried to the release gate as a condition.
+
+The check result is a CI gate. Grok stays advisory for merge and release decisions, and the human gates are unchanged.
+
 ## Outcomes
 
 | Outcome | When | What happens |

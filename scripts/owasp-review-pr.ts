@@ -2,12 +2,14 @@
 /**
  * Review the current pull request and print the owasp-review v1 report.
  * With --comment, print the PR comment (summary plus hidden machine block).
- * Exit 1 when the review failed. Exit 0 when it completed or was skipped.
+ * Exit 1 when the review failed or any mandatory blocker is open. Exit 0 when it completed
+ * without one, or was skipped.
  * Never prints a key value.
  */
 import { pathToFileURL } from "node:url";
 import { renderOwaspReviewComment } from "../packages/releasedesk-core/src/owasp-review/comment.ts";
 import { owaspReviewForPullRequest } from "../packages/releasedesk-core/src/owasp-review/pr.ts";
+import { owaspCheckExitCode } from "../packages/releasedesk-core/src/owasp-review/mandatory-blockers.ts";
 import { failedOwaspReview, redactSensitive } from "../packages/releasedesk-core/src/owasp-review/review.ts";
 import type { OwaspReviewReport } from "../packages/releasedesk-core/src/owasp-review/types.ts";
 
@@ -27,7 +29,7 @@ if (isDirectRun()) {
   owaspReviewForPullRequest()
     .then((report) => {
       writeReport(report);
-      if (report.status === "failed") process.exitCode = 1;
+      process.exitCode = owaspCheckExitCode(report);
     })
     .catch((err: unknown) => {
       const message = err instanceof Error ? err.message : "owasp review failed";

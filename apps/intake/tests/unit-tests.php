@@ -171,6 +171,69 @@ t('handoff: proposed handoff passes validate-handoff (ER -> estimation, NC -> di
         ok(in_array("finance:$rid@preliminary", $h['artifactRefs'], true) && str_contains($h['summary'], 'INR'), 'finance in handoff');
     }
 });
+$web = ['route' => 'website', 'pid' => 'PID-NC', 'catalogueOptionId' => 'NC-WEBSITE', 'addOns' => [],
+    'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'legalName' => 'Acme Pvt Ltd', 'jurisdiction' => 'India', 'sponsor' => 'R. Rao, CFO',
+    'siteName' => 'Acme Lending', 'purpose' => 'Explain our lending products and collect enquiries.', 'audience' => 'Small business owners in India',
+    'pages' => 'Home, Products, About, Contact', 'mustHaveFeatures' => 'Contact form', 'brandAssets' => 'Logo and colours exist, copy is missing',
+    'domainHosting' => 'We own acmelending.example', 'budgetBand' => '150k_300k', 'desiredBy' => '2027-01-31', 'urgency' => 'standard', 'consent' => true];
+t('website: valid request passes with no title or description; types are derived', function () use ($cfg, $web) {
+    [$e, $d] = intake_validate($web, $cfg);
+    ok($e === [], json_encode($e));
+    ok($d['requestType'] === 'website-creation' && $d['pid'] === 'PID-NC', 'type');
+    ok($d['title'] === 'Website: Acme Lending' && $d['intendedProduct'] === 'Website: Acme Lending', 'defaults');
+    ok(str_contains($d['description'], 'Pages needed: Home, Products, About, Contact') && str_contains($d['description'], 'Needed by: 2027-01-31'), 'brief');
+    ok($d['customerBudgetInr'] === 300000, 'band ceiling becomes the stated budget');
+    [, $d2] = intake_validate(['budgetBand' => 'not_sure', 'description' => 'Please call before building.'] + $web, $cfg);
+    ok($d2['customerBudgetInr'] === null && str_contains($d2['description'], 'Notes: Please call before building.'), 'no ceiling, notes kept');
+    foreach (['SX-LANDING-PAGE'] as $opt) ok(intake_validate(['catalogueOptionId' => $opt] + $web, $cfg)[0] === [], $opt);
+});
+t('website: missing brief, bad band, bad date, wrong template and wrong pid are rejected', function () use ($cfg, $web) {
+    $e = intake_validate(['legalName' => '', 'jurisdiction' => '', 'sponsor' => '', 'siteName' => '', 'purpose' => '', 'audience' => '', 'pages' => ''] + $web, $cfg)[0];
+    sort($e); ok($e === ['audience', 'jurisdiction', 'legalName', 'pages', 'purpose', 'siteName', 'sponsor'], json_encode($e));
+    ok(in_array('budgetBand', intake_validate(['budgetBand' => 'free'] + $web, $cfg)[0], true), 'band');
+    ok(in_array('desiredBy', intake_validate(['desiredBy' => '2027-02-30'] + $web, $cfg)[0], true), 'date');
+    ok(in_array('catalogueOptionId', intake_validate(['catalogueOptionId' => 'NC-KYC'] + $web, $cfg)[0], true), 'non-website template');
+    ok(in_array('pid', intake_validate(['pid' => 'PID-ER'] + $web, $cfg)[0], true), 'pid must be PID-NC');
+    ok(in_array('addOns', intake_validate(['addOns' => ['ADD-NC-KYC-API']] + $web, $cfg)[0], true), 'add-on of another template');
+    ok(intake_validate(['addOns' => ['ADD-NC-WEB-FORMS', 'ADD-NC-WEB-AI']] + $web, $cfg)[0] === [], 'website add-ons');
+});
+t('website: card carries type and brief; handoff goes to change-analyst at discovery and validates', function () use ($cfg, $web) {
+    [$e, $d] = intake_validate($web, $cfg);
+    $rid = 'REQ-20261127-000321';
+    $fin = finance_assess($cfg, ['pid' => 'PID-NC', 'text' => $d['description'], 'urgency' => 'standard', 'customerBudgetInr' => $d['customerBudgetInr'], 'requestId' => $rid, 'catalogueOptionId' => 'NC-WEBSITE', 'addOns' => []]);
+    ok($fin['source'] === 'catalogue-option', json_encode($fin['source']));
+    $card = intake_build_card($cfg, $rid, $d, $fin, '2026-11-27T12:00:00Z');
+    ok($card['pid'] === 'PID-NC' && $card['requestType'] === 'website-creation' && $card['channel'] === '#new-customer', 'card type');
+    $w = $card['requestDetails']['website'] ?? [];
+    ok($w['siteName'] === 'Acme Lending' && $w['pages'] === 'Home, Products, About, Contact' && $w['budgetBand'] === '150k_300k' && $w['deadline'] === '2027-01-31'
+        && $w['purpose'] !== '' && $w['audience'] !== '' && $w['brandAssets'] !== '' && $w['domainHosting'] !== '' && $w['mustHaveFeatures'] !== '', json_encode($w));
+    ok($card['customer']['legalName'] === 'Acme Pvt Ltd' && $card['customer']['intendedProduct'] === 'Website: Acme Lending' && $card['customer']['sponsor'] === 'R. Rao, CFO', 'NC entry facts');
+    ok($card['catalogueOptionId'] === 'NC-WEBSITE' && $card['to'] === 'lead' && !isset($card['pidState']), 'card');
+    $h = $card['proposedHandoff'];
+    ok(handoff_v1_validate($h, 'lead') === [], json_encode(handoff_v1_validate($h, 'lead')));
+    ok($h['pid'] === 'PID-NC' && $h['stage'] === 'discovery' && $h['to'] === 'change-analyst' && str_contains($h['summary'], 'website-creation') && str_contains($h['summary'], "intake:$rid"), 'handoff');
+    ok(in_array("intake:$rid", $h['artifactRefs'], true), 'artifact ref');
+});
+t('request types: ER defect/regulatory/enhancement and NC carry requestType; non-website cards have no website details', function () use ($cfg, $base) {
+    foreach (['enhancement', 'defect', 'regulatory'] as $ct) {
+        [$e, $d] = intake_validate(['changeType' => $ct] + $base, $cfg);
+        ok($e === [] && $d['requestType'] === $ct, "$ct " . json_encode($e));
+    }
+    $fin = finance_assess($cfg, ['pid' => 'PID-ER', 'text' => '', 'lines' => [['serviceId' => 'SVC-UI-S', 'qty' => 1]]]);
+    $card = intake_build_card($cfg, 'REQ-20261127-000322', intake_validate(['changeType' => 'defect'] + $base, $cfg)[1], $fin, '2026-11-27T12:00:00Z');
+    ok($card['requestType'] === 'defect' && $card['requestDetails'] === null && $card['pid'] === 'PID-ER', 'er card');
+    [$e, $d] = intake_validate(['route' => 'new_customer', 'pid' => 'PID-NC', 'catalogueOptionId' => 'NC-KYC', 'legalName' => 'Acme Pvt Ltd', 'jurisdiction' => 'India', 'intendedProduct' => 'Lending', 'sponsor' => 'R. Rao, CFO'] + $base, $cfg);
+    ok($e === [] && $d['requestType'] === 'new-application', json_encode($e));
+});
+t('chat: schema offers the website route, every draft field is required, budget band is enumerated', function () use ($cfg) {
+    $cat = catalogue_load($cfg);
+    $sch = chat_schema(array_keys($cat['byId']));
+    ok(in_array('website', $sch['properties']['route']['enum'], true), 'route');
+    foreach (['siteName', 'purpose', 'audience', 'pages', 'mustHaveFeatures', 'brandAssets', 'domainHosting', 'budgetBand', 'desiredBy'] as $f) ok(isset($sch['properties']['draft']['properties'][$f]) && in_array($f, $sch['properties']['draft']['required'], true), $f);
+    ok($sch['properties']['draft']['properties']['description']['maxLength'] === 2000 && $sch['properties']['draft']['properties']['purpose']['maxLength'] === 600, 'lengths');
+    ok(count(CHAT_DRAFT_FIELDS) <= $sch['properties']['missingFields']['maxItems'], 'missingFields can list every draft field');
+    ok(str_contains(chat_system_prompt($cat), 'website: Website creation'), 'prompt');
+});
 t('handoff validator: rejects bot approval, non-lead stage-handoff, extra fields, wrong thread', function () {
     $h = ['v' => 1, 'kind' => 'stage-return', 'pid' => 'PID-ER', 'pidVersion' => '1.1.0', 'requestId' => 'REQ-20261122-000123', 'thread' => ['channel' => 'lead-chat', 'threadId' => 'thr_20261122000123'],
         'from' => 'change-analyst', 'to' => 'lead', 'stage' => 'finance-approval', 'action' => 'return', 'summary' => 's', 'artifactRefs' => [], 'memoryKey' => 'pid.state.REQ-20261122-000123',

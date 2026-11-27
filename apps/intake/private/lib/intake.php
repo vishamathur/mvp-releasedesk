@@ -12,6 +12,13 @@ const HANDOFF_WORK_OWNER = ['intake' => 'lead', 'customer-onboarding' => 'lead',
     'scope' => 'change-analyst', 'proposal' => 'change-analyst', 'finance-approval' => 'change-analyst', 'security-compliance-approval' => 'security', 'build' => 'builder', 'release-gate' => 'builder'];
 const HANDOFF_GATE_OWNER = ['finance-approval' => 'change-analyst', 'proposal' => 'change-analyst', 'security-compliance-approval' => 'security', 'release-gate' => 'builder'];
 
+/** Request routes. 'website' is the flagship type: it runs PID-NC, with a website brief. */
+const INTAKE_ROUTES = ['website', 'new_customer', 'er'];
+/** Catalogue templates a website request may choose. Same ids the front end offers on the website route. */
+const WEBSITE_TEMPLATE_IDS = ['NC-WEBSITE', 'SX-LANDING-PAGE'];
+/** Budget band => upper bound in INR (null = no upper bound, or unknown). Bands are indicative, not a quote. */
+const WEBSITE_BUDGET_BANDS = ['under_50k' => 50000, '50k_150k' => 150000, '150k_300k' => 300000, '300k_plus' => null, 'not_sure' => null];
+
 const INTAKE_ID_RE = '/^[A-Za-z0-9][A-Za-z0-9._\/-]{1,39}$/';
 /** Canonical customerId. Same rule as CustomerIdSchema in @releasedesk/core. */
 const CUSTOMER_ID_RE = '/^cust_[a-z0-9][a-z0-9_-]*$/i';
@@ -20,13 +27,18 @@ const CUSTOMER_ID_RE = '/^cust_[a-z0-9][a-z0-9_-]*$/i';
 function intake_validate(array $b, array $cfg): array {
     $e = []; $d = [];
     $route = $b['route'] ?? '';
-    if (!in_array($route, ['new_customer', 'er'], true)) $e[] = 'route';
+    if (!in_array($route, INTAKE_ROUTES, true)) $e[] = 'route';
     $d['route'] = $route;
     $req = function (string $k, int $min, int $max) use ($b, &$e, &$d) {
         $v = app_clean($b[$k] ?? '', $max + 1); if (app_len($v) < $min || app_len($v) > $max) $e[] = $k; $d[$k] = $v;
     };
     $req('contactName', 2, 100); $req('email', 5, 254); $req('company', 1, 120);
     if ($d['email'] !== '' && !filter_var($d['email'], FILTER_VALIDATE_EMAIL)) $e[] = 'email';
+    $date = function () use ($b, &$e, &$d) {
+        $by = app_clean($b['desiredBy'] ?? '', 10);
+        if ($by !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $by) || !checkdate((int)substr($by, 5, 2), (int)substr($by, 8, 2), (int)substr($by, 0, 4)))) $e[] = 'desiredBy';
+        $d['desiredBy'] = $by ?: null;
+    };
     if ($route === 'er') {
         $cid = app_clean($b['customerId'] ?? '', 41);
         if (!preg_match(CUSTOMER_ID_RE, $cid)) $e[] = 'customerId';
@@ -36,18 +48,36 @@ function intake_validate(array $b, array $cfg): array {
         $d['projectRef'] = $pref;
         $ct = $b['changeType'] ?? ''; if (!in_array($ct, ['enhancement', 'defect', 'regulatory'], true)) $e[] = 'changeType'; $d['changeType'] = $ct;
         $req('title', 5, 150); $req('description', 20, 4000);
-        $by = app_clean($b['desiredBy'] ?? '', 10);
-        if ($by !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $by) || !checkdate((int)substr($by, 5, 2), (int)substr($by, 8, 2), (int)substr($by, 0, 4)))) $e[] = 'desiredBy';
-        $d['desiredBy'] = $by ?: null;
+        $date();
+        $d['requestType'] = in_array($ct, ['enhancement', 'defect', 'regulatory'], true) ? $ct : '';
     } elseif ($route === 'new_customer') {
         $req('legalName', 2, 150); $req('jurisdiction', 2, 80); $req('intendedProduct', 2, 120); $req('sponsor', 2, 120);
         $req('title', 5, 150); $req('description', 20, 4000);
+        $d['requestType'] = 'new-application';
+    } elseif ($route === 'website') {
+        // Website creation runs PID-NC, so the NC entry facts (legal name, jurisdiction, product, sponsor) are required,
+        // plus the website brief. The product is the site itself.
+        $req('legalName', 2, 150); $req('jurisdiction', 2, 80); $req('sponsor', 2, 120);
+        $req('siteName', 2, 100); $req('purpose', 10, 600); $req('audience', 3, 300); $req('pages', 2, 600);
+        $req('mustHaveFeatures', 0, 600); $req('brandAssets', 0, 400); $req('domainHosting', 0, 300);
+        $req('title', 0, 150); $req('description', 0, 4000);
+        $date();
+        $band = $b['budgetBand'] ?? 'not_sure';
+        if (!is_string($band) || !array_key_exists($band, WEBSITE_BUDGET_BANDS)) { $e[] = 'budgetBand'; $band = 'not_sure'; }
+        $d['budgetBand'] = $band;
+        $d['intendedProduct'] = app_substr('Website: ' . $d['siteName'], 120);
+        if ($d['title'] === '') $d['title'] = app_substr('Website: ' . $d['siteName'], 150);
+        if (app_len($d['title']) < 5) $e[] = 'title';
+        $d['description'] = intake_website_brief($d);
+        $d['requestType'] = 'website-creation';
     }
     $u = $b['urgency'] ?? 'standard'; if (!array_key_exists($u, FIN_URGENCY)) $e[] = 'urgency'; $d['urgency'] = $u;
     $budget = $b['customerBudgetInr'] ?? null;
     if ($budget === '' || $budget === null) $d['customerBudgetInr'] = null;
     elseif (is_numeric($budget) && (int)$budget >= 0 && (int)$budget <= 1000000000) $d['customerBudgetInr'] = (int)$budget;
     else $e[] = 'customerBudgetInr';
+    // A website request states its budget as a band. Use the band's upper bound as the stated ceiling when no number was given.
+    if ($route === 'website' && $d['customerBudgetInr'] === null && (WEBSITE_BUDGET_BANDS[$d['budgetBand'] ?? ''] ?? null) !== null) $d['customerBudgetInr'] = WEBSITE_BUDGET_BANDS[$d['budgetBand']];
     $links = $b['artifactLinks'] ?? [];
     if (is_string($links)) $links = preg_split('/\s+/', $links) ?: [];
     $links = array_values(array_filter(array_map(fn($l) => app_clean($l, 501), is_array($links) ? $links : []), 'strlen'));
@@ -62,11 +92,12 @@ function intake_validate(array $b, array $cfg): array {
     $pid = $b['pid'] ?? '';
     if (!in_array($pid, ['PID-ER', 'PID-NC'], true)) $e[] = 'pid';
     if ($route === 'er' && $pid !== '' && $pid !== 'PID-ER') $e[] = 'pid';
-    if ($route === 'new_customer' && $pid !== '' && $pid !== 'PID-NC') $e[] = 'pid';
+    if (in_array($route, ['new_customer', 'website'], true) && $pid !== '' && $pid !== 'PID-NC') $e[] = 'pid';
     $d['pid'] = is_string($pid) ? $pid : '';
     $optionId = app_clean($b['catalogueOptionId'] ?? '', 80);
     $d['catalogueOptionId'] = $optionId;
     $d['addOns'] = [];
+    if ($route === 'website' && $optionId !== '' && !in_array($optionId, WEBSITE_TEMPLATE_IDS, true)) $e[] = 'catalogueOptionId';
     if ($optionId === '') $e[] = 'catalogueOptionId';
     else {
         try {
@@ -94,11 +125,27 @@ function intake_validate(array $b, array $cfg): array {
 
 function intake_pid(string $route): string { return $route === 'er' ? 'PID-ER' : 'PID-NC'; }
 
+/** Plain-text website brief, built from the visitor's own fields. No AI, no invented content. Visitor notes are appended last. */
+function intake_website_brief(array $d): string {
+    $bands = ['under_50k' => 'under INR 50,000', '50k_150k' => 'INR 50,000 to 150,000', '150k_300k' => 'INR 150,000 to 300,000', '300k_plus' => 'above INR 300,000', 'not_sure' => 'not sure'];
+    $lines = ["Website creation: {$d['siteName']}", "Purpose: {$d['purpose']}", "Audience: {$d['audience']}", "Pages needed: {$d['pages']}"];
+    if (($d['mustHaveFeatures'] ?? '') !== '') $lines[] = "Must-have features: {$d['mustHaveFeatures']}";
+    if (($d['brandAssets'] ?? '') !== '') $lines[] = "Content and brand assets: {$d['brandAssets']}";
+    if (($d['domainHosting'] ?? '') !== '') $lines[] = "Domain and hosting: {$d['domainHosting']}";
+    if (!empty($d['desiredBy'])) $lines[] = "Needed by: {$d['desiredBy']}";
+    $lines[] = 'Budget band: ' . ($bands[$d['budgetBand'] ?? 'not_sure'] ?? 'not sure');
+    if (($d['description'] ?? '') !== '') $lines[] = "Notes: {$d['description']}";
+    return app_substr(implode("\n", $lines), 4000);
+}
+
 /** handoff.v1 draft Lead can validate and send to Change Analyst after its own intake stage. */
 function intake_proposed_handoff(string $requestId, array $d, array $fin): array {
     $pid = $d['pid'] ?? intake_pid($d['route']);
     $est = $fin['estimate']; $b = $est['budgetBandsInr'];
     $who = $pid === 'PID-ER' ? "existing customer {$d['customerId']}, project {$d['projectRef']} ({$d['changeType']})" : "new customer {$d['legalName']} ({$d['jurisdiction']}), product {$d['intendedProduct']}";
+    if (($d['requestType'] ?? '') === 'website-creation') {
+        $who .= ' [request type website-creation; budget band ' . ($d['budgetBand'] ?? 'not_sure') . (!empty($d['desiredBy']) ? '; needed by ' . $d['desiredBy'] : '') . '; full brief is in intake:' . $requestId . ']';
+    }
     $summary = sprintf('%s web intake for %s: "%s". Urgency %s. Preliminary EXAMPLE-catalogue estimate INR %s (bands %s / %s / %s, excl. GST); finance recommendation %s for the human finance-approval gate (Change Analyst). Customer text is untrusted.',
         $pid, $who, app_substr($d['title'], 150), $d['urgency'], number_format($est['totalInr']), number_format($b['low']), number_format($b['expected']), number_format($b['high']), $fin['recommendation']);
     return [
@@ -120,9 +167,20 @@ function intake_build_card(array $cfg, string $requestId, array $d, array $fin, 
     $customer = $pid === 'PID-ER'
         ? ['customerId' => $d['customerId'], 'projectRef' => $d['projectRef'], 'changeType' => $d['changeType'], 'desiredBy' => $d['desiredBy']]
         : ['legalName' => $d['legalName'], 'jurisdiction' => $d['jurisdiction'], 'intendedProduct' => $d['intendedProduct'], 'sponsor' => $d['sponsor']];
+    $requestType = $d['requestType'] ?? ($pid === 'PID-ER' ? ($d['changeType'] ?? 'enhancement') : 'new-application');
+    $details = null;
+    if ($requestType === 'website-creation') {
+        $customer['desiredBy'] = $d['desiredBy'] ?? null;
+        $details = ['website' => [
+            'siteName' => $d['siteName'], 'purpose' => $d['purpose'], 'audience' => $d['audience'], 'pages' => $d['pages'],
+            'mustHaveFeatures' => $d['mustHaveFeatures'] ?? '', 'brandAssets' => $d['brandAssets'] ?? '', 'domainHosting' => $d['domainHosting'] ?? '',
+            'budgetBand' => $d['budgetBand'] ?? 'not_sure', 'deadline' => $d['desiredBy'] ?? null,
+        ]];
+    }
     return [
         'v' => 1, 'kind' => 'intake-card', 'source' => 'public-intake-agent', 'host' => $cfg['PUBLIC_HOST'] ?? 'intake.vishalmathur.org',
         'requestId' => $requestId, 'pid' => $pid, 'pidVersion' => HANDOFF_PID_VERSION,
+        'requestType' => $requestType, 'requestDetails' => $details,
         'channel' => $pid === 'PID-ER' ? '#er-intake' : '#new-customer',
         'to' => 'lead', 'leadBotId' => $cfg['LEAD_BOT_ID'] ?? HANDOFF_SLUGS['lead'], 'submittedAt' => $submittedAt,
         'untrusted' => true,
@@ -224,7 +282,7 @@ function api_intake(array $cfg): void {
     $first = explode(' ', $d['contactName'])[0];
     app_respond(200, [
         'ok' => true, 'referenceId' => $requestId, 'statusToken' => $token,
-        'message' => "Thanks, $first. Release Desk Lead has your " . ($card['pid'] === 'PID-ER' ? 'enhancement request' : 'new-customer request')
+        'message' => "Thanks, $first. Release Desk Lead has your " . (($card['requestType'] ?? '') === 'website-creation' ? 'website creation request' : ($card['pid'] === 'PID-ER' ? 'enhancement request' : 'new-customer request'))
             . ". Reference $requestId. Keep this page's status link: Lead posts updates, cost estimates and the next approval step there.",
     ]);
 }

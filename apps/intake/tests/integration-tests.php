@@ -76,6 +76,33 @@ t('showcase options are priced and can be submitted', function () use ($base, $J
     ok($card['finance']['source'] === 'catalogue-option' && $card['finance']['estimate']['totalInr'] === 385000, json_encode($card['finance']['estimate']['totalInr'] ?? null));
     ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before + 3, 'three cards');
 });
+t('website creation: catalogue lists it first, a submission stores the brief and runs PID-NC', function () use ($base, $J, $data) {
+    [$c, $j] = req('GET', "$base/api/catalogue.php");
+    ok($j['newApplications'][0]['id'] === 'NC-WEBSITE' && $j['newApplications'][0]['name'] === 'Website creation' && count($j['newApplications'][0]['addOns']) === 3, 'catalogue order');
+    $est = $j['newApplications'][0]['exampleEstimate']['totalInr'] ?? 0;
+    ok($est > 0 && str_contains($j['label'], 'EXAMPLE DATA - illustrative prices only'), 'example estimate');
+    $web = ['route' => 'website', 'pid' => 'PID-NC', 'catalogueOptionId' => 'NC-WEBSITE', 'addOns' => ['ADD-NC-WEB-FORMS'],
+        'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'legalName' => 'Acme Pvt Ltd', 'jurisdiction' => 'India', 'sponsor' => 'R. Rao, CFO',
+        'siteName' => 'Acme Lending', 'purpose' => 'Explain our lending products and collect enquiries.', 'audience' => 'Small business owners',
+        'pages' => 'Home, Products, About, Contact', 'mustHaveFeatures' => 'Contact form', 'brandAssets' => 'Logo exists', 'domainHosting' => 'We own the domain',
+        'budgetBand' => '300k_plus', 'desiredBy' => '2027-01-31', 'urgency' => 'standard', 'artifactLinks' => [], 'website' => '', 'consent' => true];
+    $before = count(glob("$data/submissions/REQ-*.json") ?: []);
+    [$c, $j] = req('POST', "$base/api/intake.php", $web, $J);
+    ok($c === 200 && ($j['ok'] ?? false) === true && str_contains($j['message'], 'website creation request'), json_encode($j));
+    $card = json_decode((string)file_get_contents("$data/submissions/{$j['referenceId']}.json"), true);
+    ok($card['pid'] === 'PID-NC' && $card['requestType'] === 'website-creation' && $card['catalogueOptionId'] === 'NC-WEBSITE' && $card['addOns'] === ['ADD-NC-WEB-FORMS'], 'card type');
+    ok($card['requestDetails']['website']['pages'] === 'Home, Products, About, Contact' && $card['requestDetails']['website']['deadline'] === '2027-01-31', 'brief');
+    ok($card['finance']['source'] === 'catalogue-option' && $card['finance']['estimate']['totalInr'] > $est, 'priced from the catalogue with the add-on, no Grok');
+    ok($card['proposedHandoff']['stage'] === 'discovery' && $card['proposedHandoff']['to'] === 'change-analyst' && $card['customer']['intendedProduct'] === 'Website: Acme Lending', 'handoff');
+    ok(str_contains($card['ask']['description'], 'Purpose: Explain our lending products'), 'description composed from the brief');
+    ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before + 1, 'one card');
+    // A website request cannot use a template that is not a website template, and cannot skip the brief.
+    [$c, $j] = req('POST', "$base/api/intake.php", ['catalogueOptionId' => 'NC-KYC'] + $web, $J);
+    ok($c === 400 && in_array('catalogueOptionId', $j['fields'] ?? [], true), json_encode($j));
+    [$c, $j] = req('POST', "$base/api/intake.php", ['pages' => '', 'purpose' => ''] + $web, $J);
+    ok($c === 400 && in_array('pages', $j['fields'] ?? [], true) && in_array('purpose', $j['fields'] ?? [], true), json_encode($j));
+    ok(count(glob("$data/submissions/REQ-*.json") ?: []) === $before + 1, 'rejected requests store nothing');
+});
 t('intake with an invalid catalogue option is rejected', function () use ($base, $J, $er, $data) {
     $before = count(glob("$data/submissions/REQ-*.json") ?: []);
     [$c, $j] = req('POST', "$base/api/intake.php", ['catalogueOptionId' => 'NO-SUCH'] + $er, $J);

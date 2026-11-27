@@ -1,0 +1,63 @@
+# Reusable release-intel (Grok) review for customer repos.
+# Called from a customer repo's grok-review.yml. The github context is the caller's,
+# so the scripts read the caller's pull request through its GITHUB_TOKEN.
+# The harness code is checked out from this public repo at inputs.harness_ref.
+name: release-intel-reusable
+
+on:
+  workflow_call:
+    inputs:
+      harness_ref:
+        description: Harness ref to run (branch, tag or SHA)
+        type: string
+        default: main
+    secrets:
+      grok_api_key:
+        description: The caller repo's own Grok key (RELEASEDESK_GROK_API_KEY_LEAD)
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: vishamathur/mvp-releasedesk
+          ref: ${{ inputs.harness_ref }}
+          path: harness
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: harness/package-lock.json
+      - run: npm ci
+        working-directory: harness
+      - run: npm run build:core
+        working-directory: harness
+      - name: Classify the pull request
+        working-directory: harness
+        env:
+          RELEASEDESK_GROK_API_KEY_LEAD: ${{ secrets.grok_api_key }}
+          GROK_MODEL: ${{ vars.GROK_MODEL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./node_modules/.bin/tsx scripts/release-intel-pr.ts --comment > "$RUNNER_TEMP/release-intel-comment.md"
+      - name: Comment release-intel v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          existing="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | startswith("## release-intel v1")) | .id' | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${existing}" -f body="$(cat "$RUNNER_TEMP/release-intel-comment.md")"
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$(cat "$RUNNER_TEMP/release-intel-comment.md")"
+          fi

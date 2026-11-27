@@ -176,7 +176,12 @@ describe("dry-run planning", () => {
 describe("request bodies", () => {
   it("protects main with a PR, no GitHub approvals, required checks, no force-push or deletion", () => {
     const body = branchProtectionBody(DEFAULT_REQUIRED_CHECKS);
-    expect(body.required_status_checks.contexts).toEqual(["ci", "grok-review / review", "owasp-review / review"]);
+    expect(body.required_status_checks.contexts).toEqual([
+      "ci",
+      "grok-review / review",
+      "owasp-review / review",
+      "acceptance / review",
+    ]);
     expect(body.required_pull_request_reviews.required_approving_review_count).toBe(0);
     expect(body.required_status_checks.strict).toBe(true);
     expect(body.allow_force_pushes).toBe(false);
