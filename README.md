@@ -1,20 +1,26 @@
 # mvp-releasedesk
 
-**Release Desk** is Northwind Bank's release process for the **KYC** demo app. Seven Grok Bot teammates run it in chat: Intake, Lead, Change Analyst, Standards, Security, and Builder, plus Release Desk Log. Intake sends public requests to Lead. Lead is the only writer of `pid.state`. Each human gate is raised by the bot that owns that work. The Desk at `/handoff` is a read-only trace of the Log (`RELEASEDESK_LOG_DIR`) or a `.jsonl` file imported in the browser. There is no mock mode and no Replay. Builder launches the Cursor cloud agent only when the exclusive Cursor keys are set. The release-intel workflow calls the Grok API and fails clearly when `RELEASEDESK_GROK_API_KEY_LEAD` is missing. KYC (`apps/kyc`) is the demo customer app.
+**Release Desk** is a chat-run SDLC harness. Grok Bot teammates (Intake, Lead, Change Analyst, Standards, Security, Builder, plus Release Desk Log) move each request through human gates. Builder's Cursor cloud agent writes the code. Grok reviews every pull request.
 
-Read [the SDLC overview](./docs/sdlc/overview.md), [the demo script](./docs/sdlc/demo-script.md), and [the bot pack](./grok-bots/README.md).
+**North Star:** Any customer, any project which is required should be able to run through this SDLC lifecycle.
 
-This repository currently includes:
+## SDLC flow
 
-- **Milestone 1** — working KYC demo app (`apps/kyc`)
-- **Milestone 2** — shared execution context + agent contracts (`packages/releasedesk-core`)
-- **Milestone 3** — Lead Agent orchestrator (`packages/releasedesk-lead`)
-- **Milestone 4** — specialist agents (`packages/releasedesk-specialists`)
-- **Milestone 5** — Builder → Cursor Cloud Agents (Coding / Testing / Review; real client only)
-- **Milestone 6** — Verification checkpoints, remediation loops, PR workflow + human gates
-- **Milestone 7** — Release Desk UI + demo scenarios (`apps/releasedesk`)
+1. **Intake.** Lead opens the request (PID-ER enhancement or PID-NC new product).
+2. **Finance approval.** Change Analyst estimates, then Vishal types the decision.
+3. **Repo from template.** A private customer repo is created from [releasedesk-customer-template](https://github.com/vishamathur/releasedesk-customer-template), with its own Grok key.
+4. **Security gate.** Security reviews the scope, then Vishal types the decision.
+5. **Build.** Builder's cloud agent opens a PR in the customer repo. CI, Grok release-intel and the OWASP review run on it.
+6. **Release gate.** Vishal types the decision and merges by hand. Nothing auto-merges.
+7. **Rejected requests.** The repo is archived and its Grok key revoked.
 
-License: [GPL-3.0](./LICENSE).
+## Rules
+
+- **Repo names:** `<customer>-ER` or `<customer>-<request>`, for example `acme-ER` or `acme-kyc-occupation`.
+- **One Grok key per customer repo**, stored as the `RELEASEDESK_GROK_API_KEY_LEAD` secret.
+- **Reviews are Grok only.** The required checks are Grok release-intel and the OWASP review. GitHub needs no human approvals, and Grok never approves a merge or a release.
+- **No extra cost.** Private repos on GitHub Free get no branch protection, so the Release Desk gates (security-compliance and release) enforce the rules there.
+- **No mocks, no fallbacks.** A missing key fails the check. Demo integrations keep their labels (below).
 
 ## Quick start
 
@@ -22,134 +28,33 @@ Requires Node.js 20+.
 
 ```bash
 npm install
-npm run seed
-npm run dev
+npm test                 # all workspaces
+npm run dev              # KYC demo on :3000
+npm run build:core && npm run build:lead && npm run desk   # Desk on :3002 (/handoff)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for KYC.
+## Layout
 
-**Release Desk UI (M7):**
-
-```bash
-npm run build:core && npm run build:lead
-npm run desk
-```
-
-Open [http://localhost:3002](http://localhost:3002).
-
-| Command | Description |
+| Path | What |
 | --- | --- |
-| `npm run dev` | Start the KYC app (Next.js) on port 3000 |
-| `npm run desk` | Start Release Desk UI on port **3002** |
-| `npm run seed` | Load sample applications into the local JSON store |
-| `npm test` | Run KYC + core + lead + specialists + desk unit tests |
-| `npm run test:kyc` / `npm run test:core` / `npm run test:lead` / `npm run test:specialists` / `npm run test:desk` | Workspace-scoped tests |
-| `npm run build` / `npm start` | Production build and serve KYC |
-| `npm run build:desk` / `npm run start:desk` | Production build and serve Release Desk UI |
-| `npm run build:core` / `npm run build:lead` / `npm run build:specialists` | Compile packages to `dist/` |
-| `npm run check:release -- --repo owner/name` | On-demand Lead + specialists release check (CLI) |
-| `npm run check:release -- --repo owner/name` | Lead check. Needs real specialist runners and credentials. |
+| `grok-bots/` | Bot personas and skills |
+| `packages/releasedesk-core` | Run context, contracts, OWASP review, customer-repo setup |
+| `packages/releasedesk-lead` | Lead orchestrator, verification, PR workflow |
+| `packages/releasedesk-specialists` | Specialists and Builder's cloud-agent dispatch |
+| `apps/releasedesk` | Desk UI (read-only Log trace) and Grok release-intel |
+| `apps/kyc` | Northwind Bank KYC demo app (moving to its customer repo) |
 
-## What you can do
+## Demo labels
 
-1. Open Release Desk on port **3002** and read a handover at `/handoff` (set `RELEASEDESK_LOG_DIR`, or import a `.jsonl` file in the browser).
-2. Follow one PID-ER request in [the demo script](./docs/sdlc/demo-script.md). Change Analyst raises finance, Security raises the iteration gate, and Builder raises release. Vishal decides in that bot's chat.
-3. A release-intel comment appears on a pull request only when `RELEASEDESK_GROK_API_KEY_LEAD` is set. A missing key fails the check. CI does not invent a result. The comment names the PR head commit, grounded blockers (`path:line` plus the changed line), anything dropped because the diff does not support it, the model, token usage, latency, the billed cost when xAI reports `cost_in_usd_ticks` (otherwise "billed cost not reported"), and a separately labelled estimate. Builder copies the hidden machine block into `build-result` ([format](./docs/grok-release-intel-report.md)). Grok stays advisory. Live evals run only with the `run-grok-evals` label or a manual workflow run.
-4. Open the KYC demo on port 3000: draft an application, add document placeholders, submit, and use the analyst actions. **Load sample data** on `/applications` for pre-built cases.
+- **KYC (`apps/kyc`)** labels these integrations **MOCK** in the UI and API: document storage and OCR (metadata and a fabricated summary), identity and liveness (placeholder), and sanctions/PEP screening (local rules, `MOCK:` notes).
+- **Intake site (`apps/intake`)** labels its catalogue **EXAMPLE DATA**.
 
-## Mocked integrations (labeled in UI/API)
+## Docs
 
-| Integration | Behavior in this milestone |
-| --- | --- |
-| Document upload / storage | Metadata only (`fileName`, `mockStorageKey`). No file bytes persisted. |
-| Document OCR | Fabricated `mockOcrSummary` string. No OCR vendor API. |
-| Identity verification / liveness | Selfie is a placeholder document type only. |
-| Sanctions / PEP / bureau screening | Local deterministic risk rules in `apps/kyc/src/lib/domain/risk.ts`. Notes include a `MOCK:` prefix. |
+- [SDLC overview](./docs/sdlc/overview.md) · [PID-ER](./docs/sdlc/PID-ER.v1.md) · [PID-NC](./docs/sdlc/PID-NC.v1.md) · [Demo script](./docs/sdlc/demo-script.md)
+- [Customer intake](./docs/customer-intake.md) · Customer repos: `docs/customer-repos.md` (PR #50)
+- [Release-intel report](./docs/grok-release-intel-report.md) · [OWASP review](./docs/security/owasp-review.md) · [Grok guardrails](./docs/security/grok-guardrails.md)
+- [Contributing](./CONTRIBUTING.md) · [Definition of Ready](./docs/DEFINITION_OF_READY.md) · [Definition of Done](./docs/DEFINITION_OF_DONE.md) · [Working agreement](./docs/WORKING_AGREEMENT.md) · [Security](./SECURITY.md)
+- [Agent rules](./AGENTS.md) · [Bot pack](./grok-bots/README.md)
 
-## Monorepo layout
-
-```
-apps/
-  kyc/                        # Northwind Bank KYC (Milestone 1)
-  releasedesk/                # Release Desk UI + demos (Milestone 7)
-packages/
-  releasedesk-core/           # Shared run context + agent contracts (Milestone 2)
-  releasedesk-lead/           # Lead orchestrator + verification/PR workflow (M3 + M6)
-  releasedesk-specialists/    # Specialists + Builder Cloud Agents (M4–M5)
-```
-
-Root `package.json` uses npm workspaces (`apps/*`, `packages/*`). Keep agent/runtime packages out of `apps/kyc` so release-check tooling can land beside the demo app without a rewrite.
-
-Bots run the process. Desk only shows the log. There is no mock mode.
-
-## Milestone 2 — shared context & contracts
-
-Package: [`packages/releasedesk-core`](./packages/releasedesk-core/) (`@releasedesk/core`).
-
-- Unique `run_` IDs and a parallel-safe task model (status, dependencies, evidence, retry/failure)
-- Zod schemas for Lead, Change Analyst, Standards, Security, and Builder agent I/O
-- Audit trail hooks on every store mutation
-- In-memory and file-backed run-context stores
-- Evidence records can still carry a historical `mocked` field. New clients do not invent a result when a credential is missing.
-
-```bash
-npm run test:core
-```
-
-See the [package README](./packages/releasedesk-core/README.md) for how agents plug in.
-
-## Milestone 3 — Lead Agent orchestrator
-
-Package: [`packages/releasedesk-lead`](./packages/releasedesk-lead/) (`@releasedesk/lead`).
-
-- Creates unique runs via `@releasedesk/core` and delegates to pluggable specialist `AgentRunner`s
-- Specialist runners are required. There is no stand-in runner.
-- Parallel analysis wave; retry/failure handling; remediation + reverification loop structure
-- Human approval gates for merge/release (**not** auto-approved)
-- CLI: `npm run check:release -- --repo vishamathur/mvp-releasedesk`
-
-```bash
-npm run test:lead
-npm run check:release -- --repo vishamathur/mvp-releasedesk --json
-```
-
-## Milestone 4 — specialist agents
-
-Package: [`packages/releasedesk-specialists`](./packages/releasedesk-specialists/) (`@releasedesk/specialists`).
-
-- Real `AgentRunner` implementations for Change Analyst, Standards, Security, and Builder
-- Injected into Lead via `createSpecialistRunners()` — results written independently onto shared run context
-- Local git and Northwind policy checks. A missing Grok key throws. An empty git range does not invent a change set.
-- Builder prepares Cursor Cloud Agent handoffs and (M5) dispatches Coding → Testing ∥ Review
-
-```bash
-npm run test:specialists
-npm run check:release -- --repo vishamathur/mvp-releasedesk --json
-```
-
-## Milestone 5 — Cursor Cloud Agents under Builder
-
-Builder dispatches **Coding**, then **Testing** and **Review** in parallel, recording branch names, test results, and PR URLs on the shared run context. The client is the real Cursor client. Each kind needs its exclusive key (`RELEASEDESK_CURSOR_API_KEY_CODING`, `RELEASEDESK_CURSOR_API_KEY_TESTING`, `RELEASEDESK_CURSOR_API_KEY_REVIEW`). A missing key throws. CI does not set those keys and does not launch agents.
-
-Cloud Agents never auto-merge — Lead human merge/release gates stay pending. See [`packages/releasedesk-specialists/README.md`](./packages/releasedesk-specialists/README.md).
-
-## Milestone 6 — verification loops + PR workflow
-
-Lead runs **checkpoint verification** after specialist analysis and after Builder/Cloud Agent stages, drives remediation → reverify when checkpoints fail, and tracks PRs with the real GitHub client when `GH_TOKEN` or `GITHUB_TOKEN` is set. A missing token throws if a pull request is opened. Merge and release still require **explicit human approval** — never auto-merge.
-
-```bash
-npm run test:lead
-npm run check:release -- --repo vishamathur/mvp-releasedesk --json
-```
-
-See [`packages/releasedesk-lead/README.md`](./packages/releasedesk-lead/README.md).
-
-## KYC domain snapshot
-
-- Statuses: `draft` → `submitted` → `in_review` → `approved` | `rejected` | `needs_info`
-- Required docs to submit: one government ID (`passport` \| `national_id` \| `drivers_license`) + `proof_of_address`
-- Persistence: `apps/kyc/data/store.json` (gitignored; recreated by seed)
-
-## GPL-3.0
-
-This project is licensed under the GNU General Public License v3.0. See [LICENSE](./LICENSE).
+License: [GPL-3.0](./LICENSE).
