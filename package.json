@@ -30,7 +30,8 @@
     "lint": "npm run lint -w @northwind/kyc",
     "seed": "npm run seed -w @northwind/kyc",
     "seed:customers": "npm run seed:customers -w @releasedesk/core",
-    "dev:desk": "npm run desk"
+    "dev:desk": "npm run desk",
+    "customer-repo": "tsx scripts/create-customer-repo.ts"
   },
   "engines": {
     "node": ">=20"
