@@ -1,0 +1,54 @@
+# OWASP review for every pull request that targets main.
+# Runs on opened, synchronize, and reopened, including draft PRs.
+# No head-branch filter, no label filter, and no REQ-id filter.
+# PID-ER, PID-NC, a Builder cloud agent, and a human-authored PR all run this job.
+name: owasp-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:core
+      - name: Review the pull request diff
+        env:
+          RELEASEDESK_GROK_API_KEY_SECURITY: ${{ secrets.RELEASEDESK_GROK_API_KEY_SECURITY }}
+          RELEASEDESK_GROK_API_KEY_LEAD: ${{ secrets.RELEASEDESK_GROK_API_KEY_LEAD }}
+          GROK_MODEL: ${{ vars.GROK_MODEL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          REPO: ${{ github.repository }}
+        run: |
+          set +e
+          ./node_modules/.bin/tsx scripts/owasp-review-pr.ts --comment > "$RUNNER_TEMP/owasp-review-comment.md"
+          code=$?
+          set -e
+          if [ ! -s "$RUNNER_TEMP/owasp-review-comment.md" ]; then
+            printf '%s\n' "## owasp-review v1" "" "Status: failed. Risk: not assessed. Outcome: needs-human. The review script produced no comment." > "$RUNNER_TEMP/owasp-review-comment.md"
+            code=1
+          fi
+          existing="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | startswith("## owasp-review v1")) | .id' | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${existing}" -f body="$(cat "$RUNNER_TEMP/owasp-review-comment.md")"
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$(cat "$RUNNER_TEMP/owasp-review-comment.md")"
+          fi
+          exit "$code"

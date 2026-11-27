@@ -15,3 +15,9 @@ Skill: launch-cursor-build
    "Grok release-intel @<sha7>: risk <riskTier>, blockers <path:line or none>, model <model> (requested <requestedModel>), tokens <prompt>/<completion>, <latencyMs> ms, billed <billedCostUsd or billed cost not reported>, est. $<estUsd> (estimate); vs Security: AGREE|DISAGREE (<one clause>)|not compared"
    or "Grok release-intel @<sha7>: none (<reason>)". Put the comment URL and the digest file path in artifactRefs. Do not add new fields: handoff.v1 allows only summary, artifactRefs and testsSummary for this.
 6. remediate: follow-up on the same agent and branch with the failing checks or blockers; same PR. Redo 5a-5e on the new head SHA before the next build-result.
+7. OWASP review (additive; `docs/security/owasp-review.md`). Read the comment that starts with `## owasp-review v1`. The machine JSON is between `<!-- owasp-review-json:v1` and `-->`. schema is `owasp-review.v1`. Compare headSha with the PR head.
+   - outcome `remediate`: apply each `failures[]` item at path:line using `suggestedFix` (`what`, `where`, `why`, `owaspId`). The review runs again on the new head.
+   - outcome `auto-proceed`: no OWASP failure to fix.
+   - outcome `needs-human`: do not treat the review as a pass and do not invent a fix. `exceptions[]` has type, control id, path:line, and reason.
+   - outcome `skipped` or status `failed`: risk was not assessed. This is not a pass and not auto-proceed.
+   This layer never approves a merge or a release. The human still types security-compliance-approval and the release go/no-go. If you dispute a fix, post `<!-- owasp-builder-dispute:v1 { "disputes": [{ "id", "disputed": true, "reason", "path", "line" }] } -->`.

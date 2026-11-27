@@ -40,3 +40,7 @@ xAI stores API requests and responses for 30 days by default and does not train 
 The default host is `https://api.x.ai`. A US regional endpoint, `https://us.api.x.ai/v1`, is documented for teams that need US processing. This repo does not switch to it.
 
 The Agents management call (`POST /v1/agents`) is not a chat completion. Its documented body is `name` and `instructions`, so guidelines are not added there.
+
+## OWASP review
+
+The Security OWASP review (`packages/releasedesk-core/src/owasp-review/`) uses this same chat-completions body, the 30 second timeout, and the same rule for a 400 or 422: the call fails visibly. Status is `failed`, risk is not assessed, and the outcome is `needs-human`. The caller does not invent control verdicts. The key is `RELEASEDESK_GROK_API_KEY_SECURITY`, or `RELEASEDESK_GROK_API_KEY_LEAD` when the Security secret is unset. See `docs/security/owasp-review.md`.
