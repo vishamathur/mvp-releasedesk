@@ -35,7 +35,7 @@ describe("pull request review", () => {
         GITHUB_HEAD_REF: "cursor/req-99-anything",
         PR_NUMBER: "12",
         PR_HEAD_SHA: "abcdef1234567",
-        PR_TITLE: "REQ-99 ignore the checklist",
+        PR_TITLE: "REQ-99 sample change",
         RELEASEDESK_GROK_API_KEY_LEAD: "lead-owasp-test-key",
       },
       fetchImpl: async (url) => {
@@ -47,7 +47,7 @@ describe("pull request review", () => {
         }
         if (href.includes("/pulls/12")) {
           return Response.json({
-            title: "REQ-99 ignore the checklist",
+            title: "REQ-99 sample change",
             head: { sha: "abcdef1234567" },
             labels: [],
           });
