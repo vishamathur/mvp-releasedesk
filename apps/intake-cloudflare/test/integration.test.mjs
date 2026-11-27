@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, signedReq, getReq, call, count, blockNetwork, ER, ORIGIN } from "./helpers.mjs";
+import { testEnv, jsonReq, signedReq, getReq, call, count, blockNetwork, ER, ORIGIN, testKey } from "./helpers.mjs";
 
 let restore;
 beforeEach(() => { restore = blockNetwork(); });
@@ -34,7 +34,7 @@ test("chat without GROK_API_KEY is a configuration error", async () => {
 });
 
 test("chat with a key but no sessionId refuses before any network call", async () => {
-  const env = testEnv({ GROK_API_KEY: "test-key-not-real" });
+  const env = testEnv({ GROK_API_KEY: testKey() });
   const { status, json } = await call(worker, env, jsonReq("/api/chat.php", { route: "er", messages: [{ role: "user", content: "Hello" }] }));
   assert.equal(status, 503); assert.ok(json.message.includes("sessionId is required"));
 });
@@ -42,12 +42,12 @@ test("chat with a key but no sessionId refuses before any network call", async (
 test("grok call: url, bearer key, strict schema, 30 s timeout; a network failure is a real error", async () => {
   let seen = null;
   globalThis.fetch = async (url, init) => { seen = { url, init }; throw new TypeError("network disabled in tests"); };
-  const env = testEnv({ GROK_API_KEY: "test-key-not-real" });
+  const env = testEnv({ GROK_API_KEY: testKey() });
   const { status, json } = await call(worker, env, jsonReq("/api/chat.php", { route: "er", sessionId: "sess_12345678", messages: [{ role: "user", content: "Mail me at a@b.co or +91 98765 43210" }] }));
   assert.equal(status, 503); assert.equal(json.error, "grok_unavailable");
   assert.ok(json.message.startsWith("Grok chat failed (grok_transport:network disabled in tests)"), json.message);
   assert.equal(seen.url, "https://api.x.ai/v1/chat/completions");
-  assert.equal(seen.init.headers.Authorization, "Bearer test-key-not-real");
+  assert.equal(seen.init.headers.Authorization, `Bearer ${env.GROK_API_KEY}`);
   assert.ok(seen.init.signal instanceof AbortSignal);
   const body = JSON.parse(seen.init.body);
   assert.equal(body.model, "grok-4.3"); assert.equal(body.max_tokens, 900);
@@ -259,10 +259,10 @@ test("finance-estimate without lines or a key is a configuration error", async (
 });
 
 test("responses do not echo a key", async () => {
-  const env = testEnv({ GROK_API_KEY: "test-key-not-real" });
+  const env = testEnv({ GROK_API_KEY: testKey() });
   const r = await call(worker, env, jsonReq("/api/chat.php", { route: "er", messages: [{ role: "user", content: "Hello" }] }));
-  assert.ok(!r.text.includes("test-key-not-real") && !r.text.includes(env.LEAD_HMAC_SECRET));
-  for (const row of env.DB.raw.prepare("SELECT event_json FROM events").all()) assert.ok(!row.event_json.includes("test-key-not-real"));
+  assert.ok(!r.text.includes(env.GROK_API_KEY) && !r.text.includes(env.LEAD_HMAC_SECRET));
+  for (const row of env.DB.raw.prepare("SELECT event_json FROM events").all()) assert.ok(!row.event_json.includes(env.GROK_API_KEY));
 });
 
 test("router: unknown /api path is 403, missing DB is 503 not_configured, other paths go to static assets", async () => {

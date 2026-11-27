@@ -1014,7 +1014,8 @@ export async function intakeCleanup(c) {
     db.prepare("DELETE FROM submissions WHERE created_at < ?1").bind(cut),
     db.prepare("DELETE FROM finance_artifacts WHERE created_at < ?1").bind(cut),
     db.prepare("DELETE FROM status WHERE updated_at < ?1").bind(cut),
-    db.prepare("DELETE FROM outbox WHERE state = 'sent' AND updated_at < ?1").bind(cut),
+    // Sent envelopes are kept only for the 24 h fetch-back window (api/envelope.php also enforces it in its query).
+    db.prepare("DELETE FROM outbox WHERE state = 'sent' AND created_at < ?1").bind(c.now - ENVELOPE_TTL_SEC),
     db.prepare("DELETE FROM events WHERE at < ?1").bind(cut),
     db.prepare("DELETE FROM rate_hits WHERE ts < ?1").bind(c.now - 7200),
   ]);
@@ -1172,23 +1173,6 @@ async function apiStatus(c) {
 // ---------------------------------------------------------------- delivery (delivery.php)
 
 /**
- * Largest envelope the site sends in one webhook body, in UTF-8 bytes. The Lead/Intake webhook receiver cut a
- * 10,996-byte envelope short (the trailing signature was lost) while an 8,168-byte one arrived whole, so the default
- * stays under 8 KB. Override with LEAD_WEBHOOK_MAX_BYTES (a plain var, not a secret).
- */
-export const DELIVERY_MAX_BYTES_DEFAULT = 7600;
-export function deliveryMaxBytes(cfg) {
-  const v = phpInt(cfg.LEAD_WEBHOOK_MAX_BYTES ?? DELIVERY_MAX_BYTES_DEFAULT);
-  return v >= 2000 && v <= 1000000 ? v : DELIVERY_MAX_BYTES_DEFAULT;
-}
-const utf8Len = (s) => ENC.encode(s).length;
-
-/**
- * Signed envelope. The payload travels once, as payloadJson (the exact signed bytes: verify, then parse). The signature
- * comes before payloadJson, so a body cut short by a receiver still carries an intact signature and fails verification
- * instead of arriving unsigned.
- */
-/**
  * JSON.stringify output rewritten so the text holds only printable ASCII and no short escapes: \n, \r, \t, \b, \f
  * become \u000a-style escapes, and non-ASCII characters become \uXXXX. JSON.parse gives the identical value.
  * Website briefs are multi-line. The two website cards whose payloadJson arrived cut (892906, 234442) were the only
@@ -1212,6 +1196,10 @@ export function jsonAsciiSafe(value) {
   return out;
 }
 
+/**
+ * Full signed envelope, stored in the D1 outbox and served to Lead by GET api/envelope.php. Lead verifies the
+ * signature over payloadJson (ts + "." + payloadJson), then parses it. signature comes before payloadJson.
+ */
 export async function deliveryEnvelope(cfg, kind, requestId, payload, now = nowSec()) {
   const ts = String(now);
   const body = jsonAsciiSafe(payload);
@@ -1226,66 +1214,27 @@ export async function deliveryEnvelope(cfg, kind, requestId, payload, now = nowS
   };
 }
 
-const TRIM_MARK = " [trimmed for delivery; the full text is in the site's D1 submission]";
-function trimTo(s, chars) { return appLen(s) <= chars ? s : appSubstr(s, Math.max(0, chars)) + TRIM_MARK; }
+/** Fetch-back window: envelopes can be fetched for 24 hours, then they are gone. */
+export const ENVELOPE_TTL_SEC = 86400;
 
 /**
- * Fits a payload under the byte budget without losing the signature. Order: drop ask.notes when it only repeats
- * ask.description; then keep only serviceId, qty and lineTotalInr on finance lines; then drop the fixed
- * leadInstructions and finance.notice text; then shorten ask.description; then shorten the long website brief fields. Every reduction is listed
- * in payload.deliveryTrimmed (inside the signed bytes). The stored D1 card is never changed. Returns [envelope, trimmed].
+ * Webhook notice (well under 2 KB). Lead's run sees only the wake text, cut at about 5 KB, so the full envelope is
+ * fetched from GET api/envelope.php. sig = hex HMAC-SHA256(LEAD_HMAC_SECRET, ts + "." + requestId + "." + payloadSha256).
  */
-export async function deliveryFit(cfg, kind, requestId, payload, now = nowSec()) {
-  const max = deliveryMaxBytes(cfg);
-  const size = async (p) => { const e = await deliveryEnvelope(cfg, kind, requestId, p, now); return [e, utf8Len(JSON.stringify(e))]; };
-  let [env, n] = await size(payload);
-  if (n <= max) return [env, []];
-  const p = JSON.parse(JSON.stringify(payload));
-  const trimmed = [];
-  const mark = () => { p.deliveryTrimmed = [...trimmed]; };
-  if (isPlainObject(p.ask) && typeof p.ask.notes === "string" && p.ask.notes === p.ask.description) {
-    p.ask.notes = null; trimmed.push("ask.notes (same as ask.description)"); mark();
-    [env, n] = await size(p); if (n <= max) return [env, trimmed];
-  }
-  const lines = p.finance?.estimate?.lines;
-  if (Array.isArray(lines) && lines.length) {
-    // Lossless for Lead: names, units and prices come from the catalogue by serviceId (catalogueVersion is kept).
-    p.finance.estimate.lines = lines.map((l) => ({ serviceId: l.serviceId, qty: l.qty, lineTotalInr: l.lineTotalInr }));
-    trimmed.push("finance.estimate.lines (serviceId, qty, lineTotalInr only)"); mark();
-    [env, n] = await size(p); if (n <= max) return [env, trimmed];
-  }
-  // Fixed text the site writes on every card; Lead's skills hold the same rules.
-  if (typeof p.leadInstructions === "string") { p.leadInstructions = null; trimmed.push("leadInstructions (fixed text)"); }
-  if (isPlainObject(p.finance) && typeof p.finance.notice === "string") { p.finance.notice = null; trimmed.push("finance.notice (fixed text)"); }
-  mark();
-  [env, n] = await size(p); if (n <= max) return [env, trimmed];
-  const shrink = async (get, set, label, floor) => {
-    const cur = get();
-    if (typeof cur !== "string" || appLen(cur) <= floor) return false;
-    trimmed.push(label); mark();
-    // JSON escaping can make one character cost up to 12 bytes inside payloadJson; step down until it fits or hits the floor.
-    let keep = Math.max(floor, appLen(cur) - Math.ceil((n - max) / 2) - TRIM_MARK.length);
-    for (;;) {
-      set(trimTo(cur, keep));
-      [env, n] = await size(p);
-      if (n <= max || keep <= floor) return n <= max;
-      keep = Math.max(floor, keep - Math.max(50, Math.ceil((n - max) / 2)));
-    }
+export async function deliveryNotice(cfg, envelope, now = nowSec()) {
+  const secret = String(cfg.LEAD_HMAC_SECRET ?? "");
+  if (ENC.encode(secret).length < 32) throw new RuntimeError("LEAD_HMAC_SECRET is not set. Refusing to send an unsigned notice.");
+  const ts = String(now);
+  const payloadSha256 = await sha256Hex(envelope.payloadJson);
+  return {
+    source: envelope.source, kind: envelope.kind, requestId: envelope.requestId, ts, payloadSha256,
+    sig: await hmacHex(secret, `${ts}.${envelope.requestId}.${payloadSha256}`),
   };
-  if (isPlainObject(p.ask) && await shrink(() => p.ask.description, (v) => { p.ask.description = v; }, "ask.description", 150)) return [env, trimmed];
-  const web = p.requestDetails?.website;
-  if (isPlainObject(web)) {
-    for (const f of ["style", "purpose", "pages", "mustHaveFeatures", "brandAssets", "domainHosting", "audience"]) {
-      if (await shrink(() => web[f], (v) => { web[f] = v; }, `requestDetails.website.${f}`, 60)) return [env, trimmed];
-    }
-  }
-  if (isPlainObject(p.proposedHandoff) && await shrink(() => p.proposedHandoff.summary, (v) => { p.proposedHandoff.summary = v; }, "proposedHandoff.summary", 200)) return [env, trimmed];
-  throw new RuntimeError(`Envelope is ${n} bytes, over the ${max}-byte webhook limit even after trimming. Refusing to send a body the receiver would cut.`);
 }
 
-/** Writes the envelope to the D1 outbox first (queue + audit), then attempts delivery. */
+/** Writes the full envelope to the D1 outbox first (queue + audit + fetch-back), then sends the notice. */
 export async function deliverySend(c, kind, requestId, payload) {
-  const [env] = await deliveryFit(c.cfg, kind, requestId, payload, c.now);
+  const env = await deliveryEnvelope(c.cfg, kind, requestId, payload, c.now);
   const id = `${gmdate.ymdhis(c.now)}-${requestId}-${kind}-${randomHex(2)}`;
   await c.env.DB.prepare("INSERT INTO outbox (id, request_id, kind, envelope_json, attempts, state, last_error, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 0, 'queued', NULL, ?5, ?5)")
     .bind(id, requestId, kind, JSON.stringify(env), c.now).run();
@@ -1307,8 +1256,10 @@ export async function deliveryAttempt(c, id) {
     else {
       const auth = String(c.cfg.LEAD_WEBHOOK_AUTH ?? "bearer");
       const hdr = auth.startsWith("header:") ? { [auth.slice(7)]: key } : { Authorization: "Bearer " + key };
-      const [code] = await appHttpPostJson(url, hdr, JSON.parse(row.envelope_json), 8);
-      ok = code >= 200 && code < 300; detail = code ? `webhook_${code}` : "webhook_transport";
+      let notice = null;
+      try { notice = await deliveryNotice(c.cfg, JSON.parse(row.envelope_json), c.now); } catch (e) { if (!(e instanceof RuntimeError)) throw e; }
+      const [code] = notice ? await appHttpPostJson(url, hdr, notice, 8) : [0];
+      ok = code >= 200 && code < 300; detail = !notice ? "lead_hmac_secret_not_configured" : code ? `webhook_${code}` : "webhook_transport";
     }
   } else if (mode === "email") {
     detail = "email_not_supported_on_cloudflare"; // PHP mail() has no Pages equivalent; use webhook.
@@ -1341,6 +1292,45 @@ export async function drainOutbox(c, limit = 5) {
   }
   if (out.length) await appLog(c, { event: "drain_outbox", processed: out.length });
   return out;
+}
+
+// ---------------------------------------------------------------- envelope fetch-back (Cloudflare build only)
+
+/**
+ * GET api/envelope.php?requestId=REQ-...[&kind=intake-card|visitor-message][&payloadSha256=<hex>]
+ * Authorization: Bearer <LEAD_FETCH_KEY>, compared in constant time. Returns the stored envelope exactly as written
+ * (payloadJson plus its signature block), newest first when several match. 401 bad key, 404 unknown or older than 24 h.
+ */
+async function apiEnvelope(c) {
+  const r = c.request;
+  if (r.method !== "GET") return respond(405, { ok: false, error: "method_not_allowed" });
+  const [ok, retry] = await appRateLimit(c, "envelope", phpInt(c.cfg.ENVELOPE_RATE_LIMIT_MAX ?? 120), 600);
+  if (!ok) return respond(429, { ok: false, error: "rate_limited" }, { "Retry-After": String(retry) });
+  const want = String(c.cfg.LEAD_FETCH_KEY ?? "");
+  if (ENC.encode(want).length < 32) return respond(503, { ok: false, error: "not_configured", message: "LEAD_FETCH_KEY is not set." });
+  const m = /^Bearer ([^\s]+)$/.exec(r.headers.get("Authorization") ?? "");
+  const given = m ? m[1] : "";
+  // Compare hashes so the comparison time does not depend on the key's length or content.
+  if (!hashEquals(await sha256Hex(want), await sha256Hex(given))) {
+    await appLog(c, { event: "envelope_auth_failed" });
+    return respond(401, { ok: false, error: "unauthorized" });
+  }
+  const q = new URL(r.url).searchParams;
+  const requestId = q.get("requestId") ?? "";
+  const kind = q.get("kind") ?? "";
+  const sha = (q.get("payloadSha256") ?? "").toLowerCase();
+  if (!appValidRequestId(requestId) || (kind !== "" && !["intake-card", "visitor-message"].includes(kind)) || (sha !== "" && !/^[a-f0-9]{64}$/.test(sha))) {
+    return respond(404, { ok: false, error: "not_found" });
+  }
+  const rows = (await c.env.DB.prepare("SELECT kind, envelope_json FROM outbox WHERE request_id = ?1 AND created_at >= ?2 ORDER BY created_at DESC, rowid DESC LIMIT 50")
+    .bind(requestId, c.now - ENVELOPE_TTL_SEC).all()).results ?? [];
+  for (const row of rows) {
+    if (kind !== "" && row.kind !== kind) continue;
+    if (sha !== "") { const env = JSON.parse(row.envelope_json); if ((await sha256Hex(env.payloadJson)) !== sha) continue; }
+    await appLog(c, { event: "envelope_fetched", requestId, kind: row.kind });
+    return new Response(row.envelope_json, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+  }
+  return respond(404, { ok: false, error: "not_found" });
 }
 
 // ---------------------------------------------------------------- inspiration photo style (Cloudflare build only)
@@ -1558,6 +1548,7 @@ export const ROUTES = {
   "/api/lead-update.php": apiLeadUpdate,
   "/api/finance-estimate.php": apiFinanceEstimate,
   "/api/style.php": apiStyle, // Cloudflare build only (inspiration photo style); the PHP build has no equivalent
+  "/api/envelope.php": apiEnvelope, // Cloudflare build only: Lead fetches the full envelope named in a webhook notice
 };
 
 /** Non-secret settings come from wrangler.toml [vars]; secrets from `wrangler pages secret put`. */
@@ -1579,7 +1570,8 @@ export function appConfig(env) {
     LEAD_WEBHOOK_URL: v("LEAD_WEBHOOK_URL", ""),
     LEAD_WEBHOOK_KEY: v("LEAD_WEBHOOK_KEY", ""),
     LEAD_WEBHOOK_AUTH: v("LEAD_WEBHOOK_AUTH", "bearer"),
-    LEAD_WEBHOOK_MAX_BYTES: v("LEAD_WEBHOOK_MAX_BYTES", DELIVERY_MAX_BYTES_DEFAULT),
+    LEAD_FETCH_KEY: v("LEAD_FETCH_KEY", ""),
+    ENVELOPE_RATE_LIMIT_MAX: v("ENVELOPE_RATE_LIMIT_MAX", 120),
     LEAD_HMAC_SECRET: v("LEAD_HMAC_SECRET", ""),
   };
 }

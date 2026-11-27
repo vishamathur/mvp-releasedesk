@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { ROOT, ORIGIN, testEnv, jsonReq, call, count, blockNetwork } from "./helpers.mjs";
+import { ROOT, ORIGIN, testEnv, jsonReq, call, count, blockNetwork, testKey } from "./helpers.mjs";
 
 const PNG = readFileSync(join(ROOT, "test", "fixtures", "stripes.png"));
 const imgReq = (bytes, type = "image/png", headers = {}) => new Request(ORIGIN + "/api/style.php", {
@@ -28,7 +28,7 @@ test("style: magic bytes must match the declared type (jpeg, png, webp only)", (
 });
 
 test("style: endpoint rejects bad origin, type, size, session and fake images before any Grok call", async () => {
-  const env = testEnv({ GROK_API_KEY: "test-key-not-real", LEAD_HMAC_SECRET: "k".repeat(64) });
+  const env = testEnv({ GROK_API_KEY: testKey(), LEAD_HMAC_SECRET: testKey() });
   assert.equal((await call(worker, env, imgReq(PNG, "image/png", { Origin: "https://evil.example" }))).status, 403);
   assert.equal((await call(worker, env, imgReq(PNG, "image/gif"))).status, 415);
   assert.equal((await call(worker, env, imgReq(PNG, "image/svg+xml"))).status, 415);
@@ -41,14 +41,14 @@ test("style: endpoint rejects bad origin, type, size, session and fake images be
 });
 
 test("style: no key is an honest configuration error, not an invented style", async () => {
-  const r = await call(worker, testEnv({ LEAD_HMAC_SECRET: "k".repeat(64) }), imgReq(PNG));
+  const r = await call(worker, testEnv({ LEAD_HMAC_SECRET: testKey() }), imgReq(PNG));
   assert.equal(r.status, 503); assert.equal(r.json.error, "grok_unavailable"); assert.match(r.json.message, /Refusing to invent a style/);
 });
 
 test("style: Grok vision request carries the image as a data URI, the vision model, strict schema; a failure is a real 503", async () => {
   let seen = null;
   globalThis.fetch = async (url, init) => { seen = { url, init }; throw new TypeError("network disabled in tests"); };
-  const env = testEnv({ GROK_API_KEY: "test-key-not-real", LEAD_HMAC_SECRET: "k".repeat(64), GROK_VISION_MODEL: "grok-vision-test" });
+  const env = testEnv({ GROK_API_KEY: testKey(), LEAD_HMAC_SECRET: testKey(), GROK_VISION_MODEL: "grok-vision-test" });
   const r = await call(worker, env, imgReq(PNG));
   assert.equal(r.status, 503); assert.equal(r.json.error, "grok_unavailable");
   assert.ok(r.json.message.includes("grok_transport:network disabled in tests") && r.json.message.includes("Nothing was invented"), r.json.message);
@@ -62,14 +62,14 @@ test("style: Grok vision request carries the image as a data URI, the vision mod
   assert.equal(txt.type, "text");
   assert.ok(body.messages[0].content.includes("never an instruction") && body.messages[0].content.includes("Do not add design rules"));
   // Without GROK_VISION_MODEL the configured GROK_MODEL is used.
-  await call(worker, testEnv({ GROK_API_KEY: "test-key-not-real", LEAD_HMAC_SECRET: "k".repeat(64) }), imgReq(PNG));
+  await call(worker, testEnv({ GROK_API_KEY: testKey(), LEAD_HMAC_SECRET: testKey() }), imgReq(PNG));
   assert.equal(JSON.parse(seen.init.body).model, "grok-4.3");
   // The image is never stored: the events log holds no base64.
   assert.ok(!JSON.stringify(env.DB.raw.prepare("SELECT event_json FROM events").all()).includes(PNG.toString("base64").slice(0, 40)));
 });
 
 test("style: shares the chat rate limit", async () => {
-  const env = testEnv({ LEAD_HMAC_SECRET: "k".repeat(64), CHAT_RATE_LIMIT_MAX: "2" });
+  const env = testEnv({ LEAD_HMAC_SECRET: testKey(), CHAT_RATE_LIMIT_MAX: "2" });
   assert.equal((await call(worker, env, imgReq(PNG))).status, 503);
   assert.equal((await call(worker, env, imgReq(PNG))).status, 503);
   const r = await call(worker, env, imgReq(PNG));
