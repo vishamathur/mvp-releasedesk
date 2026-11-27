@@ -31,14 +31,24 @@ export function staticCheckCovers(id: OwaspControlId): boolean {
   return (STATIC_COVERED_CONTROL_IDS as readonly string[]).includes(id);
 }
 
+const A03_SINK = /\beval\s*\(|new\s+Function\s*\(|dangerouslySetInnerHTML|\.innerHTML\s*=|\b(?:exec|execSync|spawn)\s*\(/;
+
+function withoutQuotedText(line: string): string {
+  return line.replace(/'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g, '""');
+}
+
 /** A regex literal that names a sink. A real call outside the regex still counts. */
 export function isDetectorPatternLine(line: string): boolean {
   if (!/\/(?:\\.|[^/\n])+\/[gimsuy]*/.test(line)) return false;
   const outside = line.replace(/\/(?:\\.|[^/\n])+\/[gimsuy]*/g, " ");
-  if (/\beval\s*\(|new\s+Function\s*\(|dangerouslySetInnerHTML|\.innerHTML\s*=|\b(?:exec|execSync|spawn)\s*\(/.test(outside)) {
-    return false;
-  }
+  if (A03_SINK.test(outside)) return false;
   return /eval|Function|innerHTML|\bexec\b|\bspawn\b|SELECT|child_process/.test(line);
+}
+
+/** The sink text sits in a quote, as in a test that stores "eval(input)". A real call does not. */
+export function isQuotedSinkFixture(line: string): boolean {
+  if (!A03_SINK.test(line)) return false;
+  return !A03_SINK.test(withoutQuotedText(line));
 }
 
 export function isTestFixturePath(path: string): boolean {
@@ -47,14 +57,25 @@ export function isTestFixturePath(path: string): boolean {
 
 const LIVE_SECRET_VALUE = /^(?:sk-|ghp_|github_pat_|AKIA|xox[baprs]-|xai-)|-----BEGIN /;
 
+function isWordFixture(value: string): boolean {
+  return placeholder(value) || /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/.test(value);
+}
+
 /** A quoted test value made of words, such as shared-xai-value. Live secret shapes are not this. */
 export function isObviousFixtureSecret(line: string): boolean {
+  if (/AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{16,}|xox[baprs]-|-----BEGIN /.test(line)) {
+    return false;
+  }
   if (placeholder(line)) return true;
+  const assigned = [
+    ...line.matchAll(
+      /(?:api[_-]?key|secret|passwd|password|access[_-]?token|private[_-]?key)\s*[:=]\s*['"]([^'"]+)['"]/gi,
+    ),
+  ].map((match) => match[1] ?? "");
+  if (assigned.length > 0) return assigned.every((value) => isWordFixture(value));
   const quoted = [...line.matchAll(/['"]([^'"]+)['"]/g)].map((match) => match[1] ?? "");
   if (quoted.length === 0) return false;
-  return quoted.every(
-    (value) => !LIVE_SECRET_VALUE.test(value) && (placeholder(value) || /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/.test(value)),
-  );
+  return quoted.every((value) => !LIVE_SECRET_VALUE.test(value) && isWordFixture(value));
 }
 
 /**
@@ -62,7 +83,12 @@ export function isObviousFixtureSecret(line: string): boolean {
  * A live secret shape in a test file still is.
  */
 export function isSuppressedReviewFinding(id: string, path: string, evidence: string, lineText = ""): boolean {
-  if (id === "A03") return isDetectorPatternLine(evidence) || isDetectorPatternLine(lineText);
+  if (id === "A03") {
+    const detector = isDetectorPatternLine(evidence) || isDetectorPatternLine(lineText);
+    const quoted =
+      isTestFixturePath(path) && (isQuotedSinkFixture(evidence) || isQuotedSinkFixture(lineText));
+    return detector || quoted;
+  }
   if (id === "X01" && isTestFixturePath(path)) {
     return isObviousFixtureSecret(evidence) || isObviousFixtureSecret(lineText);
   }
@@ -170,7 +196,9 @@ export function runStaticChecks(files: readonly DiffFile[], selected: ReadonlySe
     for (const line of addedLines(file)) {
       for (const rule of RULES) {
         if (!selected.has(rule.id)) continue;
-        if (rule.id === "A03" && isDetectorPatternLine(line.text)) continue;
+        if (rule.id === "A03" && (isDetectorPatternLine(line.text) || (isTestFixturePath(line.path) && isQuotedSinkFixture(line.text)))) {
+          continue;
+        }
         if (rule.id === "X01" && isTestFixturePath(line.path) && isObviousFixtureSecret(line.text)) continue;
         if (!rule.test(line.text)) continue;
         const key = `${rule.id}:${line.path}:${line.line}`;

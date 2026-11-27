@@ -86,7 +86,7 @@ A docs-only diff (every path ends in `.md`, `.mdx`, `.rst`, or `.adoc`, and none
 
 High-confidence static checks run on added lines of selected controls: hard-coded secrets (X01), `eval` / raw HTML / shell interpolation (A03), a variable URL (A10), `path.join` of user input (X05), unsafe deserialization (A08), and MD5/SHA-1 used as a password hash (A02). Anything else is Grok's judgement, with a strict JSON schema. Static findings and model findings are both grounded in the diff.
 
-A regex literal that only names a sink is a detector, not a finding, so A03 does not fail that line. A quoted placeholder in a `*.test.ts` or `*.spec.ts` fixture (words such as `shared-xai-value`) is not an X01 finding. A live secret shape in a test file, such as `AKIA`, `ghp_`, or `sk-`, still is.
+A regex literal that only names a sink is a detector, not a finding, so A03 does not fail that line. In a test file, a sink that appears only inside a quote (a fixture such as `"eval(input)"`) is not an A03 finding, and a quoted placeholder (words such as `shared-xai-value`) is not an X01 finding. A live secret shape in a test file, such as `AKIA`, `ghp_`, or `sk-`, still is. A real `eval` call outside a quote still is.
 
 When Grok returns `UNDECIDED` or confidence below 0.6 for a control the static check covers, and that check found nothing, the control is `PASS` with reason `PASS(static): deterministic check found nothing`. That is not an exception.
 

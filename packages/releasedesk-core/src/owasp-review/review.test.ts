@@ -857,5 +857,13 @@ describe("runOwaspReview", () => {
       OWASP_REVIEW_KEY_ENV_LEAD,
     );
     expect(stillSecret.failures.some((failure) => failure.id === "X01" && failure.path === livePath)).toBe(true);
+
+    const quotedEval = '    const realCall = "eval(input);";';
+    const quotedFixture =
+      '    const fixture = \'env: { XAI_API_KEY: "shared-xai-value", GROK_API_KEY: "shared-grok-value" },\';';
+    const selfPath = "packages/releasedesk-core/src/owasp-review/review.test.ts";
+    const selfFiles = [file(selfPath, [quotedEval, quotedFixture])];
+    const selfReview = reviewDiff(reviewInput(selfFiles), modelOf(selfFiles), OWASP_REVIEW_KEY_ENV_LEAD);
+    expect(selfReview.failures.filter((failure) => failure.id === "A03" || failure.id === "X01")).toEqual([]);
   });
 });
