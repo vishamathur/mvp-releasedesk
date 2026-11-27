@@ -5,155 +5,271 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Release Desk · Start or track a request</title>
   <meta name="description" content="Start a new customer engagement or an enhancement request with Release Desk." />
+  <meta name="theme-color" content="#0b2a4a" />
   <link rel="stylesheet" href="styles.css" />
   <script src="app.js" defer></script>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <header class="top">
-  <div class="wrap">
-    <strong>Release Desk</strong>
-    <nav><a href="#start">Start a request</a><a href="#catalogue">Services</a><a href="#track">Track a request</a></nav>
+  <div class="wrap top-inner">
+    <a class="brand" href="#main" aria-label="Release Desk home"><span class="brand-mark" aria-hidden="true">RD</span><span>Release Desk</span></a>
+    <nav aria-label="Main">
+      <a href="#catalogue">Catalogue</a><a href="#paths" class="hide-sm">Start a request</a><a href="#track">Track<span class="hide-sm"> a request</span></a>
+    </nav>
   </div>
 </header>
 
-<main class="wrap">
+<main id="main">
   <section class="hero">
-    <h1>How can we help?</h1>
-    <p>Pick an option. Our assistant helps you fill in the details, and Release Desk Lead takes it from there. People make every approval.</p>
-    <div class="options" role="radiogroup" aria-label="Request type">
-      <button type="button" class="option flagship" data-route="website" role="radio" aria-checked="false">
-        <span class="tag">PID-NC · Flagship</span>
-        <strong>Website creation</strong>
-        <small>Tell us about the site: purpose, pages, content, features, deadline. Goes to discovery, a proposal, a build and a release. People approve each gate.</small>
-      </button>
-      <button type="button" class="option" data-route="er" role="radio" aria-checked="false">
-        <span class="tag">PID-ER</span>
-        <strong>Enhance an existing service</strong>
-        <small>Pick the application, then the change. Goes to estimation.</small>
-      </button>
-      <button type="button" class="option" data-route="new_customer" role="radio" aria-checked="false">
-        <span class="tag">PID-NC</span>
-        <strong>New application</strong>
-        <small>Pick a template and any add-ons. Goes to discovery and a proposal.</small>
-      </button>
-    </div>
-  </section>
+    <div class="wrap">
+      <p class="eyebrow">Delivery requests</p>
+      <h1>Change an application you already have, or build something new.</h1>
+      <p class="lede">Choose a path, pick an item from the catalogue and tell us what you need. Release Desk Lead routes it through estimation, finance and security review. A person approves every gate.</p>
 
-  <section id="start" class="grid2" hidden>
-    <div class="card chat">
-      <h2>Assistant</h2>
-      <div id="chat-log" class="chat-log" aria-live="polite"></div>
-      <form id="chat-form" class="chat-input">
-        <input id="chat-text" maxlength="1500" placeholder="Describe what you need…" autocomplete="off" />
-        <button type="submit">Send</button>
-      </form>
-      <p class="hint">The assistant fills in the form for you. Prices it mentions are EXAMPLE list prices, not a quote.</p>
-    </div>
-
-    <div class="card">
-      <h2 id="form-title">Your request</h2>
-      <form id="intake-form" novalidate>
-        <div class="grid">
-          <label>Your name<input name="contactName" required minlength="2" maxlength="100" autocomplete="name" /></label>
-          <label>Work email<input name="email" type="email" required maxlength="254" autocomplete="email" /></label>
-          <label>Company<input name="company" required maxlength="120" autocomplete="organization" /></label>
-          <label>Urgency
-            <select name="urgency"><option value="standard">Standard</option><option value="expedited">Expedited</option><option value="critical">Critical</option></select>
-          </label>
-        </div>
-        <div class="grid" data-routes="er">
-          <label>Customer ID<input name="customerId" data-required-for="er" minlength="6" maxlength="40" pattern="[cC][uU][sS][tT]_[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="e.g. cust_1042" title="Customer ID in the form cust_1042" /></label>
-          <label>Project reference<input name="projectRef" data-required-for="er" maxlength="40" placeholder="e.g. PRJ-ONB-7" /></label>
-          <label>Change type
-            <select name="changeType"><option value="enhancement">Enhancement</option><option value="defect">Defect</option><option value="regulatory">Regulatory tweak</option></select>
-          </label>
-        </div>
-        <div class="grid" data-routes="er website">
-          <label>Needed by (optional)<input name="desiredBy" type="date" /></label>
-        </div>
-        <div class="grid" data-routes="new_customer website">
-          <label>Legal entity name<input name="legalName" data-required-for="new_customer website" maxlength="150" /></label>
-          <label>Jurisdiction<input name="jurisdiction" data-required-for="new_customer website" maxlength="80" placeholder="e.g. India" /></label>
-          <label data-routes="new_customer">Intended product<input name="intendedProduct" data-required-for="new_customer" maxlength="120" /></label>
-          <label>Sponsor (name and role)<input name="sponsor" data-required-for="new_customer website" maxlength="120" /></label>
-        </div>
-        <div class="grid" data-routes="website">
-          <label>Site or brand name<input name="siteName" data-required-for="website" maxlength="100" /></label>
-          <label class="wide">Purpose of the site<textarea name="purpose" data-required-for="website" rows="2" minlength="10" maxlength="600" placeholder="What should the site achieve?"></textarea></label>
-          <label class="wide">Audience<input name="audience" data-required-for="website" maxlength="300" placeholder="Who will use it?" /></label>
-          <label class="wide">Pages needed<textarea name="pages" data-required-for="website" rows="2" minlength="2" maxlength="600" placeholder="e.g. Home, About, Services, Pricing, Contact"></textarea></label>
-          <label class="wide">Must-have features (optional)<textarea name="mustHaveFeatures" rows="2" maxlength="600" placeholder="e.g. contact form, blog, multi-language"></textarea></label>
-          <label class="wide">Content and brand assets (optional)<textarea name="brandAssets" rows="2" maxlength="400" placeholder="Logo, colours, copy, photos: what exists and what is missing?"></textarea></label>
-          <label class="wide">Domain and hosting notes (optional)<input name="domainHosting" maxlength="300" placeholder="Existing domain? Preferred host?" /></label>
-          <label>Budget band
-            <select name="budgetBand">
-              <option value="not_sure">Not sure yet</option>
-              <option value="under_50k">Under INR 50,000</option>
-              <option value="50k_150k">INR 50,000 to 150,000</option>
-              <option value="150k_300k">INR 150,000 to 300,000</option>
-              <option value="300k_plus">Above INR 300,000</option>
-            </select>
-          </label>
-        </div>
-        <div data-routes="er" id="catalogue-er">
-          <label>Application<select id="er-app"></select></label>
-          <label>Change<select id="er-option"></select></label>
-          <p id="er-option-desc" class="hint"></p>
-        </div>
-        <div data-routes="new_customer website" id="catalogue-nc">
-          <label>Template<select id="nc-template"></select></label>
-          <fieldset id="nc-addons" class="addons"><legend>Add-ons</legend></fieldset>
-          <p id="nc-template-desc" class="hint"></p>
-        </div>
-        <p id="example-estimate" class="hint" hidden></p>
-        <label>Title<input name="title" data-required-for="er new_customer" minlength="5" maxlength="150" /></label>
-        <label><span id="description-label">Description</span><textarea name="description" data-required-for="er new_customer" minlength="20" maxlength="4000" rows="6"></textarea></label>
-        <div class="grid">
-          <label data-routes="er new_customer">Budget in INR (optional)<input name="customerBudgetInr" inputmode="numeric" pattern="[0-9]*" maxlength="10" /></label>
-          <label>Links (optional, https, one per line)<textarea name="artifactLinks" rows="2" maxlength="2600"></textarea></label>
-        </div>
-        <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off" /></label></div>
-        <label class="consent"><input type="checkbox" name="consent" required />
-          <span>I agree that these details are stored for 30 days and processed, including by an AI model, so Release Desk can review and respond. I won't include passwords or confidential data.</span></label>
-        <button type="submit" id="submit">Submit to Release Desk Lead</button>
-        <p id="form-status" role="status" aria-live="polite"></p>
-      </form>
-    </div>
-  </section>
-
-  <section id="catalogue" class="card">
-    <h2>Services <span class="badge">EXAMPLE DATA</span></h2>
-    <p class="hint" id="cat-label"></p>
-    <div class="table-wrap"><table id="cat-table"><thead><tr><th>Service</th><th>Unit</th><th class="num">List price (INR)</th><th class="num">Typical effort</th><th class="num">Risk factor</th></tr></thead><tbody></tbody></table></div>
-    <h3>What you can request</h3>
-    <div id="cat-options"></div>
-  </section>
-
-  <section id="track" class="card">
-    <h2>Track a request</h2>
-    <form id="track-form" class="grid">
-      <label>Reference<input name="ref" placeholder="REQ-20261122-123456" pattern="REQ-\d{8}-\d{6}" required /></label>
-      <label>Status key<input name="token" placeholder="from your confirmation" pattern="[a-f0-9]{32}" required /></label>
-      <button type="submit">Show status</button>
-    </form>
-    <div id="status-view" hidden>
-      <p class="status-line"><strong id="st-label"></strong> <span id="st-gate" class="hint"></span></p>
-      <ol id="st-steps" class="steps"></ol>
-      <div id="st-quote" hidden>
-        <h3>Indicative estimate from Release Desk Lead</h3>
-        <table><tbody id="st-quote-lines"></tbody></table>
-        <p class="hint" id="st-quote-note"></p>
+      <div class="paths" id="paths" role="radiogroup" aria-label="Request type">
+        <article class="path">
+          <header class="path-head">
+            <span class="pid">PID-ER</span>
+            <h2>Enhance an existing application</h2>
+            <p>Changes to an application already in service: screens, fields, rules, APIs or reports. Goes straight to estimation.</p>
+          </header>
+          <button type="button" class="option" data-route="er" role="radio" aria-checked="false">
+            <strong>Enhance an existing service</strong>
+            <small>Pick the application, then the change</small>
+          </button>
+        </article>
+        <article class="path">
+          <header class="path-head">
+            <span class="pid">PID-NC</span>
+            <h2>A new application or website</h2>
+            <p>A new build from a template, with optional add-ons. Goes to discovery, a proposal, a build and a release.</p>
+          </header>
+          <div class="path-options">
+            <button type="button" class="option flagship" data-route="website" role="radio" aria-checked="false">
+              <strong>Website creation</strong>
+              <small>Purpose, pages, content, features and deadline</small>
+            </button>
+            <button type="button" class="option" data-route="new_customer" role="radio" aria-checked="false">
+              <strong>New application</strong>
+              <small>Pick a template and any add-ons</small>
+            </button>
+          </div>
+        </article>
       </div>
-      <h3>Updates</h3>
-      <ul id="st-messages" class="messages"></ul>
-      <form id="reply-form" class="chat-input">
-        <input name="message" maxlength="2000" placeholder="Send a message to Release Desk Lead" required />
-        <button type="submit">Send</button>
-      </form>
-      <p id="reply-status" role="status"></p>
+
+      <ol class="how" aria-label="How it works">
+        <li><span>1</span><div><strong>Choose</strong> a path or a catalogue item</div></li>
+        <li><span>2</span><div><strong>Describe</strong> the request; the assistant can help</div></li>
+        <li><span>3</span><div><strong>Review</strong>: estimate, finance and security, each approved by a person</div></li>
+        <li><span>4</span><div><strong>Track</strong> progress with your reference and status key</div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="catalogue" class="section" aria-labelledby="catalogue-title">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2 id="catalogue-title">Catalogue <span class="badge">EXAMPLE DATA</span></h2>
+          <p class="hint" id="cat-label">Loading the catalogue…</p>
+        </div>
+      </div>
+      <div class="toolbar" role="search">
+        <label class="search"><span class="sr-only">Search the catalogue</span>
+          <input type="search" id="cat-search" placeholder="Search by name, application or service" autocomplete="off" />
+        </label>
+        <div class="filters" role="group" aria-label="Show">
+          <button type="button" class="chip" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" class="chip" data-filter="er" aria-pressed="false">Enhancements <span class="pid-sm">PID-ER</span></button>
+          <button type="button" class="chip" data-filter="nc" aria-pressed="false">New builds <span class="pid-sm">PID-NC</span></button>
+          <button type="button" class="chip" data-filter="svc" aria-pressed="false">Rate card</button>
+        </div>
+      </div>
+      <p id="cat-count" class="hint" role="status" aria-live="polite"></p>
+      <div id="cat-options" class="cat-groups"></div>
+      <p id="cat-empty" class="empty" hidden>Nothing matches that search. Try another word or choose All.</p>
+    </div>
+  </section>
+
+  <section id="start" class="section section-alt" hidden aria-labelledby="form-title">
+    <div class="wrap">
+      <div class="form-card">
+        <div class="form-head">
+          <p class="eyebrow" id="form-pid"></p>
+          <h2 id="form-title">Your request</h2>
+          <p class="hint">Need help? <button type="button" class="link" id="assistant-open-2" aria-controls="assistant">Ask the assistant</button>. It fills in the form as you talk.</p>
+        </div>
+        <form id="intake-form" novalidate>
+          <fieldset class="step">
+            <legend><span class="step-n">1</span> What you need</legend>
+            <div data-routes="er" id="catalogue-er" class="grid">
+              <label>Application<select id="er-app"></select></label>
+              <label>Change<select id="er-option"></select></label>
+              <p id="er-option-desc" class="hint wide"></p>
+            </div>
+            <div data-routes="new_customer website" id="catalogue-nc">
+              <label>Template<select id="nc-template"></select></label>
+              <p id="nc-template-desc" class="hint"></p>
+              <fieldset id="nc-addons" class="addons"><legend>Add-ons</legend></fieldset>
+            </div>
+            <div class="grid">
+              <label>Urgency
+                <select name="urgency"><option value="standard">Standard</option><option value="expedited">Expedited</option><option value="critical">Critical</option></select>
+              </label>
+            </div>
+            <p id="example-estimate" class="estimate" hidden></p>
+          </fieldset>
+
+          <fieldset class="step">
+            <legend><span class="step-n">2</span> About you</legend>
+            <div class="grid">
+              <label>Your name<input name="contactName" required minlength="2" maxlength="100" autocomplete="name" /></label>
+              <label>Work email<input name="email" type="email" required maxlength="254" autocomplete="email" /></label>
+              <label>Company<input name="company" required maxlength="120" autocomplete="organization" /></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="step">
+            <legend><span class="step-n">3</span> Request details</legend>
+            <div class="grid" data-routes="er">
+              <label>Customer ID<input name="customerId" data-required-for="er" minlength="6" maxlength="40" pattern="[cC][uU][sS][tT]_[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="e.g. cust_1042" title="Customer ID in the form cust_1042" /></label>
+              <label>Project reference<input name="projectRef" data-required-for="er" maxlength="40" placeholder="e.g. PRJ-ONB-7" /></label>
+              <label>Change type
+                <select name="changeType"><option value="enhancement">Enhancement</option><option value="defect">Defect</option><option value="regulatory">Regulatory tweak</option></select>
+              </label>
+            </div>
+            <div class="grid" data-routes="er website">
+              <label>Needed by (optional)<input name="desiredBy" type="date" /></label>
+            </div>
+            <div class="grid" data-routes="new_customer website">
+              <label>Legal entity name<input name="legalName" data-required-for="new_customer website" maxlength="150" /></label>
+              <label>Jurisdiction<input name="jurisdiction" data-required-for="new_customer website" maxlength="80" placeholder="e.g. India" /></label>
+              <label data-routes="new_customer">Intended product<input name="intendedProduct" data-required-for="new_customer" maxlength="120" /></label>
+              <label>Sponsor (name and role)<input name="sponsor" data-required-for="new_customer website" maxlength="120" /></label>
+            </div>
+            <div class="grid" data-routes="website">
+              <label>Site or brand name<input name="siteName" data-required-for="website" maxlength="100" /></label>
+              <label class="wide">Purpose of the site<textarea name="purpose" data-required-for="website" rows="2" minlength="10" maxlength="600" placeholder="What should the site achieve?"></textarea></label>
+              <label class="wide">Audience<input name="audience" data-required-for="website" maxlength="300" placeholder="Who will use it?" /></label>
+              <label class="wide">Pages needed<textarea name="pages" data-required-for="website" rows="2" minlength="2" maxlength="600" placeholder="e.g. Home, About, Services, Pricing, Contact"></textarea></label>
+              <label class="wide">Must-have features (optional)<textarea name="mustHaveFeatures" rows="2" maxlength="600" placeholder="e.g. contact form, blog, multi-language"></textarea></label>
+              <label class="wide">Content and brand assets (optional)<textarea name="brandAssets" rows="2" maxlength="400" placeholder="Logo, colours, copy, photos: what exists and what is missing?"></textarea></label>
+              <label class="wide">Domain and hosting notes (optional)<input name="domainHosting" maxlength="300" placeholder="Existing domain? Preferred host?" /></label>
+              <div class="wide" id="inspiration">
+                <label>Inspiration photo (optional: JPEG, PNG or WebP, up to 4 MB)<input type="file" id="inspiration-photo" accept="image/jpeg,image/png,image/webp" /></label>
+                <p class="hint">Grok reads only the visual style (colours, mood, textures, type and layout). The photo is not stored or sent to Release Desk Lead; only the style text below goes with your request.</p>
+                <p id="inspiration-status" class="hint" role="status" aria-live="polite"></p>
+                <div id="inspiration-result" hidden>
+                  <div id="inspiration-swatches" class="swatches"></div>
+                  <p id="inspiration-text" class="style-text"></p>
+                  <button type="button" id="inspiration-clear" class="secondary">Remove style</button>
+                </div>
+                <input type="hidden" name="inspirationStyle" />
+                <input type="hidden" name="inspirationStyleSig" />
+              </div>
+              <label>Budget band
+                <select name="budgetBand">
+                  <option value="not_sure">Not sure yet</option>
+                  <option value="under_50k">Under INR 50,000</option>
+                  <option value="50k_150k">INR 50,000 to 150,000</option>
+                  <option value="150k_300k">INR 150,000 to 300,000</option>
+                  <option value="300k_plus">Above INR 300,000</option>
+                </select>
+              </label>
+            </div>
+            <div data-routes="er" id="catalogue-er">
+              <label>Application<select id="er-app"></select></label>
+              <label>Change<select id="er-option"></select></label>
+              <p id="er-option-desc" class="hint"></p>
+            </div>
+            <div data-routes="new_customer website" id="catalogue-nc">
+              <label>Template<select id="nc-template"></select></label>
+              <fieldset id="nc-addons" class="addons"><legend>Add-ons</legend></fieldset>
+              <p id="nc-template-desc" class="hint"></p>
+            </div>
+            <label>Title<input name="title" data-required-for="er new_customer" minlength="5" maxlength="150" /></label>
+            <label><span id="description-label">Description</span><textarea name="description" data-required-for="er new_customer" minlength="20" maxlength="4000" rows="6"></textarea></label>
+            <div class="grid">
+              <label data-routes="er new_customer">Budget in INR (optional)<input name="customerBudgetInr" inputmode="numeric" pattern="[0-9]*" maxlength="10" /></label>
+              <label>Links (optional, https, one per line)<textarea name="artifactLinks" rows="2" maxlength="2600"></textarea></label>
+            </div>
+            <div class="hp" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off" /></label></div>
+          </fieldset>
+
+          <fieldset class="step">
+            <legend><span class="step-n">4</span> Review and submit</legend>
+            <label class="consent"><input type="checkbox" name="consent" required />
+              <span>I agree that these details are stored for 30 days and processed, including by an AI model, so Release Desk can review and respond. I won't include passwords or confidential data.</span></label>
+            <div class="submit-row">
+              <button type="submit" id="submit">Submit to Release Desk Lead</button>
+              <p class="hint">The submitted price is calculated on the server. Nothing here is an offer or an approval.</p>
+            </div>
+            <p id="form-status" role="status" aria-live="polite"></p>
+          </fieldset>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="track" class="section" aria-labelledby="track-title">
+    <div class="wrap">
+      <div class="track-card">
+        <div class="section-head">
+          <div>
+            <h2 id="track-title">Track a request</h2>
+            <p class="hint">Use the reference and status key from your confirmation. The key stays in your browser's address bar and is not sent to server logs.</p>
+          </div>
+        </div>
+        <form id="track-form" class="track-form">
+          <label>Reference<input name="ref" placeholder="REQ-20261122-123456" pattern="REQ-\d{8}-\d{6}" required /></label>
+          <label>Status key<input name="token" placeholder="from your confirmation" pattern="[a-f0-9]{32}" required /></label>
+          <button type="submit">Show status</button>
+        </form>
+        <div id="status-view" class="status-view" hidden>
+          <p class="status-line"><strong id="st-label"></strong> <span id="st-gate" class="hint"></span></p>
+          <ol id="st-steps" class="steps"></ol>
+          <div id="st-quote" class="quote" hidden>
+            <h3>Indicative estimate from Release Desk Lead</h3>
+            <table><tbody id="st-quote-lines"></tbody></table>
+            <p class="hint" id="st-quote-note"></p>
+          </div>
+          <h3>Updates</h3>
+          <ul id="st-messages" class="messages"></ul>
+          <form id="reply-form" class="chat-input">
+            <label class="sr-only" for="reply-message">Message to Release Desk Lead</label>
+            <input id="reply-message" name="message" maxlength="2000" placeholder="Send a message to Release Desk Lead" required />
+            <button type="submit">Send</button>
+          </form>
+          <p id="reply-status" role="status"></p>
+        </div>
+      </div>
     </div>
   </section>
 </main>
-<footer class="wrap hint">Service names and prices on this page are EXAMPLE data for demonstration. Nothing here is an offer or an approval.</footer>
+
+<aside id="assistant" class="drawer" aria-labelledby="assistant-title" hidden>
+  <div class="drawer-head">
+    <div>
+      <h2 id="assistant-title">Assistant</h2>
+      <p class="hint">Fills in the form for you as you talk.</p>
+    </div>
+    <button type="button" class="icon-btn" id="assistant-close" aria-label="Close the assistant">×</button>
+  </div>
+  <div id="chat-log" class="chat-log" aria-live="polite"></div>
+  <p class="hint chat-empty" id="chat-empty">Choose a path or a catalogue item first, then describe what you need.</p>
+  <form id="chat-form" class="chat-input">
+    <label class="sr-only" for="chat-text">Message to the assistant</label>
+    <input id="chat-text" maxlength="1500" placeholder="Describe what you need…" autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+  <p class="hint">Prices it mentions are EXAMPLE list prices, not a quote.</p>
+</aside>
+
+<button type="button" class="fab" id="assistant-open" aria-controls="assistant" aria-expanded="false">Ask the assistant</button>
+
+<footer class="foot">
+  <div class="wrap hint">Service names and prices on this page are EXAMPLE data for demonstration. Nothing here is an offer or an approval.</div>
+</footer>
 </body>
 </html>
