@@ -1,0 +1,132 @@
+# Reusable acceptance check for customer repos (QA as a Builder capability).
+# Called from a customer repo's acceptance.yml; the check is named `acceptance / review`.
+# Runs the full test suite once with a Jest-format JSON reporter and coverage, then maps every
+# acceptance criterion id (AC-1, AC-2, ...) and regression id (REG-<finding>) to its named test.
+# Fails when a criterion has no passing test, any test fails, or line coverage is below the threshold.
+# Needs no secrets.
+name: acceptance-reusable
+
+on:
+  workflow_call:
+    inputs:
+      harness_ref:
+        description: Harness ref to run (branch, tag or SHA)
+        type: string
+        default: main
+      test_command:
+        description: Runs the full suite and writes results_path and coverage_summary_path
+        type: string
+        default: npm run test:acceptance
+      results_path:
+        description: Jest-format JSON test results (vitest --reporter=json or jest --json)
+        type: string
+        default: reports/acceptance-results.json
+      coverage_summary_path:
+        description: Istanbul coverage-summary.json (json-summary reporter)
+        type: string
+        default: coverage/coverage-summary.json
+      coverage_threshold:
+        description: Minimum total line coverage percent; 0 turns the coverage check off
+        type: number
+        default: 80
+      criteria_dir:
+        description: Folder of acceptance files (one per story); files changed by the PR are read
+        type: string
+        default: docs/acceptance
+      exempt_labels:
+        description: Comma-separated PR labels that need no acceptance criteria (the suite and coverage still run)
+        type: string
+        default: dependencies
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: vishamathur/mvp-releasedesk
+          ref: ${{ inputs.harness_ref }}
+          path: harness
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: harness/package-lock.json
+      - run: npm ci
+        working-directory: harness
+      - name: Require an app manifest
+        working-directory: app
+        run: |
+          if [ ! -f package.json ] || [ ! -f package-lock.json ]; then
+            echo "::error::No package.json/package-lock.json yet. The first build PR adds the app and a test:acceptance script."
+            exit 1
+          fi
+      - run: npm ci
+        working-directory: app
+      - name: Run the full test suite with results and coverage
+        id: tests
+        working-directory: app
+        env:
+          TEST_COMMAND: ${{ inputs.test_command }}
+          RESULTS_PATH: ${{ inputs.results_path }}
+        run: |
+          mkdir -p "$(dirname "$RESULTS_PATH")"
+          set +e
+          bash -c "$TEST_COMMAND"
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+      - name: List acceptance files changed by the pull request
+        id: criteria
+        working-directory: app
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CRITERIA_DIR: ${{ inputs.criteria_dir }}
+        run: |
+          {
+            echo "files<<EOF_CRITERIA"
+            git diff --name-only --diff-filter=AMR "$BASE_SHA" HEAD -- "$CRITERIA_DIR" | grep -E '\.md$' || true
+            echo "EOF_CRITERIA"
+          } >> "$GITHUB_OUTPUT"
+      - name: Map acceptance criteria to tests
+        working-directory: harness
+        env:
+          APP_DIR: ${{ github.workspace }}/app
+          RESULTS_PATH: ${{ inputs.results_path }}
+          COVERAGE_SUMMARY_PATH: ${{ inputs.coverage_summary_path }}
+          COVERAGE_THRESHOLD: ${{ inputs.coverage_threshold }}
+          CHANGED_CRITERIA_FILES: ${{ steps.criteria.outputs.files }}
+          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+          EXEMPT_LABELS: ${{ inputs.exempt_labels }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set +e
+          ./node_modules/.bin/tsx scripts/acceptance-check.ts > "$RUNNER_TEMP/acceptance-comment.md"
+          code=$?
+          set -e
+          if [ ! -s "$RUNNER_TEMP/acceptance-comment.md" ]; then
+            printf '%s\n' "## acceptance v1" "" "Status: failed. The acceptance script produced no report." > "$RUNNER_TEMP/acceptance-comment.md"
+            code=1
+          fi
+          cat "$RUNNER_TEMP/acceptance-comment.md" >> "$GITHUB_STEP_SUMMARY"
+          existing="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate --jq '.[] | select(.body | startswith("## acceptance v1")) | .id' | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${existing}" -f body="$(cat "$RUNNER_TEMP/acceptance-comment.md")"
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$(cat "$RUNNER_TEMP/acceptance-comment.md")"
+          fi
+          exit "$code"
