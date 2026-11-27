@@ -77,6 +77,25 @@ test("deliveryFit: a small payload is untouched; a tiny LEAD_WEBHOOK_MAX_BYTES t
   await assert.rejects(W.deliveryFit({ ...cfg, LEAD_WEBHOOK_MAX_BYTES: 2000 }, "visitor-message", "REQ-20261127-000001", { message: "x".repeat(3000) }, 1795813322), /Refusing to send/);
 });
 
+test("payloadJson is printable ASCII with no short escapes, parses to the same card, and the HMAC covers it as sent", async () => {
+  const card = { ask: { description: "Website creation: Acme\nPurpose: tabs\there\r\nquote \" backslash \\n literal \u00e9\u4e2d\u2028 \ud83d\ude00" } };
+  const t = W.jsonAsciiSafe(card);
+  assert.ok(/^[\x20-\x7e]*$/.test(t), "printable ASCII only");
+  assert.ok(!/(^|[^\\])(\\\\)*\\[nrtbf]/.test(t), "no short escapes");
+  assert.deepEqual(JSON.parse(t), card);
+  assert.ok(t.includes("\\\\n literal"), "an escaped backslash before n stays a backslash and the letter n");
+  const env = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: "k".repeat(64) }, "intake-card", "REQ-20261127-000001", card, 1795813322);
+  assert.equal(env.payloadJson, t);
+  assert.equal(env.signature.hex, createHmac("sha256", "k".repeat(64)).update(`${env.signature.ts}.${env.payloadJson}`).digest("hex"));
+  const env2 = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: "k".repeat(64) }, "intake-card", "REQ-20261127-000001", { d: "Line one\nLine two\r\nLine three" }, 1795813322);
+  assert.ok(!JSON.stringify(env2).includes("\\\\n") && !env2.payloadJson.includes("\\n"), "a multi-line brief has no newline escape in payloadJson or the body");
+});
+
+test("PID-NC envelope cap stays at or under the largest envelope Lead verified (748965: 8,168 bytes)", () => {
+  assert.ok(W.DELIVERY_MAX_BYTES_DEFAULT <= 8168);
+  assert.equal(W.deliveryMaxBytes({}), W.DELIVERY_MAX_BYTES_DEFAULT);
+});
+
 test("webhook delivery: header:<Name> auth style", async () => {
   const calls = [];
   globalThis.fetch = recorder(200, calls);

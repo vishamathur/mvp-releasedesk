@@ -1188,9 +1188,33 @@ const utf8Len = (s) => ENC.encode(s).length;
  * comes before payloadJson, so a body cut short by a receiver still carries an intact signature and fails verification
  * instead of arriving unsigned.
  */
+/**
+ * JSON.stringify output rewritten so the text holds only printable ASCII and no short escapes: \n, \r, \t, \b, \f
+ * become \u000a-style escapes, and non-ASCII characters become \uXXXX. JSON.parse gives the identical value.
+ * Website briefs are multi-line. The two website cards whose payloadJson arrived cut (892906, 234442) were the only
+ * envelopes with \n inside payloadJson, so the signed bytes no longer contain that sequence.
+ */
+export function jsonAsciiSafe(value) {
+  const t = JSON.stringify(value);
+  const SHORT = { n: "\\u000a", r: "\\u000d", t: "\\u0009", b: "\\u0008", f: "\\u000c" };
+  let out = "";
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (ch === "\\") {
+      const nx = t[i + 1];
+      out += hasOwn(SHORT, nx) ? SHORT[nx] : ch + nx;
+      i++;
+    } else {
+      const code = ch.charCodeAt(0);
+      out += code > 126 ? "\\u" + code.toString(16).padStart(4, "0") : ch;
+    }
+  }
+  return out;
+}
+
 export async function deliveryEnvelope(cfg, kind, requestId, payload, now = nowSec()) {
   const ts = String(now);
-  const body = JSON.stringify(payload);
+  const body = jsonAsciiSafe(payload);
   const secret = String(cfg.LEAD_HMAC_SECRET ?? "");
   return {
     source: cfg.PUBLIC_HOST ?? "intake.vishalmathur.org", kind, requestId,
