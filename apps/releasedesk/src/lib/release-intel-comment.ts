@@ -48,7 +48,8 @@ export function sanitizeInline(text: string, max = 400): string {
 
 function formatGrounded(blocker: GroundedBlocker): string {
   const where = sanitizeInline(`${blocker.path}:${blocker.line}`, 180);
-  return `- \`${where}\` (${blocker.severity}) — ${sanitizeInline(blocker.evidence, 200)}`;
+  const origin = blocker.source === "deterministic" ? "deterministic check, " : "";
+  return `- \`${where}\` (${origin}${blocker.severity}) — ${sanitizeInline(blocker.evidence, 200)}`;
 }
 
 function formatDropped(blocker: DroppedBlocker): string {

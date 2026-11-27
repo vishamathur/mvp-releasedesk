@@ -25,6 +25,7 @@ import {
   RELEASE_INTEL_SYSTEM_PROMPT,
   buildReleaseIntelUserContent,
   groundedBlockerLabel,
+  applyDeterministicRubric,
   partitionGroundedBlockers,
   type BudgetedDiff,
   type DroppedBlocker,
@@ -418,6 +419,11 @@ export async function runGrokReleaseIntel(
     const partitioned = partitionGroundedBlockers(parsed.blockers, input.diff?.files ?? [], input.knownPaths);
     const injectionSuspected = parsed.injectionSuspected === true;
     const injectionReason = typeof parsed.injectionReason === "string" ? parsed.injectionReason : "";
+    const groundedBlockers = applyDeterministicRubric({
+      grounded: partitioned.grounded,
+      files: input.diff?.files ?? [],
+      injectionSuspected,
+    });
     return {
       mode: "live",
       label: "LIVE",
@@ -434,8 +440,8 @@ export async function runGrokReleaseIntel(
       score: { level: scoreLevel, rationale: scoreRationale },
       summarize: String(parsed.summarize),
       riskTier,
-      blockers: partitioned.grounded.map(groundedBlockerLabel),
-      groundedBlockers: partitioned.grounded,
+      blockers: groundedBlockers.map(groundedBlockerLabel),
+      groundedBlockers,
       droppedUngrounded: partitioned.dropped,
       injectionSuspected,
       injectionReason,
