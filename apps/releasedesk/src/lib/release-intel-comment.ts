@@ -12,6 +12,7 @@
  */
 import { formatGrokTelemetryLine } from "@releasedesk/core";
 import type { ReleaseIntelPrReport } from "./release-intel-pr";
+import type { DroppedBlocker, GroundedBlocker } from "./release-intel-diff";
 
 export const RELEASE_INTEL_HEADING = "## release-intel v1";
 export const RELEASE_INTEL_MACHINE_OPEN = "<!-- release-intel-json:v1";
@@ -45,21 +46,44 @@ export function sanitizeInline(text: string, max = 400): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+function formatGrounded(blocker: GroundedBlocker): string {
+  const where = sanitizeInline(`${blocker.path}:${blocker.line}`, 180);
+  return `- \`${where}\` (${blocker.severity}) — ${sanitizeInline(blocker.evidence, 200)}`;
+}
+
+function formatDropped(blocker: DroppedBlocker): string {
+  const where = sanitizeInline(`${blocker.path || "?"}:${blocker.line ?? "?"}`, 180);
+  return `- \`${where}\` — ${sanitizeInline(blocker.reason, 200)}`;
+}
+
 export function renderReleaseIntelComment(report: ReleaseIntelPrReport): string {
   const { intel } = report;
   const commit = report.headSha
     ? `\`${report.headSha.slice(0, 7)}\` (\`${report.headSha}\`)`
     : "unknown (PR_HEAD_SHA was not set and GitHub did not return a head commit)";
-  const blockers = intel.blockers.length
-    ? intel.blockers.map((b) => `\`${sanitizeInline(b, 120).replace(/'/g, "")}\``).join(", ")
-    : "none";
+  const coverage = report.diffTruncated
+    ? `${report.filesSent}/${report.filesTotal} files sent (diff truncated)`
+    : `${report.filesSent}/${report.filesTotal} files sent`;
+  const grounded = intel.groundedBlockers.length ? intel.groundedBlockers.map(formatGrounded).join("\n") : "- none";
+  const dropped = intel.droppedUngrounded.length ? intel.droppedUngrounded.map(formatDropped).join("\n") : "- none";
+  const injection = intel.injectionSuspected
+    ? `suspected — ${sanitizeInline(intel.injectionReason || "no reason given", 240)}`
+    : "not suspected";
   const footer = formatGrokTelemetryLine(intel.telemetry);
   const head = [
     RELEASE_INTEL_HEADING,
     "",
     `**Commit** ${commit} · **risk** ${intel.riskTier} · **score** ${intel.score.level} · **${intel.label}**`,
     "",
-    `**Grok blockers (advisory):** ${blockers}`,
+    `**Files** ${coverage}`,
+    "",
+    `**Prompt injection:** ${injection}`,
+    "",
+    "**Grounded blockers (advisory):**",
+    grounded,
+    "",
+    "**Dropped (ungrounded):**",
+    dropped,
     "",
     sanitizeInline(intel.summarize),
     "",

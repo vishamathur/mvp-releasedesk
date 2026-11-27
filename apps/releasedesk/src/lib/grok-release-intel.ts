@@ -15,13 +15,21 @@ import {
   buildGrokTelemetry,
   GROK_API_KEY_ENV,
   GROK_CHAT_COMPLETIONS_URL,
-  GROK_REQUEST_TIMEOUT_MS,
   GrokGuidelineError,
   MissingCredentialError,
   resolveAgentGrokApiKey,
   resolveGrokModel,
   type GrokTelemetry,
 } from "@releasedesk/core";
+import {
+  RELEASE_INTEL_SYSTEM_PROMPT,
+  buildReleaseIntelUserContent,
+  groundedBlockerLabel,
+  partitionGroundedBlockers,
+  type BudgetedDiff,
+  type DroppedBlocker,
+  type GroundedBlocker,
+} from "./release-intel-diff";
 
 export type GrokIntelMode = "live";
 
@@ -31,6 +39,10 @@ export type GrokReleaseIntelInput = {
   findings: Array<{ source: string; text: string; severity?: string }>;
   /** Pull request number, when this call is about one. Used only as a stable cache key. */
   pullRequest?: number | null;
+  /** Unified diff sent to the model. Blockers are grounded against these files only. */
+  diff?: BudgetedDiff | null;
+  /** Every changed path, including files the token budget did not send. */
+  knownPaths?: string[];
 };
 
 /** Stable across re-runs of the same repo (and PR). Not a secret. */
@@ -63,23 +75,31 @@ export type GrokReleaseIntelResult = {
   requestedModel: string;
   /** False when the API response carried no `model` field. */
   modelReported: boolean;
-  /** Token usage, latency and an estimated cost for this one call. */
+  /** Token usage, latency, billed cost, and a separately labelled estimate. */
   telemetry: GrokTelemetry;
   classify: { category: string; confidence: number };
   extract: string[];
   score: { level: "low" | "medium" | "high" | "critical"; rationale: string };
   summarize: string;
   riskTier: "low" | "medium" | "high";
+  /**
+   * Grounded blockers as `path:line` strings so a v1 reader can still join them.
+   * The structured records are `groundedBlockers`. Ids are never taken from the title.
+   */
   blockers: string[];
+  groundedBlockers: GroundedBlocker[];
+  droppedUngrounded: DroppedBlocker[];
+  injectionSuspected: boolean;
+  injectionReason: string;
   trustCheck: GrokIntelTrustCheck;
   mocked: boolean;
   rawPreview?: string;
 };
 
 /** Completion budget for one report. A reply cut off at this limit fails visibly. */
-export const RELEASE_INTEL_MAX_TOKENS = 2000;
-/** Findings (changed file paths for a PR) sent to Grok per call. */
-export const RELEASE_INTEL_FINDINGS_LIMIT = 40;
+export const RELEASE_INTEL_MAX_TOKENS = 4000;
+/** Diff review can outlast the shared 30s chat timeout. This call fails visibly at this limit. */
+export const RELEASE_INTEL_TIMEOUT_MS = 120_000;
 const INTEL_ROLE = "lead" as const;
 const INTEL_KEY_ENV = GROK_API_KEY_ENV[INTEL_ROLE];
 
@@ -119,7 +139,16 @@ export type ReleaseIntelRiskTier = "low" | "medium" | "high";
 export const RELEASE_INTEL_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["classify", "summarize", "riskTier", "blockers", "extract", "score"],
+  required: [
+    "classify",
+    "summarize",
+    "riskTier",
+    "blockers",
+    "extract",
+    "score",
+    "injectionSuspected",
+    "injectionReason",
+  ],
   properties: {
     classify: {
       type: "object",
@@ -132,7 +161,22 @@ export const RELEASE_INTEL_JSON_SCHEMA = {
     },
     summarize: { type: "string" },
     riskTier: { type: "string", enum: ["low", "medium", "high"] },
-    blockers: { type: "array", items: { type: "string" } },
+    blockers: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["path", "line", "evidence", "severity"],
+        properties: {
+          path: { type: "string" },
+          line: { type: "integer" },
+          evidence: { type: "string" },
+          severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        },
+      },
+    },
+    injectionSuspected: { type: "boolean" },
+    injectionReason: { type: "string" },
     extract: { type: "array", items: { type: "string" } },
     score: {
       type: "object",
@@ -153,6 +197,8 @@ export function trustCheckGrokIntelPayload(payload: {
   summarize?: unknown;
   riskTier?: unknown;
   blockers?: unknown;
+  injectionSuspected?: unknown;
+  injectionReason?: unknown;
 }): { ok: true; confidence: number } | { ok: false; reason: string } {
   if (!payload.classify || payload.summarize == null) {
     return { ok: false, reason: "missing classify/summarize" };
@@ -179,8 +225,38 @@ export function trustCheckGrokIntelPayload(payload: {
   if (payload.riskTier !== "low" && payload.riskTier !== "medium" && payload.riskTier !== "high") {
     return { ok: false, reason: "riskTier invalid" };
   }
-  if (!Array.isArray(payload.blockers) || payload.blockers.some((item) => typeof item !== "string")) {
-    return { ok: false, reason: "blockers must be string[]" };
+  if (!Array.isArray(payload.blockers)) {
+    return { ok: false, reason: "blockers must be an array" };
+  }
+  for (const item of payload.blockers) {
+    if (!item || typeof item !== "object") return { ok: false, reason: "blocker must be an object" };
+    const blocker = item as Record<string, unknown>;
+    if (typeof blocker.path !== "string" || !blocker.path.trim()) {
+      return { ok: false, reason: "blocker.path invalid" };
+    }
+    if (typeof blocker.line !== "number" || !Number.isInteger(blocker.line) || blocker.line < 1) {
+      return { ok: false, reason: "blocker.line invalid" };
+    }
+    if (typeof blocker.evidence !== "string" || !blocker.evidence.trim()) {
+      return { ok: false, reason: "blocker.evidence invalid" };
+    }
+    if (
+      blocker.severity !== "low" &&
+      blocker.severity !== "medium" &&
+      blocker.severity !== "high" &&
+      blocker.severity !== "critical"
+    ) {
+      return { ok: false, reason: "blocker.severity invalid" };
+    }
+  }
+  if (typeof payload.injectionSuspected !== "boolean") {
+    return { ok: false, reason: "injectionSuspected must be boolean" };
+  }
+  if (typeof payload.injectionReason !== "string") {
+    return { ok: false, reason: "injectionReason must be a string" };
+  }
+  if (payload.injectionSuspected && !payload.injectionReason.trim()) {
+    return { ok: false, reason: "injectionReason required when injection is suspected" };
   }
   return { ok: true, confidence };
 }
@@ -211,8 +287,13 @@ export async function runGrokReleaseIntel(
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const promptCacheKey = releaseIntelPromptCacheKey(input.repository, input.pullRequest);
-  const system =
-    "You are Release Desk Grok intel. Return ONLY JSON matching the schema: classify{category,confidence 0-1}, summarize, riskTier low|medium|high, blockers string[], extract string[], score{level,rationale}. Do not approve merges.";
+  const system = RELEASE_INTEL_SYSTEM_PROMPT;
+  const user = buildReleaseIntelUserContent({
+    repository: input.repository,
+    title: input.goal,
+    diff: input.diff ?? null,
+    findings: input.findings,
+  });
 
   try {
     const startedAt = performance.now();
@@ -240,18 +321,11 @@ export async function runGrokReleaseIntel(
           },
           messages: [
             { role: "system", content: system },
-            {
-              role: "user",
-              content: JSON.stringify({
-                repository: input.repository,
-                goal: input.goal,
-                findings: input.findings.slice(0, RELEASE_INTEL_FINDINGS_LIMIT),
-              }),
-            },
+            { role: "user", content: user },
           ],
         }),
       ),
-      signal: AbortSignal.timeout(GROK_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(RELEASE_INTEL_TIMEOUT_MS),
     });
 
     assertGrokChatStatus(res.status);
@@ -295,9 +369,9 @@ export async function runGrokReleaseIntel(
     );
 
     const riskTier = parsed.riskTier as ReleaseIntelRiskTier;
-    const blockers = Array.isArray(parsed.blockers)
-      ? parsed.blockers.map((item) => String(item)).filter(Boolean)
-      : [];
+    const partitioned = partitionGroundedBlockers(parsed.blockers, input.diff?.files ?? [], input.knownPaths);
+    const injectionSuspected = parsed.injectionSuspected === true;
+    const injectionReason = typeof parsed.injectionReason === "string" ? parsed.injectionReason : "";
     return {
       mode: "live",
       label: "LIVE",
@@ -314,10 +388,15 @@ export async function runGrokReleaseIntel(
       score: { level: scoreLevel, rationale: scoreRationale },
       summarize: String(parsed.summarize),
       riskTier,
-      blockers,
+      blockers: partitioned.grounded.map(groundedBlockerLabel),
+      groundedBlockers: partitioned.grounded,
+      droppedUngrounded: partitioned.dropped,
+      injectionSuspected,
+      injectionReason,
       trustCheck: trustNotes([
         `LIVE Grok API via exclusive ${INTEL_KEY_ENV}`,
         "Schema trust check passed",
+        "Blockers that the diff does not support were dropped",
         "Human merge/release gates remain authoritative",
       ]),
       mocked: false,

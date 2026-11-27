@@ -54,7 +54,7 @@ Open [http://localhost:3002](http://localhost:3002).
 
 1. Open Release Desk on port **3002** and read a handover at `/handoff` (set `RELEASEDESK_LOG_DIR`, or import a `.jsonl` file in the browser).
 2. Follow one PID-ER request in [the demo script](./docs/sdlc/demo-script.md). Change Analyst raises finance, Security raises the iteration gate, and Builder raises release. Vishal decides in that bot's chat.
-3. A release-intel comment appears on a pull request only when `RELEASEDESK_GROK_API_KEY_LEAD` is set. A missing key fails the check. CI does not invent a result. The comment names the PR head commit, the model that answered, token usage, latency and an estimated cost, and carries a hidden machine block that Builder copies into `build-result` ([format](./docs/grok-release-intel-report.md)).
+3. A release-intel comment appears on a pull request only when `RELEASEDESK_GROK_API_KEY_LEAD` is set. A missing key fails the check. CI does not invent a result. The comment names the PR head commit, grounded blockers (`path:line` plus the changed line), anything dropped because the diff does not support it, the model, token usage, latency, the billed cost when xAI reports `cost_in_usd_ticks` (otherwise "billed cost not reported"), and a separately labelled estimate. Builder copies the hidden machine block into `build-result` ([format](./docs/grok-release-intel-report.md)). Grok stays advisory. Live evals run only with the `run-grok-evals` label or a manual workflow run.
 4. Open the KYC demo on port 3000: draft an application, add document placeholders, submit, and use the analyst actions. **Load sample data** on `/applications` for pre-built cases.
 
 ## Mocked integrations (labeled in UI/API)

@@ -2,6 +2,8 @@ name: release-intel
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -9,6 +11,7 @@ permissions:
 
 jobs:
   intel:
+    if: github.event_name == 'pull_request' && github.event.action != 'labeled'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,3 +43,22 @@ jobs:
           else
             gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$(cat "$RUNNER_TEMP/release-intel-comment.md")"
           fi
+
+  # Live Grok evals. They do not run on an ordinary pull request.
+  # Add the label run-grok-evals, or run this workflow by hand.
+  grok-evals:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-grok-evals')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:core
+      - name: Live release-intel evals
+        env:
+          RELEASEDESK_GROK_API_KEY_LEAD: ${{ secrets.RELEASEDESK_GROK_API_KEY_LEAD }}
+          GROK_MODEL: ${{ vars.GROK_MODEL }}
+        run: ./node_modules/.bin/tsx evals/release-intel/run.ts
