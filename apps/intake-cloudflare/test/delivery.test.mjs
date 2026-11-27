@@ -14,7 +14,7 @@ afterEach(() => restore());
 function recorder(status, calls) {
   return async (url, init) => {
     if (url !== HOOK) throw new Error("unexpected url " + url);
-    calls.push({ url, headers: init.headers, body: JSON.parse(init.body), hasTimeout: init.signal instanceof AbortSignal });
+    calls.push({ url, headers: init.headers, raw: init.body, body: JSON.parse(init.body), hasTimeout: init.signal instanceof AbortSignal });
     return new Response("{}", { status });
   };
 }
@@ -34,10 +34,47 @@ test("webhook delivery: bearer auth, signed envelope, outbox marked sent", async
   assert.equal(body.leadBotId, "46e50097-0409-4972-9be0-6ade37563135");
   assert.equal(body.signature.alg, "HMAC-SHA256"); assert.equal(body.signature.over, 'ts + "." + payloadJson');
   assert.equal(body.signature.hex, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${body.signature.ts}.${body.payloadJson}`).digest("hex"));
-  assert.deepEqual(JSON.parse(body.payloadJson), body.payload);
-  assert.equal(body.payload.humanGate, null); assert.equal(body.payload.finance.gate.decidedBy, null);
+  assert.ok(!("payload" in body), "the payload travels once, as payloadJson");
+  const payload = JSON.parse(body.payloadJson);
+  assert.equal(payload.humanGate, null); assert.equal(payload.finance.gate.decidedBy, null);
+  assert.ok(!("deliveryTrimmed" in payload), "a normal ER card is not trimmed");
   const row = env.DB.raw.prepare("SELECT state, attempts FROM outbox").get();
   assert.deepEqual({ ...row }, { state: "sent", attempts: 1 });
+});
+
+test("large PID-NC website envelope stays under the webhook byte limit, keeps its signature first, and verifies", async () => {
+  const calls = [];
+  globalThis.fetch = recorder(202, calls);
+  const env = webhookEnv();
+  const big = { route: "website", pid: "PID-NC", catalogueOptionId: "NC-WEBSITE", addOns: ["ADD-NC-WEB-SITE", "ADD-NC-WEB-FORMS", "ADD-NC-WEB-AI"],
+    contactName: "Jane \"Quote\" Doe", email: "jane@example.com", company: "Acme & Sons <Holdings>", legalName: "Acme Pvt Ltd", jurisdiction: "India", sponsor: "R. Rao, CFO",
+    siteName: "Acme Lending", purpose: "P\"".repeat(300), audience: "A".repeat(300), pages: "Home, \"Products\", ".repeat(30).slice(0, 600),
+    mustHaveFeatures: "F\\".repeat(300), brandAssets: "B".repeat(400), domainHosting: "D".repeat(300), budgetBand: "300k_plus", desiredBy: "2027-01-31",
+    title: "T".repeat(150), description: "Notes \u00e9\u4e2d\"".repeat(500).slice(0, 4000), urgency: "critical", artifactLinks: [], website: "", consent: true };
+  const r = await call(worker, env, jsonReq("/api/intake.php", big));
+  assert.equal(r.status, 200, r.text);
+  const raw = calls[0].raw;
+  assert.ok(Buffer.byteLength(raw, "utf8") <= W.DELIVERY_MAX_BYTES_DEFAULT, `envelope ${Buffer.byteLength(raw, "utf8")} bytes`);
+  assert.ok(raw.indexOf('"signature"') < raw.indexOf('"payloadJson"'), "signature precedes payloadJson");
+  const body = JSON.parse(raw);
+  assert.equal(body.signature.hex, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${body.signature.ts}.${body.payloadJson}`).digest("hex"));
+  const sent = JSON.parse(body.payloadJson);
+  assert.equal(sent.requestType, "website-creation"); assert.equal(sent.pid, "PID-NC");
+  assert.ok(Array.isArray(sent.deliveryTrimmed) && sent.deliveryTrimmed.length >= 1, JSON.stringify(sent.deliveryTrimmed));
+  assert.equal(sent.ask.notes, null);
+  assert.ok(sent.ask.description.includes("trimmed for delivery"));
+  // The stored card is complete; only the delivered copy is trimmed.
+  const stored = JSON.parse(env.DB.raw.prepare("SELECT card_json FROM submissions WHERE request_id = ?").get(r.json.referenceId).card_json);
+  assert.ok(!("deliveryTrimmed" in stored)); assert.equal(stored.ask.notes, stored.ask.description); assert.ok(!stored.ask.description.includes("trimmed for delivery"));
+  assert.equal(JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE request_id = ?").get(r.json.referenceId).envelope_json).payloadJson, body.payloadJson);
+});
+
+test("deliveryFit: a small payload is untouched; a tiny LEAD_WEBHOOK_MAX_BYTES that cannot fit is a real error", async () => {
+  const cfg = { LEAD_HMAC_SECRET: "k".repeat(64) };
+  const [env, trimmed] = await W.deliveryFit(cfg, "visitor-message", "REQ-20261127-000001", { message: "hi" }, 1795813322);
+  assert.deepEqual(trimmed, []); assert.deepEqual(JSON.parse(env.payloadJson), { message: "hi" });
+  assert.equal(W.deliveryMaxBytes({ LEAD_WEBHOOK_MAX_BYTES: "50" }), W.DELIVERY_MAX_BYTES_DEFAULT, "out-of-range override falls back");
+  await assert.rejects(W.deliveryFit({ ...cfg, LEAD_WEBHOOK_MAX_BYTES: 2000 }, "visitor-message", "REQ-20261127-000001", { message: "x".repeat(3000) }, 1795813322), /Refusing to send/);
 });
 
 test("webhook delivery: header:<Name> auth style", async () => {

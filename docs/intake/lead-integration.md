@@ -33,6 +33,14 @@ Intake-card additions for request types: `requestType` (`website-creation`, `new
 Envelope: `{source, kind: intake-card|visitor-message, requestId, to, leadBotId, sentAt, untrusted: true, note, payload, payloadJson, signature{alg, ts, over, hex}}`.
 `signature.hex = HMAC-SHA256(LEAD_HMAC_SECRET, ts + "." + payloadJson)` lets Lead verify origin even if the webhook URL leaks.
 
+Cloudflare build (`apps/intake-cloudflare`, the live site): the envelope is `{source, kind, requestId, to, leadBotId, sentAt, untrusted, note, signature, payloadJson}`. There is no separate `payload` object: verify the signature over `payloadJson`, then parse it. `signature` comes before `payloadJson`, so a body cut short still carries its signature and fails verification instead of arriving unsigned. Each envelope stays under `LEAD_WEBHOOK_MAX_BYTES` (default 7,600 bytes) because the webhook receiver cut a 10,996-byte envelope short. When a card would be larger, the delivered copy is reduced in this order. Every step is listed in `payload.deliveryTrimmed`, inside the signed bytes:
+1. `ask.notes` when it only repeats `ask.description`.
+2. Finance lines down to `serviceId`, `qty` and `lineTotalInr`.
+3. The fixed `leadInstructions` and `finance.notice` text.
+4. A shortened description, then the long website brief fields, then the handoff summary.
+
+The full card stays in D1 `submissions`.
+
 ## Lead -> Site (outbound)
 Lead runs `curl` from its computer with the shared secret from its vault (skills `finance-estimate`, `public-status-update`).
 Both endpoints need `X-Intake-Timestamp` (±300 s) and `X-Intake-Signature = hex HMAC-SHA256(secret, ts + "." + rawBody)`.

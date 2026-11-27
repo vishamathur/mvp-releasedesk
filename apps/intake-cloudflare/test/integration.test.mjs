@@ -224,7 +224,7 @@ test("visitor message on the status page goes to the outbox; closed requests ref
   assert.equal(r.status, 200, r.text);
   const row = env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE kind = 'visitor-message'").get();
   const envl = JSON.parse(row.envelope_json);
-  assert.equal(envl.payload.message, "Any update?"); assert.equal(envl.payload.currentPublicStatus, "received");
+  const vp = JSON.parse(envl.payloadJson); assert.equal(vp.message, "Any update?"); assert.equal(vp.currentPublicStatus, "received");
   r = await call(worker, env, jsonReq("/api/status.php", { ref: json.referenceId, token: json.statusToken, message: "x" })); assert.equal(r.status, 400);
   r = await call(worker, env, jsonReq("/api/status.php", { ref: json.referenceId, token: "0".repeat(32), message: "hello" })); assert.equal(r.status, 404);
   env.DB.raw.prepare("UPDATE status SET status = 'rejected' WHERE request_id = ?").run(json.referenceId);
