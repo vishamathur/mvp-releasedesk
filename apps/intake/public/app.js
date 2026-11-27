@@ -14,6 +14,9 @@
     artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
     catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
 
+  // One random id per page load: the server hashes it into Grok's safety_identifier and rejects chat without it.
+  const sessionId = "s_" + crypto.randomUUID();
+
   // ---- route selection
   let route = null;
   const form = $("#intake-form");
@@ -53,7 +56,7 @@
     input.value = ""; say("user", text);
     const typing = el("div", "…", "msg assistant typing"); $("#chat-log").appendChild(typing);
     try {
-      const [r, d] = await post("api/chat.php", { route, messages: chat.slice(-12) });
+      const [r, d] = await post("api/chat.php", { route, sessionId, messages: chat.slice(-12) });
       typing.remove();
       if (!r.ok) { say("assistant", d.message || "Sorry, I couldn't respond. Please use the form."); return; }
       say("assistant", d.reply);

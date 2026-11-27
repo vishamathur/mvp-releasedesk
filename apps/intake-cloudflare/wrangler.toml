@@ -12,7 +12,7 @@ compatibility_date = "2026-11-01"
 [vars]
 GROK_MODEL = "grok-4.20-0309-non-reasoning"
 GROK_BASE_URL = "https://api.x.ai/v1"
-ALLOWED_ORIGINS = "https://intake.vishalmathur.org"
+ALLOWED_ORIGINS = "https://intake.vishalmathur.org,https://vishalmathur-intake.pages.dev"
 PUBLIC_HOST = "intake.vishalmathur.org"
 RATE_LIMIT_MAX = "5"
 RATE_LIMIT_WINDOW_SEC = "600"
@@ -25,6 +25,6 @@ LEAD_WEBHOOK_AUTH = "bearer"
 [[d1_databases]]
 binding = "DB"
 database_name = "vishalmathur-intake"
-# Replace with the id printed by `npx wrangler d1 create vishalmathur-intake`. An id is not a secret.
-database_id = "00000000-0000-0000-0000-000000000000"
+# Created 27 Nov 2026 in the vishalmathur-intake account (location hint apac). An id is not a secret.
+database_id = "7254c9f0-a0ce-4839-b8d7-cbfb56fb8ec5"
 migrations_dir = "migrations"
