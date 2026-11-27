@@ -93,8 +93,12 @@ export const OwaspReviewReportSchema = z.object({
       evidence: z.string(),
       suggestedFix: FixSchema,
       autoFixable: z.boolean(),
+      mandatory: z.boolean().default(false),
+      mandatoryReasons: z.array(z.string()).default([]),
+      cwe: z.array(z.string()).default([]),
     }),
   ),
+  mandatoryBlockers: z.number().int().nonnegative().default(0),
   droppedUngrounded: z.array(
     z.object({
       id: z.string(),
@@ -154,14 +158,16 @@ function outcomeLine(report: OwaspReviewReport): string {
 export function renderOwaspReviewComment(report: OwaspReviewReport): string {
   const commit = report.headSha ? `\`${report.headSha.slice(0, 7)}\` (\`${report.headSha}\`)` : "unknown";
   const key = report.keyEnvVar ?? "none";
-  const failures = report.failures.length
-    ? report.failures
-        .map((failure) => {
-          const fix = sanitizeInline(failure.suggestedFix.what, 180);
-          return `- **${failure.id}** \`${failure.path}:${failure.line}\` ${failure.severity}. Evidence: \`${sanitizeInline(failure.evidence, 160)}\`. Fix: ${fix}`;
-        })
-        .join("\n")
-    : "_None._";
+  const failureLine = (failure: OwaspReviewReport["failures"][number]): string => {
+    const fix = sanitizeInline(failure.suggestedFix.what, 180);
+    const cwe = failure.cwe.length ? ` ${failure.cwe.join(", ")}.` : "";
+    const why = failure.mandatory ? ` Blocks because: ${sanitizeInline(failure.mandatoryReasons.join("; "), 200)}.` : "";
+    return `- **${failure.id}** \`${failure.path}:${failure.line}\` ${failure.severity}.${cwe}${why} Evidence: \`${sanitizeInline(failure.evidence, 160)}\`. Fix: ${fix}`;
+  };
+  const mandatoryFailures = report.failures.filter((failure) => failure.mandatory);
+  const otherFailures = report.failures.filter((failure) => !failure.mandatory);
+  const mandatory = mandatoryFailures.length ? mandatoryFailures.map(failureLine).join("\n") : "_None._";
+  const failures = otherFailures.length ? otherFailures.map(failureLine).join("\n") : "_None._";
   const exceptions = report.exceptions.length
     ? report.exceptions
         .map((item) => {
@@ -182,11 +188,20 @@ export function renderOwaspReviewComment(report: OwaspReviewReport): string {
     outcomeLine(report),
     "",
   ];
+  if (mandatoryFailures.length) {
+    lines.push(
+      `**This check fails: ${mandatoryFailures.length} mandatory blocker${mandatoryFailures.length === 1 ? "" : "s"}.** Mandatory blockers are authentication failures, broken access control, hard-coded secrets in production code and anything rated high or critical. They block whatever severity was given, and each one closes only with a passing test.`,
+      "",
+    );
+  }
   if (report.error) {
     lines.push(`**Error:** ${sanitizeInline(report.error, 500)}`, "");
   }
   lines.push(
-    "### Failures handed to Builder",
+    "### Mandatory blockers",
+    mandatory,
+    "",
+    "### Other failures handed to Builder",
     failures,
     "",
     "### Exceptions",

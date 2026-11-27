@@ -1,0 +1,31 @@
+# Cloudflare Pages project for intake.vishalmathur.org (advanced mode: dist/_worker.js).
+# Build first: node apps/intake-cloudflare/scripts/build.mjs
+# NO SECRETS IN THIS FILE. Set these with `npx wrangler pages secret put <NAME> --project-name vishalmathur-intake`:
+#   GROK_API_KEY       xAI key for chat and free-text finance estimates (server only)
+#   LEAD_HMAC_SECRET   >= 32 chars (openssl rand -hex 32); the same value as Lead's vault entry intake-site-hmac
+#   LEAD_WEBHOOK_KEY   the Lead intake routine's webhook secret key
+#   LEAD_WEBHOOK_URL   the Lead intake routine's webhook URL (https)
+#   LEAD_FETCH_KEY     32-byte hex key Lead sends as Bearer to GET /api/envelope.php
+name = "vishalmathur-intake"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+[vars]
+GROK_MODEL = "grok-4.20-0309-non-reasoning"
+GROK_BASE_URL = "https://api.x.ai/v1"
+ALLOWED_ORIGINS = "https://intake.vishalmathur.org,https://vishalmathur-intake.pages.dev"
+PUBLIC_HOST = "intake.vishalmathur.org"
+RATE_LIMIT_MAX = "5"
+RATE_LIMIT_WINDOW_SEC = "600"
+CHAT_RATE_LIMIT_MAX = "30"
+RETENTION_DAYS = "30"
+LEAD_BOT_ID = "46e50097-0409-4972-9be0-6ade37563135"
+LEAD_DELIVERY = "webhook"
+LEAD_WEBHOOK_AUTH = "bearer"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vishalmathur-intake"
+# Created 27 Nov 2026 in the vishalmathur-intake account (location hint apac). An id is not a secret.
+database_id = "7254c9f0-a0ce-4839-b8d7-cbfb56fb8ec5"
+migrations_dir = "migrations"

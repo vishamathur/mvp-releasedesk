@@ -177,6 +177,38 @@
   ],
   "newApplications": [
     {
+      "id": "NC-WEBSITE",
+      "name": "Website creation",
+      "description": "A new website built end to end: discovery, one site build, a medium UI and content pass, security review and release support.",
+      "billOfMaterials": [
+        {"serviceId": "SVC-DISC", "qty": 1},
+        {"serviceId": "SVC-WEB", "qty": 1},
+        {"serviceId": "SVC-UI-M", "qty": 1},
+        {"serviceId": "SVC-SEC", "qty": 1},
+        {"serviceId": "SVC-REL", "qty": 1}
+      ],
+      "addOns": [
+        {
+          "id": "ADD-NC-WEB-SITE",
+          "name": "Second site or microsite",
+          "description": "One more site or microsite on the same brand.",
+          "billOfMaterials": [{"serviceId": "SVC-WEB", "qty": 1}]
+        },
+        {
+          "id": "ADD-NC-WEB-FORMS",
+          "name": "Forms and system integration",
+          "description": "Connect the site's contact or lead form to one existing system.",
+          "billOfMaterials": [{"serviceId": "SVC-API", "qty": 1}]
+        },
+        {
+          "id": "ADD-NC-WEB-AI",
+          "name": "Grok assistant on the site",
+          "description": "A small Grok-powered assistant for visitors, built as a GenAI pilot.",
+          "billOfMaterials": [{"serviceId": "SVC-AI", "qty": 1}]
+        }
+      ]
+    },
+    {
       "id": "NC-KYC",
       "name": "KYC onboarding app",
       "description": "A new KYC onboarding application: discovery, the onboarding module, security review and release support.",

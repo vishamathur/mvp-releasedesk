@@ -40,6 +40,12 @@ export type OwaspFailure = {
   evidence: string;
   suggestedFix: OwaspSuggestedFix;
   autoFixable: boolean;
+  /** True when the finding blocks whatever severity it was given. See mandatory-blockers.ts. */
+  mandatory: boolean;
+  /** Why it is mandatory, in plain words. Empty when it is not. */
+  mandatoryReasons: string[];
+  /** CWE ids on the finding, such as CWE-307. */
+  cwe: string[];
 };
 
 export type OwaspDropped = {
@@ -106,6 +112,8 @@ export type OwaspReviewReport = {
   selectedControlIds: OwaspControlId[];
   controls: OwaspControlResult[];
   failures: OwaspFailure[];
+  /** Count of failures that are mandatory blockers. The OWASP check fails when this is above zero. */
+  mandatoryBlockers: number;
   droppedUngrounded: OwaspDropped[];
   exceptions: OwaspException[];
   /** Consecutive completed-review FAILs per control, including this head. */
