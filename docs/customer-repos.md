@@ -23,7 +23,7 @@ npm run customer-repo -- --customer "Northwind Bank" --customer-id cust_northwin
   --state /workspace/releasedesk-state/REQ-2026-0001.json --dry-run
 ```
 
-Drop `--dry-run` to run it. Steps, in order; any failure stops the run with the real error:
+Drop `--dry-run` to run it. Steps, in order. Any failure stops the run with the real error, with one exception for branch protection on GitHub Free (below):
 
 | Step | What | Call |
 | --- | --- | --- |
@@ -31,13 +31,13 @@ Drop `--dry-run` to run it. Steps, in order; any failure stops the run with the 
 | finance guard | Refuse unless `decisions[]` or a transition `humanDecision` has `gate: finance-approval`, `status: approved` and a named `decidedBy` | local |
 | check-free | Refuse if the repo already exists | `gh repo view` |
 | create | Private repo from the template | `gh repo create <owner>/<name> --private --template vishamathur/releasedesk-customer-template` |
-| protect | `main`: PR required, 1 approving review, required checks `ci`, `grok-review / review`, `owasp-review / review`, no force-push, no deletion | `PUT /repos/{repo}/branches/main/protection` |
+| protect | `main`: PR required, 1 approving review, required checks `ci`, `grok-review / review`, `owasp-review / review`, no force-push, no deletion. On GitHub's 403 plan-upgrade error: record `unavailable-free-plan`, warn, continue. Any other error stops before a key exists | `PUT /repos/{repo}/branches/main/protection` |
 | labels | Labels from the template's `.github/labels.yml` | `gh label create --force` |
 | mint key | Per-repo Grok key `releasedesk-<owner>-<name>`, ACLs `api-key:endpoint:chat`, `api-key:model:grok-4.3` | xAI Management API `POST https://management-api.x.ai/auth/teams/{teamId}/api-keys` |
 | set secret | `RELEASEDESK_GROK_API_KEY_LEAD` from stdin; the value is never printed or put in argv. If this fails the new key is deleted | `gh secret set ... -R <repo>` |
 | customer record | `metadata.repository`, `metadata.baseRef` on the customer | `FileCustomerStore` |
-| request target | `target: { repository, baseRef, source, setAt, setBy, grokKeyId }` in the state file | local |
-| audit | One `customer-repo-audit.v1` line: request, repo, finance approver, key id, time | `releasedesk-log/customer-repos.audit.jsonl` |
+| request target | `target: { repository, baseRef, source, setAt, setBy, grokKeyId, protection }` in the state file | local |
+| audit | One `customer-repo-audit.v1` line: request, repo, finance approver, key id, `protection`, time | `releasedesk-log/customer-repos.audit.jsonl` |
 
 Archive on reject:
 
@@ -58,6 +58,6 @@ It refuses unless the state has a rejected gate decision and the state's `target
 
 ## Known limits
 
-- **Branch protection on private repos** needs GitHub Pro (or a Team/Enterprise org). On GitHub Free the protect step fails with GitHub's 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." The script stops there, after the repo was created and before any key is minted.
+- **Branch protection on private repos (GitHub Free, no paid upgrade).** GitHub answers the protection call with 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." The script matches that exact message with HTTP 403 only. It then records `protection: "unavailable-free-plan"` in the request target and the audit line, prints a warning that `main` is **not enforced by GitHub** and that enforcement relies on the Release Desk gates (the typed security-compliance and release gates, and required reviews by the Release Desk bots), and continues with labels, key, customer record and target. Any other protection error (other 403s, 404, 422, network) still stops the run before a key exists. `protection` values: `applied`, `unavailable-free-plan`.
 - **Reusable review workflows.** The template's `grok-review.yml` and `owasp-review.yml` call `release-intel-reusable.yml` and `owasp-review-reusable.yml` in this repo (`workflow_call`). Those two files must land in `.github/workflows/` here first.
 - The tests (`packages/releasedesk-core/src/customer-repo/index.test.ts`) cover the name rule, the finance guard and dry-run planning. They make no network calls.

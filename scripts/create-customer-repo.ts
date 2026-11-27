@@ -13,7 +13,9 @@
  *
  * Env: XAI_MANAGEMENT_API_KEY (required to mint or revoke), XAI_TEAM_ID (optional; read from the
  * management key validation endpoint when unset). gh must be logged in with the repo scope.
- * Every failure exits 1 with the real error. Nothing falls back. Secret values are never printed.
+ * Every failure exits 1 with the real error, with one recorded exception: GitHub's 403 plan-upgrade
+ * error on branch protection (private repo on GitHub Free) is recorded as protection
+ * "unavailable-free-plan", warned about, and the run continues. Secret values are never printed.
  */
 import { execFileSync } from "node:child_process";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -24,6 +26,9 @@ import {
   branchProtectionBody,
   CustomerRepoError,
   DEFAULT_REQUIRED_CHECKS,
+  FREE_PLAN_PROTECTION_WARNING,
+  GITHUB_FREE_PLAN_PROTECTION_MESSAGE,
+  isFreePlanProtectionError,
   DEFAULT_KEY_ACLS,
   GROK_KEY_SECRET_NAME,
   grokKeyName,
@@ -38,6 +43,7 @@ import {
   xaiValidateManagementKeyRequest,
   type HttpRequestSpec,
   type PlanStep,
+  type ProtectionStatus,
 } from "../packages/releasedesk-core/src/customer-repo/index.ts";
 
 type Args = Record<string, string | true>;
@@ -179,12 +185,22 @@ async function create(args: Args): Promise<void> {
   }
   if (!ready) throw new CustomerRepoError(`${repo} has no ${plan.baseRef} branch after 60 s`);
 
-  // Protection: a 403 (for example a private repo on GitHub Free) stops the run with GitHub's message.
-  gh(
-    ["api", "-X", "PUT", `repos/${repo}/branches/${plan.baseRef}/protection`, "--input", "-"],
-    JSON.stringify(branchProtectionBody(options.requiredChecks)),
-  );
-  process.stdout.write(`protected ${plan.baseRef}\n`);
+  // Protection. Only GitHub's 403 plan-upgrade error (private repo on GitHub Free) is tolerated:
+  // record it, warn, and continue. Any other error stops here, before a key exists.
+  let protection: ProtectionStatus;
+  try {
+    gh(
+      ["api", "-X", "PUT", `repos/${repo}/branches/${plan.baseRef}/protection`, "--input", "-"],
+      JSON.stringify(branchProtectionBody(options.requiredChecks)),
+    );
+    protection = "applied";
+    process.stdout.write(`protected ${plan.baseRef}\n`);
+  } catch (err) {
+    const text = err instanceof Error ? err.message : String(err);
+    if (!isFreePlanProtectionError(text)) throw err;
+    protection = "unavailable-free-plan";
+    process.stderr.write(`${FREE_PLAN_PROTECTION_WARNING}\nGitHub said: ${GITHUB_FREE_PLAN_PROTECTION_MESSAGE} (HTTP 403)\n`);
+  }
 
   const labelsText = gh(["api", `repos/${repo}/contents/.github/labels.yml`, "-H", "Accept: application/vnd.github.raw"]);
   for (const label of parseLabelsFile(labelsText)) {
@@ -224,6 +240,7 @@ async function create(args: Args): Promise<void> {
     setAt: at,
     setBy: `create-customer-repo (finance approved by ${plan.financeApproval.decidedBy})`,
     grokKeyId: apiKeyId,
+    protection,
   };
   await writeJson(statePath, fresh);
 
@@ -238,12 +255,13 @@ async function create(args: Args): Promise<void> {
       baseRef: plan.baseRef,
       financeApprovedBy: plan.financeApproval.decidedBy,
       grokKeyId: apiKeyId,
-      protection: "applied",
+      protection,
       at,
       by: "create-customer-repo",
     }),
   );
-  process.stdout.write(`done: ${repo}\n`);
+  process.stdout.write(`done: ${repo} (protection: ${protection})\n`);
+  if (protection === "unavailable-free-plan") process.stderr.write(`${FREE_PLAN_PROTECTION_WARNING}\n`);
 }
 
 async function archive(args: Args): Promise<void> {

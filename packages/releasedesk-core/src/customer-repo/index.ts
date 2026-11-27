@@ -155,6 +155,25 @@ export function branchProtectionBody(requiredChecks: string[]) {
   };
 }
 
+/** GitHub's exact plan-upgrade message for protection or rulesets on a private repo on GitHub Free. */
+export const GITHUB_FREE_PLAN_PROTECTION_MESSAGE =
+  "Upgrade to GitHub Pro or make this repository public to enable this feature.";
+
+export type ProtectionStatus = "applied" | "unavailable-free-plan" | "not-applied";
+
+export const FREE_PLAN_PROTECTION_WARNING =
+  "WARNING: GitHub branch protection is unavailable on this private repo (GitHub Free plan; no paid upgrade). " +
+  "main is NOT enforced by GitHub. Enforcement relies on the Release Desk gates: the typed security-compliance " +
+  "and release gates, and required reviews by the Release Desk bots. Merge only through those gates.";
+
+/**
+ * True only for GitHub's 403 plan-upgrade error. Any other failure (auth, 404, 422, network)
+ * returns false and must stop the run before a key exists.
+ */
+export function isFreePlanProtectionError(errorText: string): boolean {
+  return errorText.includes(GITHUB_FREE_PLAN_PROTECTION_MESSAGE) && /\b403\b/.test(errorText);
+}
+
 export type HttpRequestSpec = {
   method: "GET" | "POST" | "DELETE";
   url: string;
@@ -237,7 +256,7 @@ export function planCreateCustomerRepo(options: CreateOptions, state: unknown): 
     { id: "wait-main", description: `wait for ${baseRef} to exist`, gh: ["api", `repos/${repository}/branches/${baseRef}`] },
     {
       id: "protect",
-      description: `protect ${baseRef}: PR required, 1 review, checks ${checks.join(", ")}, no force-push, no deletion`,
+      description: `protect ${baseRef}: PR required, 1 review, checks ${checks.join(", ")}, no force-push, no deletion (GitHub Free 403 plan-upgrade: record unavailable-free-plan, warn, continue; any other error stops)`,
       gh: ["api", "-X", "PUT", `repos/${repository}/branches/${baseRef}/protection`, "--input", "-"],
     },
     { id: "labels", description: "create labels from .github/labels.yml", gh: ["label", "create", "<name>", "--color", "<color>", "--description", "<desc>", "--force", "-R", repository] },
@@ -295,7 +314,7 @@ export type AuditLine = {
   rejectedBy?: string;
   rejectedGate?: string;
   grokKeyId?: string | null;
-  protection: "applied" | "not-applied";
+  protection: ProtectionStatus;
   at: string;
   by: string;
 };

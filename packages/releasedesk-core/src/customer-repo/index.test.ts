@@ -5,6 +5,8 @@ import {
   CustomerRepoError,
   customerRepoName,
   DEFAULT_REQUIRED_CHECKS,
+  FREE_PLAN_PROTECTION_WARNING,
+  isFreePlanProtectionError,
   parseLabelsFile,
   planArchiveCustomerRepo,
   planCreateCustomerRepo,
@@ -207,5 +209,54 @@ describe("request bodies", () => {
       parseLabelsFile('# c\n- { name: "type:story", color: "1d76db", description: "User story" }\n'),
     ).toEqual([{ name: "type:story", color: "1d76db", description: "User story" }]);
     expect(() => parseLabelsFile('- { name: "x", color: "zz" }')).toThrow(/invalid entry/);
+  });
+});
+
+describe("branch protection on GitHub Free", () => {
+  // stderr from `gh api -X PUT repos/vishamathur/northwind-bank-kyc-identity/branches/main/protection`, 2026-11-27.
+  const freePlan =
+    "gh api -X PUT failed: gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)";
+
+  it("matches only GitHub's 403 plan-upgrade error", () => {
+    expect(isFreePlanProtectionError(freePlan)).toBe(true);
+    expect(isFreePlanProtectionError("gh api -X PUT failed: gh: Resource not accessible by integration (HTTP 403)")).toBe(false);
+    expect(isFreePlanProtectionError("gh api -X PUT failed: gh: Must have admin rights to Repository. (HTTP 403)")).toBe(false);
+    expect(isFreePlanProtectionError("gh api -X PUT failed: gh: Not Found (HTTP 404)")).toBe(false);
+    expect(isFreePlanProtectionError("gh api -X PUT failed: gh: Validation Failed (HTTP 422)")).toBe(false);
+    expect(isFreePlanProtectionError("gh api -X PUT failed: connect ETIMEDOUT")).toBe(false);
+    expect(
+      isFreePlanProtectionError("Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 500)"),
+    ).toBe(false);
+  });
+
+  it("warns that enforcement relies on the Release Desk gates", () => {
+    expect(FREE_PLAN_PROTECTION_WARNING).toMatch(/NOT enforced by GitHub/);
+    expect(FREE_PLAN_PROTECTION_WARNING).toMatch(/security-compliance/);
+    expect(FREE_PLAN_PROTECTION_WARNING).toMatch(/release gates/);
+    expect(FREE_PLAN_PROTECTION_WARNING).toMatch(/required reviews by the Release Desk bots/);
+  });
+
+  it("records unavailable-free-plan in the audit line", () => {
+    const line = JSON.parse(
+      auditLine({
+        schema: "customer-repo-audit.v1",
+        action: "create",
+        requestId: "REQ-2026-0004",
+        repository: "vishamathur/acme-ER",
+        protection: "unavailable-free-plan",
+        at: "2026-11-27T14:40:00+05:30",
+        by: "create-customer-repo",
+      }),
+    );
+    expect(line.protection).toBe("unavailable-free-plan");
+  });
+
+  it("plans protection before the key, with the free-plan rule in the step", () => {
+    const plan = planCreateCustomerRepo(baseOptions, approvedState);
+    const ids = plan.steps.map((s) => s.id);
+    expect(ids.indexOf("protect")).toBeLessThan(ids.indexOf("mint-key"));
+    expect(plan.steps.find((s) => s.id === "protect")?.description).toMatch(
+      /GitHub Free 403 plan-upgrade: record unavailable-free-plan, warn, continue; any other error stops/,
+    );
   });
 });
