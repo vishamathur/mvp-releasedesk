@@ -449,7 +449,10 @@ export {
   addedPatch,
   changedTexts,
   parseUnifiedHunks,
+  citationMatchesDiff,
+  evidenceMatchesHunk,
   partitionGrounded,
+  renderDiffSlices,
   renderNumberedDiff,
   type AddedLine,
   type GroundCandidate,
@@ -471,9 +474,13 @@ export {
 export {
   OWASP_CONFIDENCE_MIN,
   OWASP_REMEDIATION_ROUNDS,
+  OWASP_REVIEW_BATCH_SIZE,
   OWASP_REVIEW_KEY_ENV_LEAD,
   OWASP_REVIEW_KEY_ENV_SECURITY,
   OWASP_REVIEW_MAX_TOKENS,
+  OWASP_REVIEW_RETRY_DELAY_MS,
+  OWASP_REVIEW_TIMEOUT_MS,
+  PASS_STATIC_REASON,
   UNGROUNDED_REASON,
   callOwaspModel,
   decideOutcome,
@@ -498,7 +505,16 @@ export {
   type SelectionResult,
 } from "./owasp-review/select.js";
 
-export { runStaticChecks, type StaticFinding } from "./owasp-review/static-checks.js";
+export {
+  STATIC_COVERED_CONTROL_IDS,
+  isDetectorPatternLine,
+  isObviousFixtureSecret,
+  isSuppressedReviewFinding,
+  isTestFixturePath,
+  runStaticChecks,
+  staticCheckCovers,
+  type StaticFinding,
+} from "./owasp-review/static-checks.js";
 
 export {
   OWASP_EXCEPTION_TYPES,

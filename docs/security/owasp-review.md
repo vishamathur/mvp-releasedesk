@@ -14,7 +14,7 @@ This layer sits beside the existing release-intel review. It does not replace th
 
 The job reads `RELEASEDESK_GROK_API_KEY_SECURITY` when that secret is set. When it is unset, the job reads `RELEASEDESK_GROK_API_KEY_LEAD`. Both are real keys. The report field `keyEnvVar` is the variable name that supplied the key. The value is never written to the comment, the log, or the JSON. Shared `XAI_API_KEY` and `GROK_API_KEY` are not read. When neither exclusive variable is set, the job posts a skipped comment and exits 0. A skipped review is not a pass and is not `auto-proceed`.
 
-A Grok error, timeout, or invalid JSON posts a comment with status `failed`, risk `not_assessed`, and outcome `needs-human` (`REVIEW_FAILED`), then the job exits 1. A missing or failed review is never a pass and never `auto-proceed`.
+Each batch call uses a 90 second timeout. A timeout or an HTTP 5xx is retried once after a short wait. A second failure, any other Grok error, or invalid JSON posts a comment with status `failed`, risk `not_assessed`, and outcome `needs-human` (`REVIEW_FAILED`), then the job exits 1. A missing or failed review is never a pass and never `auto-proceed`.
 
 ## Catalogue
 
@@ -55,6 +55,8 @@ LLM controls matter on this repository because Release Desk itself calls the Gro
 
 `selectControls` is pure code. It does not call a model. It reads file paths and the text of added and deleted lines. Each run judges only the selected controls. Every unselected control is emitted as `NOT_APPLICABLE` with reason `not selected: no matching change` and is not sent to Grok.
 
+Selected controls go to Grok in batches of at most 6. The batches run concurrently. Each batch receives whole files. When those files do not fit the token budget, the batch is split by file (and a single oversized file is split into numbered chunks). Files are not dropped. `diffTruncated` stays false when every changed file was sent.
+
 The output records, on each selected control, the rule ids that selected it (`rules`) and the changed paths that matched (`paths`).
 
 A docs-only diff (every path ends in `.md`, `.mdx`, `.rst`, or `.adoc`, and none live under `.github/`) selects only X01. `docsOnly` is true on that report.
@@ -84,9 +86,13 @@ A docs-only diff (every path ends in `.md`, `.mdx`, `.rst`, or `.adoc`, and none
 
 High-confidence static checks run on added lines of selected controls: hard-coded secrets (X01), `eval` / raw HTML / shell interpolation (A03), a variable URL (A10), `path.join` of user input (X05), unsafe deserialization (A08), and MD5/SHA-1 used as a password hash (A02). Anything else is Grok's judgement, with a strict JSON schema. Static findings and model findings are both grounded in the diff.
 
+A regex literal that only names a sink is a detector, not a finding, so A03 does not fail that line. A quoted placeholder in a `*.test.ts` or `*.spec.ts` fixture (words such as `shared-xai-value`) is not an X01 finding. A live secret shape in a test file, such as `AKIA`, `ghp_`, or `sk-`, still is.
+
+When Grok returns `UNDECIDED` or confidence below 0.6 for a control the static check covers, and that check found nothing, the control is `PASS` with reason `PASS(static): deterministic check found nothing`. That is not an exception.
+
 ## Grounding
 
-A FAIL is kept only when the path is a changed file, the line sits in a changed hunk, and the evidence is a changed line in that hunk. A FAIL that fails that check is listed under `droppedUngrounded` and is not a pass. The control becomes `NOT_APPLICABLE` with reason `ungrounded finding dropped; not a pass`, unless another rule on this page escalates it.
+A FAIL is kept only when the path is a changed file, the line sits in a changed hunk, and the evidence matches a changed line in that hunk. Evidence may join consecutive changed lines in the same hunk after whitespace is collapsed, so a statement written on two lines still grounds. The cited line has to be one of those lines. A FAIL that fails that check is listed under `droppedUngrounded` and is not a pass. The control becomes `NOT_APPLICABLE` with reason `ungrounded finding dropped; not a pass`, unless another rule on this page escalates it.
 
 ## Outcomes
 
@@ -107,7 +113,7 @@ The first time a control FAILs, `failureRounds` is 1. The same control still FAI
 
 | Type | When |
 | --- | --- |
-| `AMBIGUOUS` | The model returns `UNDECIDED`, confidence is below 0.6, or the model verdict conflicts with a deterministic finding. |
+| `AMBIGUOUS` | The static check found a failure and Grok did not confirm it, or the static check does not cover the control and Grok is undecided on a changed line it cites. An undecided model on a covered control with no static finding is `PASS(static)`, not an exception. |
 | `FIX_DISPUTED` | Builder posts a dispute (`disputed: true` and a reason). |
 | `NOT_AUTO_FIXABLE` | A FAIL has `autoFixable: false` (a design decision, for example A04 or LLM09), or the same control is still FAIL after 2 remediation rounds. |
 | `MANUAL_REQUESTED` | The pull request has the label `security-manual-review`, or `OWASP_MANUAL_REVIEW` is `1`. |

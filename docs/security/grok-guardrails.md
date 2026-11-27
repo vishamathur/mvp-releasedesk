@@ -43,4 +43,4 @@ The Agents management call (`POST /v1/agents`) is not a chat completion. Its doc
 
 ## OWASP review
 
-The Security OWASP review (`packages/releasedesk-core/src/owasp-review/`) uses this same chat-completions body, the 30 second timeout, and the same rule for a 400 or 422: the call fails visibly. Status is `failed`, risk is not assessed, and the outcome is `needs-human`. The caller does not invent control verdicts. The key is `RELEASEDESK_GROK_API_KEY_SECURITY`, or `RELEASEDESK_GROK_API_KEY_LEAD` when the Security secret is unset. See `docs/security/owasp-review.md`.
+The Security OWASP review (`packages/releasedesk-core/src/owasp-review/`) uses this same chat-completions body, a 90 second timeout, and one retry after a timeout or a 5xx. A 400 or a 422 still fails immediately. Status is `failed`, risk is not assessed, and the outcome is `needs-human`. The caller does not invent control verdicts. The key is `RELEASEDESK_GROK_API_KEY_SECURITY`, or `RELEASEDESK_GROK_API_KEY_LEAD` when the Security secret is unset. See `docs/security/owasp-review.md`.

@@ -130,6 +130,82 @@ function evidenceOnChangedLine(line: string, evidence: string): boolean {
   return line.includes(evidence);
 }
 
+function normalizeSpace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** Consecutive changed lines, split where a context line sits between them. */
+function changedRuns(hunk: DiffHunk): DiffLine[][] {
+  const runs: DiffLine[][] = [];
+  let current: DiffLine[] = [];
+  for (const entry of hunk.lines) {
+    if (entry.kind === "context") {
+      if (current.length) runs.push(current);
+      current = [];
+      continue;
+    }
+    current.push(entry);
+  }
+  if (current.length) runs.push(current);
+  return runs;
+}
+
+const MAX_EVIDENCE_WINDOW = 8;
+
+/**
+ * Evidence matches one changed line, or consecutive changed lines in this hunk
+ * after whitespace is collapsed. The cited line has to be one of those lines.
+ */
+export function evidenceMatchesHunk(hunk: DiffHunk, line: number, evidence: string): boolean {
+  const needleRaw = normalizeEvidence(evidence);
+  if (!needleRaw) return false;
+  const changed = hunk.lines.filter((entry) => entry.kind === "add" || entry.kind === "del");
+  if (changed.some((entry) => entry.newLine === line && evidenceOnChangedLine(entry.text, needleRaw))) return true;
+  const needle = normalizeSpace(needleRaw);
+  if (needle.length < 12) return false;
+  for (const run of changedRuns(hunk)) {
+    for (let start = 0; start < run.length; start += 1) {
+      const last = Math.min(run.length, start + MAX_EVIDENCE_WINDOW);
+      for (let end = start + 1; end < last; end += 1) {
+        const window = run.slice(start, end + 1);
+        const numbers = window.map((entry) => entry.newLine).filter((value): value is number => value !== null);
+        if (!numbers.includes(line)) continue;
+        const joined = normalizeSpace(window.map((entry) => entry.text).join(" "));
+        if (joined === needle || joined.includes(needle)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** True when path:line is a changed line and the evidence matches that hunk. */
+export function citationMatchesDiff(
+  files: readonly DiffFile[],
+  path: string,
+  line: number,
+  evidence: string,
+): boolean {
+  if (!path || line < 1 || !evidence.trim()) return false;
+  const file = files.find((item) => item.path === path);
+  if (!file) return false;
+  const hunks = parseUnifiedHunks(file.patch);
+  const hunk = hunks.find((entry) => hunkCoversLine(entry, line));
+  if (!hunk) return false;
+  return evidenceMatchesHunk(hunk, line, evidence);
+}
+
+/** Text of a new-file line, or "" when that line is not in the diff. */
+export function changedLineText(files: readonly DiffFile[], path: string, line: number): string {
+  const file = files.find((item) => item.path === path);
+  if (!file) return "";
+  for (const hunk of parseUnifiedHunks(file.patch)) {
+    for (const entry of hunk.lines) {
+      if (entry.newLine === line && entry.kind !== "del") return entry.text;
+    }
+  }
+  return "";
+}
+
 const SEVERITIES = new Set<OwaspSeverity>(["low", "medium", "high", "critical"]);
 
 /**
@@ -172,8 +248,7 @@ export function partitionGrounded(
       dropped.push({ id: item.id, path, line, evidence, severity, reason: "line is not inside a changed hunk" });
       continue;
     }
-    const changed = hunk.lines.filter((entry) => entry.kind === "add" || entry.kind === "del");
-    if (!changed.some((entry) => evidenceOnChangedLine(entry.text, evidence))) {
+    if (!evidenceMatchesHunk(hunk, line, evidence)) {
       dropped.push({
         id: item.id,
         path,
@@ -265,6 +340,79 @@ export function renderNumberedDiff(files: readonly DiffFile[], tokenBudget: numb
     filesTotal: files.length,
     truncated,
     tokenBudget,
+  };
+}
+
+export type DiffSlice = {
+  text: string;
+  paths: string[];
+};
+
+export type DiffSlicePlan = {
+  slices: DiffSlice[];
+  filesSent: number;
+  filesTotal: number;
+  /** True only when a file could not be sent. Splitting by file is not truncation. */
+  truncated: boolean;
+};
+
+/**
+ * Whole files, packed under the token budget. A file that does not fit is split
+ * into numbered chunks that do. No file is dropped.
+ */
+export function renderDiffSlices(files: readonly DiffFile[], tokenBudget: number): DiffSlicePlan {
+  type Piece = { path: string; text: string };
+  const pieces: Piece[] = [];
+  for (const file of files) {
+    const body = `${fileBody(file)}\n`;
+    if (estimateTokensFromText(body) <= tokenBudget) {
+      pieces.push({ path: file.path, text: body });
+      continue;
+    }
+    const lines = body.split("\n");
+    const header = lines[0] ?? `diff --git a/${file.path} b/${file.path}`;
+    const rest = lines.slice(1, lines.at(-1) === "" ? -1 : undefined);
+    let acc: string[] = [];
+    const flushPiece = () => {
+      if (!acc.length) return;
+      pieces.push({ path: file.path, text: `${[header, ...acc].join("\n")}\n` });
+      acc = [];
+    };
+    for (const line of rest) {
+      const next = `${[header, ...acc, line].join("\n")}\n`;
+      if (acc.length && estimateTokensFromText(next) > tokenBudget) flushPiece();
+      acc.push(line);
+    }
+    flushPiece();
+  }
+
+  const slices: DiffSlice[] = [];
+  let text = "";
+  let paths: string[] = [];
+  let used = 0;
+  const flushSlice = () => {
+    if (!text) return;
+    slices.push({ text, paths: [...new Set(paths)] });
+    text = "";
+    paths = [];
+    used = 0;
+  };
+  for (const piece of pieces) {
+    const cost = estimateTokensFromText(piece.text);
+    if (text && used + cost > tokenBudget) flushSlice();
+    text += (text && !text.endsWith("\n") ? "\n" : "") + piece.text;
+    paths.push(piece.path);
+    used += cost;
+    if (used > tokenBudget) flushSlice();
+  }
+  flushSlice();
+  if (slices.length === 0) slices.push({ text: "", paths: [] });
+  const sent = new Set(slices.flatMap((slice) => slice.paths));
+  return {
+    slices,
+    filesSent: files.length === 0 ? 0 : sent.size,
+    filesTotal: files.length,
+    truncated: sent.size < files.length,
   };
 }
 

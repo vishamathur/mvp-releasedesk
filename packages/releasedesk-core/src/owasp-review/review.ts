@@ -9,11 +9,10 @@ import {
   assertGrokChatStatus,
   buildGrokChatCompletionBody,
   GROK_CHAT_COMPLETIONS_URL,
-  GROK_REQUEST_TIMEOUT_MS,
   GrokGuidelineError,
   resolveGrokModel,
 } from "../grok-guardrails.js";
-import { buildGrokTelemetry, type GrokTelemetry } from "../grok-telemetry.js";
+import { billedUsdFromTicks, buildGrokTelemetry, type GrokTelemetry } from "../grok-telemetry.js";
 import {
   DESIGN_LEVEL_CONTROL_IDS,
   isOwaspControlId,
@@ -21,9 +20,12 @@ import {
   type OwaspControlId,
 } from "./catalogue.js";
 import {
+  changedLineText,
+  citationMatchesDiff,
   neutralizeDiffMarkers,
   OWASP_DIFF_TOKEN_BUDGET,
   partitionGrounded,
+  renderDiffSlices,
   renderNumberedDiff,
   resolveOwaspDiffTokenBudget,
   DIFF_DATA_BEGIN,
@@ -31,7 +33,12 @@ import {
   type GroundCandidate,
 } from "./diff.js";
 import { NOT_SELECTED_REASON, selectControls, selectedIds } from "./select.js";
-import { runStaticChecks, type StaticFinding } from "./static-checks.js";
+import {
+  isSuppressedReviewFinding,
+  runStaticChecks,
+  staticCheckCovers,
+  type StaticFinding,
+} from "./static-checks.js";
 import {
   OWASP_REVIEW_SCHEMA,
   type OwaspControlResult,
@@ -54,7 +61,15 @@ export const OWASP_CONFIDENCE_MIN = 0.6;
 /** Still FAIL after this many Builder remediation rounds escalates to a human. */
 export const OWASP_REMEDIATION_ROUNDS = 2;
 export const OWASP_REVIEW_MAX_TOKENS = 8000;
+/** Selected controls per Grok call. Batches run concurrently. */
+export const OWASP_REVIEW_BATCH_SIZE = 6;
+/** Longer than the shared 30s chat timeout. One retry follows a timeout or a 5xx. */
+export const OWASP_REVIEW_TIMEOUT_MS = 90_000;
+/** Wait before the single retry of a timed-out or 5xx batch call. */
+export const OWASP_REVIEW_RETRY_DELAY_MS = 1_000;
 export const UNGROUNDED_REASON = "ungrounded finding dropped; not a pass";
+/** Static check ran for this control and found nothing, so an undecided model does not escalate. */
+export const PASS_STATIC_REASON = "PASS(static): deterministic check found nothing";
 
 const MODEL_VERDICTS = ["PASS", "FAIL", "NOT_APPLICABLE", "UNDECIDED"] as const;
 const MODEL_SEVERITIES = ["low", "medium", "high", "critical", "none"] as const;
@@ -376,13 +391,21 @@ function systemPrompt(): string {
   ].join(" ");
 }
 
-function userPrompt(input: OwaspReviewInput, ids: readonly OwaspControlId[], selectionRules: string): string {
+function userPrompt(
+  input: OwaspReviewInput,
+  ids: readonly OwaspControlId[],
+  selectionRules: string,
+  diffText?: string,
+  coverage?: string,
+): string {
   const budget = input.diffTokenBudget ?? OWASP_DIFF_TOKEN_BUDGET;
-  const diff = renderNumberedDiff(input.files, budget);
-  const coverage = `Trusted coverage from the diff: filesSent=${diff.filesSent} filesTotal=${diff.filesTotal} truncated=${diff.truncated} tokenBudget=${diff.tokenBudget}.`;
-  const data = [`repository: ${input.repository}`, `title: ${input.title ?? ""}`, diff.text].join("\n");
+  const diff = diffText === undefined ? renderNumberedDiff(input.files, budget) : null;
+  const coverageLine =
+    coverage ??
+    `Trusted coverage from the diff: filesSent=${diff?.filesSent ?? 0} filesTotal=${diff?.filesTotal ?? 0} truncated=${diff?.truncated ?? false} tokenBudget=${diff?.tokenBudget ?? budget}.`;
+  const data = [`repository: ${input.repository}`, `title: ${input.title ?? ""}`, diffText ?? diff?.text ?? ""].join("\n");
   return [
-    coverage,
+    coverageLine,
     `controlIds: ${JSON.stringify(ids)}`,
     "Selected controls and the rules that chose them:",
     selectionRules,
@@ -393,16 +416,28 @@ function userPrompt(input: OwaspReviewInput, ids: readonly OwaspControlId[], sel
   ].join("\n");
 }
 
-export async function callOwaspModel(input: {
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type AttemptResult = { result: ModelCallResult; retryable: boolean };
+
+async function callOwaspModelOnce(input: {
   review: OwaspReviewInput;
   ids: readonly OwaspControlId[];
   selectionRules: string;
   apiKey: string;
   fetchImpl: typeof fetch;
   env: Record<string, string | undefined>;
-}): Promise<ModelCallResult> {
+  diffText?: string;
+  coverage?: string;
+}): Promise<AttemptResult> {
   const requestedModel = resolveGrokModel(input.env);
   const promptCacheKey = owaspPromptCacheKey(input.review.repository, input.review.pullRequest);
+  const fail = (error: string, telemetry: GrokTelemetry | null, retryable: boolean): AttemptResult => ({
+    result: { ok: false, error, requestedModel, telemetry },
+    retryable,
+  });
   try {
     const startedAt = performance.now();
     const res = await input.fetchImpl(GROK_CHAT_COMPLETIONS_URL, {
@@ -429,20 +464,22 @@ export async function callOwaspModel(input: {
           },
           messages: [
             { role: "system", content: systemPrompt() },
-            { role: "user", content: userPrompt(input.review, input.ids, input.selectionRules) },
+            {
+              role: "user",
+              content: userPrompt(input.review, input.ids, input.selectionRules, input.diffText, input.coverage),
+            },
           ],
         }),
       ),
-      signal: AbortSignal.timeout(GROK_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(OWASP_REVIEW_TIMEOUT_MS),
     });
     assertGrokChatStatus(res.status);
     if (!res.ok) {
-      return {
-        ok: false,
-        error: `Grok request failed (${res.status}). Risk was not assessed.`,
-        requestedModel,
-        telemetry: null,
-      };
+      return fail(
+        `Grok request failed (${res.status}). Risk was not assessed.`,
+        null,
+        res.status >= 500 && res.status <= 599,
+      );
     }
     const body = (await res.json()) as {
       model?: string;
@@ -454,47 +491,59 @@ export async function callOwaspModel(input: {
       latencyMs: performance.now() - startedAt,
     });
     if (body.choices?.[0]?.finish_reason === "length") {
-      return {
-        ok: false,
-        error: `Grok response was cut off at max_tokens=${OWASP_REVIEW_MAX_TOKENS}. Risk was not assessed.`,
-        requestedModel,
+      return fail(
+        `Grok response was cut off at max_tokens=${OWASP_REVIEW_MAX_TOKENS}. Risk was not assessed.`,
         telemetry,
-      };
+        false,
+      );
     }
     const text = body.choices?.[0]?.message?.content ?? "";
     const payload = parseModelJson(text);
     if (payload === null) {
-      return {
-        ok: false,
-        error: "Grok response was not valid JSON. Risk was not assessed.",
-        requestedModel,
-        telemetry,
-      };
+      return fail("Grok response was not valid JSON. Risk was not assessed.", telemetry, false);
     }
     return {
-      ok: true,
-      payload,
-      requestedModel,
-      servedModel: telemetry.servedModel,
-      telemetry,
+      result: {
+        ok: true,
+        payload,
+        requestedModel,
+        servedModel: telemetry.servedModel,
+        telemetry,
+      },
+      retryable: false,
     };
   } catch (err) {
     if (err instanceof GrokGuidelineError) {
-      return { ok: false, error: err.message, requestedModel, telemetry: null };
+      return fail(err.message, null, false);
     }
     const name = err instanceof Error ? err.name : "";
     const message = err instanceof Error ? err.message : String(err);
     const timedOut = name === "TimeoutError" || name === "AbortError" || /timeout|aborted/i.test(message);
-    const error = timedOut
-      ? "Grok request timed out. Risk was not assessed."
-      : `Grok request failed: ${message}`;
-    return {
-      ok: false,
-      error: redactSensitive(error, [input.apiKey]),
-      requestedModel,
-      telemetry: null,
-    };
+    const error = timedOut ? "Grok request timed out. Risk was not assessed." : `Grok request failed: ${message}`;
+    return fail(redactSensitive(error, [input.apiKey]), null, timedOut);
   }
+}
+
+export async function callOwaspModel(input: {
+  review: OwaspReviewInput;
+  ids: readonly OwaspControlId[];
+  selectionRules: string;
+  apiKey: string;
+  fetchImpl: typeof fetch;
+  env: Record<string, string | undefined>;
+  diffText?: string;
+  coverage?: string;
+  retryDelayMs?: number;
+  sleepImpl?: (ms: number) => Promise<void>;
+}): Promise<ModelCallResult> {
+  const sleep = input.sleepImpl ?? defaultSleep;
+  const delay = input.retryDelayMs ?? OWASP_REVIEW_RETRY_DELAY_MS;
+  let attempt = await callOwaspModelOnce(input);
+  if (!attempt.result.ok && attempt.retryable) {
+    await sleep(delay);
+    attempt = await callOwaspModelOnce(input);
+  }
+  return attempt.result;
 }
 
 function concreteFix(
@@ -559,54 +608,68 @@ function judgeControl(
   staticFindings: readonly StaticFinding[],
   groundedModel: readonly OwaspFailure[],
   dropped: readonly OwaspDropped[],
+  citedChangedLine: boolean,
+  suppressedModelFail: boolean,
 ): Judgement {
-  const reasons: string[] = [];
-  if (model.verdict === "UNDECIDED") reasons.push("model returned UNDECIDED");
-  else if (model.confidence < OWASP_CONFIDENCE_MIN) {
-    reasons.push(`model confidence ${model.confidence.toFixed(2)} is below ${OWASP_CONFIDENCE_MIN}`);
-  }
-  if (
-    staticFindings.length > 0 &&
-    (model.verdict === "PASS" || model.verdict === "NOT_APPLICABLE" || model.verdict === "UNDECIDED")
-  ) {
-    reasons.push(`deterministic check found a failure and the model returned ${model.verdict}`);
-  }
+  const low = model.confidence < OWASP_CONFIDENCE_MIN;
+  const undecided = model.verdict === "UNDECIDED" || low;
+  const modelConfirmsFail = model.verdict === "FAIL" && !low && !suppressedModelFail;
+  const disagrees = staticFindings.length > 0 && !modelConfirmsFail;
+  const covers = staticCheckCovers(id);
 
   const staticFailures = staticFindings.map(failureFromStatic);
   const seen = new Set(staticFailures.map((failure) => `${failure.path}:${failure.line}`));
   const failures = [
     ...staticFailures,
-    ...groundedModel.filter((failure) => !seen.has(`${failure.path}:${failure.line}`)),
+    ...(modelConfirmsFail ? groundedModel.filter((failure) => !seen.has(`${failure.path}:${failure.line}`)) : []),
   ];
 
-  const ambiguous = reasons.length > 0;
   let verdict: OwaspVerdict;
   let reason = "";
-  if (ambiguous) {
+  let exception: OwaspException | null = null;
+  const anchor = failures[0];
+
+  if (disagrees) {
     verdict = "UNDECIDED";
-    reason = reasons.join("; ");
+    const conflict = `deterministic check found a failure and the model returned ${model.verdict}`;
+    reason =
+      low && model.verdict !== "UNDECIDED"
+        ? `model confidence ${model.confidence.toFixed(2)} is below ${OWASP_CONFIDENCE_MIN}; ${conflict}`
+        : conflict;
+    exception = {
+      type: "AMBIGUOUS",
+      controlId: id,
+      path: anchor?.path ?? null,
+      line: anchor?.line ?? null,
+      reason,
+    };
+  } else if (undecided && covers && staticFindings.length === 0) {
+    verdict = "PASS";
+    reason = PASS_STATIC_REASON;
+  } else if (undecided && !covers && citedChangedLine) {
+    verdict = "UNDECIDED";
+    reason =
+      model.verdict === "UNDECIDED"
+        ? "model returned UNDECIDED on a changed line"
+        : `model confidence ${model.confidence.toFixed(2)} is below ${OWASP_CONFIDENCE_MIN} on a changed line`;
+    exception = {
+      type: "AMBIGUOUS",
+      controlId: id,
+      path: model.path || null,
+      line: model.line > 0 ? model.line : null,
+      reason,
+    };
   } else if (failures.length > 0) {
     verdict = "FAIL";
-  } else if (model.verdict === "FAIL" || dropped.length > 0) {
+  } else if ((model.verdict === "FAIL" && !suppressedModelFail) || dropped.length > 0) {
     verdict = "NOT_APPLICABLE";
     reason = UNGROUNDED_REASON;
-  } else if (model.verdict === "NOT_APPLICABLE") {
+  } else if (model.verdict === "NOT_APPLICABLE" || undecided) {
     verdict = "NOT_APPLICABLE";
-    reason = "selected, no applicable change in the diff";
+    reason = undecided ? "model undecided and cited no changed line" : "selected, no applicable change in the diff";
   } else {
     verdict = "PASS";
   }
-
-  const anchor = failures[0];
-  const exception: OwaspException | null = ambiguous
-    ? {
-        type: "AMBIGUOUS",
-        controlId: id,
-        path: anchor?.path ?? null,
-        line: anchor?.line ?? null,
-        reason,
-      }
-    : null;
 
   return { verdict, reason, confidence: model.confidence, failures, exception };
 }
@@ -622,7 +685,8 @@ export function reviewDiff(
 ): OwaspReviewReport {
   const selection = selectControls(input.files);
   const ids = selectedIds(selection);
-  const diff = renderNumberedDiff(input.files, input.diffTokenBudget ?? OWASP_DIFF_TOKEN_BUDGET);
+  const budget = input.diffTokenBudget ?? OWASP_DIFF_TOKEN_BUDGET;
+  const diff = renderDiffSlices(input.files, budget);
   const base = {
     keyEnvVar,
     docsOnly: selection.docsOnly,
@@ -679,10 +743,18 @@ export function reviewDiff(
     staticById.set(finding.id, list);
   }
 
+  const suppressedFail = new Set<string>();
+  const realFail = new Set<string>();
   const modelCandidates: GroundCandidate[] = [];
   for (const control of validated.controls) {
     if (control.verdict !== "FAIL") continue;
     if (!isOwaspControlId(control.id)) continue;
+    const lineText = control.line > 0 ? changedLineText(input.files, control.path, control.line) : "";
+    if (isSuppressedReviewFinding(control.id, control.path, control.evidence, lineText)) {
+      suppressedFail.add(control.id);
+      continue;
+    }
+    realFail.add(control.id);
     modelCandidates.push({
       id: control.id,
       path: control.path,
@@ -764,6 +836,8 @@ export function reviewDiff(
       staticById.get(choice.id) ?? [],
       groundedById.get(choice.id) ?? [],
       droppedById.get(choice.id) ?? [],
+      citationMatchesDiff(input.files, modelControl.path, modelControl.line, modelControl.evidence),
+      suppressedFail.has(choice.id) && !realFail.has(choice.id),
     );
     failures.push(...judged.failures);
     if (judged.exception) exceptions.push(judged.exception);
@@ -848,11 +922,70 @@ export function reviewDiff(
   });
 }
 
+function chunkIds(ids: readonly OwaspControlId[], size: number): OwaspControlId[][] {
+  const chunks: OwaspControlId[][] = [];
+  for (let index = 0; index < ids.length; index += size) chunks.push(ids.slice(index, index + size));
+  return chunks;
+}
+
+function sumOrNull(values: readonly (number | null)[]): number | null {
+  if (values.some((value) => value === null)) return null;
+  return values.reduce<number>((total, value) => total + (value ?? 0), 0);
+}
+
+function mergeTelemetry(parts: readonly GrokTelemetry[]): GrokTelemetry | null {
+  if (parts.length === 0) return null;
+  const first = parts[0];
+  if (!first) return null;
+  const ticks = sumOrNull(parts.map((item) => item.costInUsdTicks));
+  const est = sumOrNull(parts.map((item) => item.estUsd));
+  return {
+    requestedModel: first.requestedModel,
+    servedModel: parts.find((item) => item.servedModel)?.servedModel ?? null,
+    promptTokens: sumOrNull(parts.map((item) => item.promptTokens)),
+    completionTokens: sumOrNull(parts.map((item) => item.completionTokens)),
+    reasoningTokens: sumOrNull(parts.map((item) => item.reasoningTokens)),
+    totalTokens: sumOrNull(parts.map((item) => item.totalTokens)),
+    cachedPromptTokens: sumOrNull(parts.map((item) => item.cachedPromptTokens)),
+    costInUsdTicks: ticks,
+    latencyMs: Math.max(...parts.map((item) => item.latencyMs)),
+    estUsd: est,
+    estNote: first.estNote,
+    billedCostUsd: ticks === null ? null : billedUsdFromTicks(ticks),
+    billedNote: ticks === null ? "billed cost not reported" : "billed cost from usage.cost_in_usd_ticks",
+  };
+}
+
+/** A confident FAIL wins. An undecided citation wins over a pass from a slice that did not see the line. */
+function mergeModelControl(parts: readonly ModelControl[]): ModelControl {
+  const first = parts[0];
+  if (!first) {
+    throw new Error("mergeModelControl called with no judgements");
+  }
+  const confidentFail = parts
+    .filter((item) => item.verdict === "FAIL" && item.confidence >= OWASP_CONFIDENCE_MIN)
+    .sort((left, right) => right.confidence - left.confidence);
+  if (confidentFail[0]) return confidentFail[0];
+  const cited = parts.find(
+    (item) =>
+      (item.verdict === "UNDECIDED" || item.confidence < OWASP_CONFIDENCE_MIN) &&
+      item.path.trim() !== "" &&
+      item.line > 0 &&
+      item.evidence.trim() !== "",
+  );
+  if (cited) return cited;
+  const pass = parts.find((item) => item.verdict === "PASS" && item.confidence >= OWASP_CONFIDENCE_MIN);
+  if (pass) return pass;
+  return first;
+}
+
 export async function runOwaspReview(
   input: OwaspReviewInput,
   opts?: {
     fetchImpl?: typeof fetch;
     env?: Record<string, string | undefined>;
+    retryDelayMs?: number;
+    sleepImpl?: (ms: number) => Promise<void>;
   },
 ): Promise<OwaspReviewReport> {
   const env = opts?.env ?? process.env;
@@ -875,17 +1008,110 @@ export async function runOwaspReview(
   const reviewInput = { ...input, diffTokenBudget: tokenBudget };
   const selection = selectControls(reviewInput.files);
   const ids = selectedIds(selection);
-  const selectionRules = selection.controls
-    .filter((control) => control.selected)
-    .map((control) => `${control.id} rules=${control.rules.join(",")} paths=${control.paths.join(",")}`)
-    .join("\n");
-  const model = await callOwaspModel({
-    review: reviewInput,
-    ids,
-    selectionRules,
-    apiKey: key.apiKey,
-    fetchImpl: opts?.fetchImpl ?? fetch,
-    env,
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  const jobs: Array<Promise<{ ids: OwaspControlId[]; result: ModelCallResult }>> = [];
+
+  for (const batch of chunkIds(ids, OWASP_REVIEW_BATCH_SIZE)) {
+    const paths = new Set<string>();
+    for (const id of batch) {
+      const choice = selection.controls.find((control) => control.id === id);
+      for (const path of choice?.paths ?? []) if (path) paths.add(path);
+    }
+    const relevant = paths.size > 0 ? reviewInput.files.filter((file) => paths.has(file.path)) : reviewInput.files;
+    const plan = renderDiffSlices(relevant, tokenBudget);
+    const rules = batch
+      .map((id) => {
+        const choice = selection.controls.find((control) => control.id === id);
+        return `${id} rules=${choice?.rules.join(",") ?? ""} paths=${choice?.paths.join(",") ?? ""}`;
+      })
+      .join("\n");
+    plan.slices.forEach((slice, index) => {
+      const coverage = `Trusted coverage from the diff: filesSent=${slice.paths.length} filesTotal=${relevant.length} truncated=false tokenBudget=${tokenBudget} slice=${index + 1}/${plan.slices.length}.`;
+      jobs.push(
+        callOwaspModel({
+          review: reviewInput,
+          ids: batch,
+          selectionRules: rules,
+          apiKey: key.apiKey,
+          fetchImpl,
+          env,
+          diffText: slice.text,
+          coverage,
+          retryDelayMs: opts?.retryDelayMs,
+          sleepImpl: opts?.sleepImpl,
+        }).then((result) => ({ ids: batch, result })),
+      );
+    });
+  }
+
+  const settled = await Promise.all(jobs);
+  const failed = settled.find((item) => !item.result.ok);
+  if (failed && !failed.result.ok) return reviewDiff(reviewInput, failed.result, key.keyEnvVar);
+
+  const byId = new Map<OwaspControlId, ModelControl[]>();
+  const telemetry: GrokTelemetry[] = [];
+  let requestedModel: string | null = null;
+  let servedModel: string | null = null;
+  for (const item of settled) {
+    if (!item.result.ok) continue;
+    requestedModel = item.result.requestedModel;
+    servedModel = item.result.servedModel ?? servedModel;
+    if (item.result.telemetry) telemetry.push(item.result.telemetry);
+    const validated = validateModelPayload(item.result.payload, item.ids);
+    if (!validated.ok) {
+      return reviewDiff(
+        reviewInput,
+        {
+          ok: false,
+          error: validated.error,
+          requestedModel: item.result.requestedModel,
+          telemetry: item.result.telemetry,
+        },
+        key.keyEnvVar,
+      );
+    }
+    for (const control of validated.controls) {
+      if (!isOwaspControlId(control.id)) continue;
+      const list = byId.get(control.id) ?? [];
+      list.push(control);
+      byId.set(control.id, list);
+    }
+  }
+
+  const controls = ids.map((id) => {
+    const parts = byId.get(id);
+    if (!parts || parts.length === 0) {
+      return null;
+    }
+    return mergeModelControl(parts);
   });
-  return reviewDiff(reviewInput, model, key.keyEnvVar);
+  const mergedTelemetry = mergeTelemetry(telemetry);
+  if (controls.some((control) => control === null) || !mergedTelemetry) {
+    const missing = ids.filter((id) => !byId.get(id)?.length);
+    const error = !mergedTelemetry
+      ? "Grok response omitted usage. Risk was not assessed."
+      : `Grok response omitted ${missing[0] ?? "a control"}. Risk was not assessed.`;
+    return reviewDiff(
+      reviewInput,
+      {
+        ok: false,
+        error,
+        requestedModel,
+        telemetry: mergedTelemetry,
+      },
+      key.keyEnvVar,
+    );
+  }
+
+  return reviewDiff(
+    reviewInput,
+    {
+      ok: true,
+      payload: { controls },
+      requestedModel: requestedModel ?? resolveGrokModel(env),
+      servedModel,
+      telemetry: mergedTelemetry,
+    },
+    key.keyEnvVar,
+  );
 }

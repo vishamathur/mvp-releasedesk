@@ -24,9 +24,55 @@ function placeholder(line: string): boolean {
   return /\b(example|changeme|placeholder|redacted|dummy|sample|fake|your[-_ ]?(key|token|secret))\b/i.test(line);
 }
 
-function looksLikeSecret(line: string): boolean {
+/** Controls that have a deterministic rule. The others are Grok's judgement only. */
+export const STATIC_COVERED_CONTROL_IDS = ["A02", "A03", "A08", "A10", "X01", "X05"] as const;
+
+export function staticCheckCovers(id: OwaspControlId): boolean {
+  return (STATIC_COVERED_CONTROL_IDS as readonly string[]).includes(id);
+}
+
+/** A regex literal that names a sink. A real call outside the regex still counts. */
+export function isDetectorPatternLine(line: string): boolean {
+  if (!/\/(?:\\.|[^/\n])+\/[gimsuy]*/.test(line)) return false;
+  const outside = line.replace(/\/(?:\\.|[^/\n])+\/[gimsuy]*/g, " ");
+  if (/\beval\s*\(|new\s+Function\s*\(|dangerouslySetInnerHTML|\.innerHTML\s*=|\b(?:exec|execSync|spawn)\s*\(/.test(outside)) {
+    return false;
+  }
+  return /eval|Function|innerHTML|\bexec\b|\bspawn\b|SELECT|child_process/.test(line);
+}
+
+export function isTestFixturePath(path: string): boolean {
+  return /(?:^|\/)[^/]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path);
+}
+
+const LIVE_SECRET_VALUE = /^(?:sk-|ghp_|github_pat_|AKIA|xox[baprs]-|xai-)|-----BEGIN /;
+
+/** A quoted test value made of words, such as shared-xai-value. Live secret shapes are not this. */
+export function isObviousFixtureSecret(line: string): boolean {
+  if (placeholder(line)) return true;
+  const quoted = [...line.matchAll(/['"]([^'"]+)['"]/g)].map((match) => match[1] ?? "");
+  if (quoted.length === 0) return false;
+  return quoted.every(
+    (value) => !LIVE_SECRET_VALUE.test(value) && (placeholder(value) || /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/.test(value)),
+  );
+}
+
+/**
+ * Detector regex lines and placeholder values in test fixtures are not findings.
+ * A live secret shape in a test file still is.
+ */
+export function isSuppressedReviewFinding(id: string, path: string, evidence: string, lineText = ""): boolean {
+  if (id === "A03") return isDetectorPatternLine(evidence) || isDetectorPatternLine(lineText);
+  if (id === "X01" && isTestFixturePath(path)) {
+    return isObviousFixtureSecret(evidence) || isObviousFixtureSecret(lineText);
+  }
+  return false;
+}
+
+function looksLikeSecret(line: string, path = ""): boolean {
   if (/process\.env|import\.meta\.env|os\.environ|getenv\s*\(/.test(line)) return false;
   if (placeholder(line)) return false;
+  if (path && isTestFixturePath(path) && isObviousFixtureSecret(line)) return false;
   if (/AKIA[0-9A-Z]{16}/.test(line)) return true;
   if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(line)) return true;
   if (/ghp_[A-Za-z0-9]{20,}/.test(line)) return true;
@@ -55,7 +101,7 @@ const RULES: readonly Rule[] = [
   {
     id: "X01",
     severity: "high",
-    test: looksLikeSecret,
+    test: (line) => looksLikeSecret(line),
     what: "Remove the hard-coded credential and read it from the environment or a secret store.",
     why: "A credential in source can be copied from repository history.",
   },
@@ -124,6 +170,8 @@ export function runStaticChecks(files: readonly DiffFile[], selected: ReadonlySe
     for (const line of addedLines(file)) {
       for (const rule of RULES) {
         if (!selected.has(rule.id)) continue;
+        if (rule.id === "A03" && isDetectorPatternLine(line.text)) continue;
+        if (rule.id === "X01" && isTestFixturePath(line.path) && isObviousFixtureSecret(line.text)) continue;
         if (!rule.test(line.text)) continue;
         const key = `${rule.id}:${line.path}:${line.line}`;
         if (seen.has(key)) continue;

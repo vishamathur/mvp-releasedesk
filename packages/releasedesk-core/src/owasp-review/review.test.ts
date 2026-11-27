@@ -7,9 +7,11 @@ import { addedPatch } from "./diff.js";
 import { NOT_SELECTED_REASON, selectControls } from "./select.js";
 import {
   OWASP_CONFIDENCE_MIN,
+  OWASP_REVIEW_BATCH_SIZE,
   OWASP_REVIEW_KEY_ENV_LEAD,
   OWASP_REVIEW_KEY_ENV_SECURITY,
   OWASP_REVIEW_MAX_TOKENS,
+  PASS_STATIC_REASON,
   UNGROUNDED_REASON,
   reviewDiff,
   runOwaspReview,
@@ -222,30 +224,66 @@ describe("reviewDiff", () => {
     expect(report.controls.find((control) => control.id === "X01")?.verdict).toBe("UNDECIDED");
   });
 
-  it("escalates AMBIGUOUS when confidence is below the floor", () => {
-    const report = reviewDiff(
+  it("records PASS(static) when a covered control is undecided and the static check found nothing", () => {
+    const low = reviewDiff(
       reviewInput(clean),
       modelOf(clean, (control) => (control.id === "X01" ? { ...control, confidence: 0.4 } : control)),
       OWASP_REVIEW_KEY_ENV_LEAD,
     );
     expect(OWASP_CONFIDENCE_MIN).toBe(0.6);
-    expect(report.outcome).toBe("needs-human");
-    expect(report.failures).toEqual([]);
-    expect(report.exceptions[0]).toMatchObject({ type: "AMBIGUOUS", controlId: "X01" });
-    expect(report.exceptions[0]?.reason).toMatch(/0\.40/);
-    expect(report.controls.find((control) => control.id === "X01")?.verdict).toBe("UNDECIDED");
-  });
+    expect(low.outcome).toBe("auto-proceed");
+    expect(low.failures).toEqual([]);
+    expect(low.exceptions).toEqual([]);
+    expect(low.controls.find((control) => control.id === "X01")).toMatchObject({
+      verdict: "PASS",
+      reason: PASS_STATIC_REASON,
+    });
 
-  it("escalates AMBIGUOUS when the model returns UNDECIDED", () => {
-    const report = reviewDiff(
+    const undecided = reviewDiff(
       reviewInput(clean),
       modelOf(clean, (control) =>
         control.id === "X01" ? { ...control, verdict: "UNDECIDED", confidence: 0.9 } : control,
       ),
       OWASP_REVIEW_KEY_ENV_LEAD,
     );
-    expect(report.outcome).toBe("needs-human");
-    expect(report.exceptions[0]?.reason).toBe("model returned UNDECIDED");
+    expect(undecided.outcome).toBe("auto-proceed");
+    expect(undecided.exceptions).toEqual([]);
+    expect(undecided.controls.find((control) => control.id === "X01")?.reason).toBe(PASS_STATIC_REASON);
+  });
+
+  it("escalates AMBIGUOUS when an uncovered control is undecided on a changed line", () => {
+    const line = "export function login(password: string) { return password; }";
+    const files = [file("src/login.ts", [line])];
+    const cited = reviewDiff(
+      reviewInput(files),
+      modelOf(files, (control) =>
+        control.id === "A07"
+          ? {
+              ...control,
+              verdict: "UNDECIDED",
+              confidence: 0.9,
+              path: "src/login.ts",
+              line: 1,
+              evidence: line,
+            }
+          : control,
+      ),
+      OWASP_REVIEW_KEY_ENV_LEAD,
+    );
+    expect(cited.outcome).toBe("needs-human");
+    expect(cited.exceptions[0]).toMatchObject({ type: "AMBIGUOUS", controlId: "A07", path: "src/login.ts", line: 1 });
+    expect(cited.exceptions[0]?.reason).toMatch(/changed line/);
+
+    const uncited = reviewDiff(
+      reviewInput(files),
+      modelOf(files, (control) =>
+        control.id === "A07" ? { ...control, verdict: "UNDECIDED", confidence: 0.2, path: "", line: 0, evidence: "" } : control,
+      ),
+      OWASP_REVIEW_KEY_ENV_LEAD,
+    );
+    expect(uncited.exceptions.map((item) => item.type)).not.toContain("AMBIGUOUS");
+    expect(uncited.controls.find((control) => control.id === "A07")?.verdict).toBe("NOT_APPLICABLE");
+    expect(uncited.outcome).toBe("auto-proceed");
   });
 
   it("escalates FIX_DISPUTED when Builder disputes a fix", () => {
@@ -540,16 +578,22 @@ describe("runOwaspReview", () => {
     expect(rejected.error).toMatch(/400/);
     expect(rejected.controls).toEqual([]);
 
+    let timeouts = 0;
     const timeout = await runOwaspReview(reviewInput(clean), {
       env,
+      retryDelayMs: 0,
+      sleepImpl: async () => undefined,
       fetchImpl: async () => {
+        timeouts += 1;
         const error = new Error("The operation was aborted due to timeout");
         error.name = "TimeoutError";
         throw error;
       },
     });
+    expect(timeouts).toBe(2);
     expect(timeout.error).toMatch(/timed out/);
     expect(timeout.outcome).not.toBe("auto-proceed");
+    expect(timeout.status).toBe("failed");
 
     const invalid = await runOwaspReview(reviewInput(clean), {
       env,
@@ -561,5 +605,257 @@ describe("runOwaspReview", () => {
     expect(invalid.status).toBe("failed");
     expect(invalid.error).toMatch(/not valid JSON/);
     expect(invalid.outcome).toBe("needs-human");
+  });
+
+  it("retries a 5xx once and then accepts the live judgement", async () => {
+    const env = { RELEASEDESK_GROK_API_KEY_LEAD: LEAD_KEY };
+    let calls = 0;
+    const delays: number[] = [];
+    const report = await runOwaspReview(reviewInput(clean), {
+      env,
+      retryDelayMs: 20,
+      sleepImpl: async (ms) => {
+        delays.push(ms);
+      },
+      fetchImpl: async () => {
+        calls += 1;
+        if (calls === 1) return new Response("unavailable", { status: 503 });
+        return Response.json({
+          model: "grok-4.3",
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: JSON.stringify({
+                  controls: [
+                    {
+                      id: "X01",
+                      verdict: "PASS",
+                      confidence: 0.9,
+                      path: "",
+                      line: 0,
+                      evidence: "",
+                      severity: "none",
+                      autoFixable: true,
+                      suggestedFix: { what: "", where: "", why: "", owaspId: "X01" },
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        });
+      },
+    });
+    expect(calls).toBe(2);
+    expect(delays).toEqual([20]);
+    expect(report.outcome).toBe("auto-proceed");
+    expect(report.status).toBe("completed");
+  });
+
+  it("sends at most six controls per call and does not drop files when the diff is split", async () => {
+    const env = { RELEASEDESK_GROK_API_KEY_SECURITY: SECURITY_KEY, OWASP_REVIEW_DIFF_TOKEN_BUDGET: "400" };
+    const rich = [
+      file("src/login.ts", [
+        "export function login(password: string) {",
+        "  const session = password;",
+        "  console.error(password);",
+        '  const sql = "SELECT id FROM users WHERE name = \'" + password + "\'";',
+        "  db.query(sql);",
+        "  return session;",
+        "}",
+      ]),
+    ];
+    const fat = ["a.ts", "b.ts", "c.ts"].map((path) => file(path, ["const n = 1;", "x".repeat(2000)]));
+    const batches: string[][] = [];
+    const bodies: string[] = [];
+    const selected = selectControls(rich)
+      .controls.filter((control) => control.selected)
+      .map((control) => control.id);
+    expect(selected.length).toBeGreaterThan(OWASP_REVIEW_BATCH_SIZE);
+
+    const richReport = await runOwaspReview(reviewInput(rich), {
+      env,
+      retryDelayMs: 0,
+      sleepImpl: async () => undefined,
+      fetchImpl: async (_url, init) => {
+        const user = JSON.parse(String(init?.body)).messages[1].content as string;
+        const match = user.match(/controlIds: (\[[^\]]*\])/);
+        const ids = JSON.parse(match?.[1] ?? "[]") as string[];
+        batches.push(ids);
+        return Response.json({
+          model: "grok-4.3",
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: JSON.stringify({
+                  controls: ids.map((id) => ({
+                    id,
+                    verdict: "PASS",
+                    confidence: 0.9,
+                    path: "",
+                    line: 0,
+                    evidence: "",
+                    severity: "none",
+                    autoFixable: true,
+                    suggestedFix: { what: "", where: "", why: "", owaspId: id },
+                  })),
+                }),
+              },
+            },
+          ],
+        });
+      },
+    });
+    expect(richReport.outcome).toBe("auto-proceed");
+    expect(batches.length).toBeGreaterThan(1);
+    for (const batch of batches) expect(batch.length).toBeLessThanOrEqual(OWASP_REVIEW_BATCH_SIZE);
+    expect([...new Set(batches.flat())].sort()).toEqual([...selected].sort());
+
+    const split = await runOwaspReview(reviewInput(fat), {
+      env,
+      retryDelayMs: 0,
+      sleepImpl: async () => undefined,
+      fetchImpl: async (_url, init) => {
+        const user = JSON.parse(String(init?.body)).messages[1].content as string;
+        bodies.push(user);
+        return Response.json({
+          model: "grok-4.3",
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: JSON.stringify({
+                  controls: [
+                    {
+                      id: "X01",
+                      verdict: "PASS",
+                      confidence: 0.9,
+                      path: "",
+                      line: 0,
+                      evidence: "",
+                      severity: "none",
+                      autoFixable: true,
+                      suggestedFix: { what: "", where: "", why: "", owaspId: "X01" },
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        });
+      },
+    });
+    expect(split.diffTruncated).toBe(false);
+    expect(split.filesSent).toBe(3);
+    expect(split.filesTotal).toBe(3);
+    expect(bodies.length).toBeGreaterThan(1);
+    for (const path of ["a.ts", "b.ts", "c.ts"]) {
+      expect(bodies.some((text) => text.includes(`a/${path}`))).toBe(true);
+    }
+    expect(bodies.every((text) => text.includes("truncated=false"))).toBe(true);
+  });
+
+  it("grounds a two-line SQL statement and ignores detector lines and placeholder fixtures", () => {
+    const sqlLines = [
+      "  const sql =",
+      `    "SELECT id, username, password_hash FROM customers WHERE username = '" + username + "'";`,
+    ];
+    const sqlFile = "apps/kyc/src/e2e-sample/customer-query.ts";
+    const sqlEvidence = `const sql = "SELECT id, username, password_hash FROM customers WHERE username = '" + username + "'";`;
+    const sqlFiles = [file(sqlFile, sqlLines)];
+    const sql = reviewDiff(
+      reviewInput(sqlFiles),
+      modelOf(sqlFiles, (control) =>
+        control.id === "A03"
+          ? {
+              ...control,
+              verdict: "FAIL",
+              confidence: 0.93,
+              path: sqlFile,
+              line: 2,
+              evidence: sqlEvidence,
+              severity: "high",
+            }
+          : control,
+      ),
+      OWASP_REVIEW_KEY_ENV_LEAD,
+    );
+    expect(sql.droppedUngrounded).toEqual([]);
+    expect(sql.failures.some((failure) => failure.id === "A03" && failure.line === 2)).toBe(true);
+    expect(sql.outcome).toBe("remediate");
+
+    const detector = String.raw`const INJECTION_RE = /\beval\s*\(|dangerouslySetInnerHTML/;`;
+    const detectorPath = "packages/releasedesk-core/src/owasp-review/select.ts";
+    const detectorFiles = [file(detectorPath, [detector])];
+    const ignored = reviewDiff(
+      reviewInput(detectorFiles),
+      modelOf(detectorFiles, (control) =>
+        control.id === "A03"
+          ? {
+              ...control,
+              verdict: "FAIL",
+              confidence: 0.95,
+              path: detectorPath,
+              line: 1,
+              evidence: detector,
+              severity: "high",
+            }
+          : control,
+      ),
+      OWASP_REVIEW_KEY_ENV_LEAD,
+    );
+    expect(ignored.failures.filter((failure) => failure.id === "A03")).toEqual([]);
+    expect(ignored.controls.find((control) => control.id === "A03")?.verdict).toBe("PASS");
+
+    const realCall = "eval(input);";
+    const callFiles = [file("src/run.ts", [realCall])];
+    const kept = reviewDiff(reviewInput(callFiles), modelOf(callFiles), OWASP_REVIEW_KEY_ENV_LEAD);
+    expect(kept.failures.some((failure) => failure.id === "A03" && failure.evidence === realCall)).toBe(true);
+
+    const fixture = 'env: { XAI_API_KEY: "shared-xai-value", GROK_API_KEY: "shared-grok-value" },';
+    const fixturePath = "packages/releasedesk-core/src/owasp-review/review.test.ts";
+    const fixtureFiles = [file(fixturePath, [fixture])];
+    const placeholder = reviewDiff(
+      reviewInput(fixtureFiles),
+      modelOf(fixtureFiles, (control) =>
+        control.id === "X01"
+          ? {
+              ...control,
+              verdict: "FAIL",
+              confidence: 0.98,
+              path: fixturePath,
+              line: 1,
+              evidence: fixture,
+              severity: "high",
+            }
+          : control,
+      ),
+      OWASP_REVIEW_KEY_ENV_LEAD,
+    );
+    expect(placeholder.failures.filter((failure) => failure.id === "X01")).toEqual([]);
+
+    const live = secretLine();
+    const livePath = "src/keys.test.ts";
+    const liveFiles = [file(livePath, [live])];
+    const stillSecret = reviewDiff(
+      reviewInput(liveFiles),
+      modelOf(liveFiles, (control) =>
+        control.id === "X01"
+          ? {
+              ...control,
+              verdict: "FAIL",
+              confidence: 0.96,
+              path: livePath,
+              line: 1,
+              evidence: live,
+              severity: "high",
+            }
+          : control,
+      ),
+      OWASP_REVIEW_KEY_ENV_LEAD,
+    );
+    expect(stillSecret.failures.some((failure) => failure.id === "X01" && failure.path === livePath)).toBe(true);
   });
 });
