@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  BILLED_COST_NOT_REPORTED,
+  billedUsdFromTicks,
   buildGrokTelemetry,
   estimateGrokCostUsd,
   formatGrokTelemetryLine,
   lookupGrokPrice,
   readGrokServedModel,
   readGrokUsage,
+  USD_TICKS_PER_DOLLAR,
 } from "./grok-telemetry.js";
 
 describe("readGrokUsage", () => {
@@ -19,14 +22,60 @@ describe("readGrokUsage", () => {
           completion_tokens_details: { reasoning_tokens: 40 },
         },
       }),
-    ).toEqual({ promptTokens: 1200, completionTokens: 300, reasoningTokens: 40, totalTokens: 1500 });
+    ).toEqual({
+      promptTokens: 1200,
+      completionTokens: 300,
+      reasoningTokens: 40,
+      totalTokens: 1500,
+      cachedPromptTokens: null,
+      costInUsdTicks: null,
+    });
+  });
+
+  it("reads billed ticks and cached prompt tokens, and does not invent either", () => {
+    expect(
+      readGrokUsage({
+        usage: {
+          prompt_tokens: 199,
+          completion_tokens: 1,
+          total_tokens: 200,
+          cost_in_usd_ticks: 37_756_000,
+          prompt_tokens_details: { cached_tokens: 128 },
+        },
+      }),
+    ).toMatchObject({ costInUsdTicks: 37_756_000, cachedPromptTokens: 128 });
+
+    expect(
+      readGrokUsage({
+        usage: { input_tokens_details: { cached_tokens: 98 }, cost_in_usd_ticks: 0 },
+      }).cachedPromptTokens,
+    ).toBe(98);
+    expect(readGrokUsage({ usage: { cost_in_usd_ticks: 0 } }).costInUsdTicks).toBe(0);
+    expect(readGrokUsage({ usage: { cost_in_usd_ticks: "37756000" } }).costInUsdTicks).toBeNull();
+    expect(readGrokUsage({ usage: { prompt_tokens_details: { cached_tokens: -1 } } }).cachedPromptTokens).toBeNull();
   });
 
   it("leaves everything null when usage is missing or malformed, and does not invent numbers", () => {
-    const empty = { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null };
+    const empty = {
+      promptTokens: null,
+      completionTokens: null,
+      reasoningTokens: null,
+      totalTokens: null,
+      cachedPromptTokens: null,
+      costInUsdTicks: null,
+    };
     expect(readGrokUsage({})).toEqual(empty);
     expect(readGrokUsage(null)).toEqual(empty);
     expect(readGrokUsage({ usage: { prompt_tokens: "12", completion_tokens: -1 } })).toEqual(empty);
+  });
+});
+
+describe("billedUsdFromTicks", () => {
+  it("converts ticks at 10^10 per USD and treats 0 as a real bill", () => {
+    expect(USD_TICKS_PER_DOLLAR).toBe(10_000_000_000);
+    expect(billedUsdFromTicks(37_756_000)).toBeCloseTo(0.0037756, 10);
+    expect(billedUsdFromTicks(400_000_000)).toBeCloseTo(0.04, 10);
+    expect(billedUsdFromTicks(0)).toBe(0);
   });
 });
 
@@ -109,7 +158,36 @@ describe("buildGrokTelemetry and the footer line", () => {
     expect(line).toContain("requested grok-4.3");
     expect(line).toContain("1234 prompt / 321 completion tokens");
     expect(line).toContain("4120 ms");
+    expect(line).toContain(BILLED_COST_NOT_REPORTED);
     expect(line).toMatch(/est\. cost \$0\.\d+ \(estimate, not a bill\)/);
+    expect(t.billedCostUsd).toBeNull();
+    expect(t.cachedPromptTokens).toBeNull();
+  });
+
+  it("shows the billed cost from ticks and keeps the estimate as a separate label", () => {
+    const t = buildGrokTelemetry({
+      requestedModel: "grok-4.3",
+      latencyMs: 800,
+      body: {
+        model: "grok-4.3",
+        usage: {
+          prompt_tokens: 199,
+          completion_tokens: 1,
+          total_tokens: 200,
+          cost_in_usd_ticks: 37_756_000,
+          prompt_tokens_details: { cached_tokens: 128 },
+        },
+      },
+    });
+    expect(t.billedCostUsd).toBeCloseTo(0.0037756, 10);
+    expect(t.costInUsdTicks).toBe(37_756_000);
+    expect(t.cachedPromptTokens).toBe(128);
+    expect(t.estUsd).not.toBeNull();
+    const line = formatGrokTelemetryLine(t);
+    expect(line).toContain("billed cost $0.0038");
+    expect(line).toContain("128 cached prompt tokens");
+    expect(line).toMatch(/est\. cost \$0\.\d+ \(estimate, not a bill\)/);
+    expect(line.indexOf("billed cost")).toBeLessThan(line.indexOf("est. cost"));
   });
 
   it("says plainly when the response had no model and no usage", () => {
@@ -118,6 +196,7 @@ describe("buildGrokTelemetry and the footer line", () => {
     );
     expect(line).toContain("response did not report a model");
     expect(line).toContain("token usage not reported");
+    expect(line).toContain(BILLED_COST_NOT_REPORTED);
     expect(line).toContain("est. cost n/a (usage not reported by the API)");
   });
 });

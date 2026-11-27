@@ -29,10 +29,13 @@ export {
 } from "./grok-guardrails.js";
 
 export {
+  BILLED_COST_NOT_REPORTED,
   GROK_LONG_CONTEXT_PROMPT_TOKENS,
   GROK_PRICE_TABLE,
   GROK_PRICE_TABLE_CHECKED,
   GROK_PRICE_TABLE_SOURCE,
+  USD_TICKS_PER_DOLLAR,
+  billedUsdFromTicks,
   buildGrokTelemetry,
   estimateGrokCostUsd,
   formatGrokTelemetryLine,
@@ -413,3 +416,125 @@ export {
   type SeedDemoCustomersOptions,
   type SeedDemoCustomersResult,
 } from "./customer-store.js";
+
+export {
+  DESIGN_LEVEL_CONTROL_IDS,
+  OWASP_CONTROLS,
+  OWASP_CONTROL_IDS,
+  isOwaspControlId,
+  owaspControl,
+  type OwaspControl,
+  type OwaspControlGroup,
+  type OwaspControlId,
+} from "./owasp-review/catalogue.js";
+
+export {
+  OWASP_BUILDER_DISPUTE_OPEN,
+  OWASP_REVIEW_HEADING,
+  OWASP_REVIEW_MACHINE_CLOSE,
+  OWASP_REVIEW_MACHINE_OPEN,
+  OwaspReviewReportSchema,
+  parseOwaspReviewComment,
+  renderOwaspReviewComment,
+  safeJsonForHtmlComment,
+  type ParsedOwaspReview,
+} from "./owasp-review/comment.js";
+
+export {
+  OWASP_DIFF_TOKEN_BUDGET,
+  DIFF_DATA_BEGIN,
+  DIFF_DATA_END,
+  neutralizeDiffMarkers,
+  addedLines,
+  addedPatch,
+  changedTexts,
+  parseUnifiedHunks,
+  citationMatchesDiff,
+  evidenceMatchesHunk,
+  partitionGrounded,
+  renderDiffSlices,
+  renderNumberedDiff,
+  type AddedLine,
+  type GroundCandidate,
+  type GroundedHit,
+} from "./owasp-review/diff.js";
+
+export {
+  GITHUB_FILES_MAX_PAGES,
+  GITHUB_FILES_PAGE_SIZE,
+  OWASP_MANUAL_REVIEW_LABEL,
+  extractBuilderDisputes,
+  extractPriorReview,
+  labelNamesFromEnv,
+  manualReviewRequested,
+  owaspReviewForPullRequest,
+  type OwaspPrEnv,
+} from "./owasp-review/pr.js";
+
+export {
+  OWASP_CONFIDENCE_MIN,
+  OWASP_REMEDIATION_ROUNDS,
+  OWASP_REVIEW_BATCH_SIZE,
+  OWASP_REVIEW_KEY_ENV_LEAD,
+  OWASP_REVIEW_KEY_ENV_SECURITY,
+  OWASP_REVIEW_MAX_TOKENS,
+  OWASP_REVIEW_RETRY_DELAY_MS,
+  OWASP_REVIEW_TIMEOUT_MS,
+  PASS_STATIC_REASON,
+  UNGROUNDED_REASON,
+  callOwaspModel,
+  decideOutcome,
+  failedOwaspReview,
+  owaspModelJsonSchema,
+  owaspPromptCacheKey,
+  redactSensitive,
+  resolveOwaspReviewKey,
+  reviewDiff,
+  runOwaspReview,
+  type ModelCallResult,
+  type OwaspReviewKey,
+} from "./owasp-review/review.js";
+
+export {
+  NOT_SELECTED_REASON,
+  hasDelimited,
+  hasVariableUrl,
+  selectControls,
+  selectedIds,
+  type ControlSelection,
+  type SelectionResult,
+} from "./owasp-review/select.js";
+
+export {
+  STATIC_COVERED_CONTROL_IDS,
+  isDetectorPatternLine,
+  isObviousFixtureSecret,
+  isSuppressedReviewFinding,
+  isTestFixturePath,
+  runStaticChecks,
+  staticCheckCovers,
+  type StaticFinding,
+} from "./owasp-review/static-checks.js";
+
+export {
+  OWASP_EXCEPTION_TYPES,
+  OWASP_OUTCOMES,
+  OWASP_REVIEW_SCHEMA,
+  OWASP_REVIEW_STATUSES,
+  OWASP_SEVERITIES,
+  OWASP_VERDICTS,
+  type BuilderDispute,
+  type DiffFile,
+  type OwaspControlResult,
+  type OwaspDropped,
+  type OwaspException,
+  type OwaspExceptionType,
+  type OwaspFailure,
+  type OwaspOutcome,
+  type OwaspReviewInput,
+  type OwaspReviewReport,
+  type OwaspReviewStatus,
+  type OwaspSeverity,
+  type OwaspSuggestedFix,
+  type OwaspVerdict,
+} from "./owasp-review/types.js";

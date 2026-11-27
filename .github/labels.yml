@@ -1,0 +1,20 @@
+# Labels for this repo and for customer repos (the template carries the same file).
+# Apply with `gh label create <name> --color <color> --description <desc> --force`.
+# Existing labels (run-grok-evals, test, GitHub defaults) stay.
+- { name: "type:story", color: "1d76db", description: "User story" }
+- { name: "type:bug", color: "d73a4a", description: "Something does not work as specified" }
+- { name: "type:enhancement", color: "a2eeef", description: "Enhancement request (PID-ER)" }
+- { name: "type:chore", color: "cfd3d7", description: "Maintenance, no user-facing change" }
+- { name: "type:security", color: "b60205", description: "Security fix or hardening" }
+- { name: "status:needs-triage", color: "fbca04", description: "New, not yet triaged" }
+- { name: "status:needs-refinement", color: "fef2c0", description: "Does not meet Definition of Ready yet" }
+- { name: "status:ready", color: "0e8a16", description: "Meets Definition of Ready" }
+- { name: "status:in-progress", color: "5319e7", description: "Being worked on (counts toward WIP limit)" }
+- { name: "status:in-review", color: "c5def5", description: "PR open and awaiting review" }
+- { name: "status:blocked", color: "000000", description: "Blocked; say by what" }
+- { name: "gate:finance", color: "f9d0c4", description: "Waiting on the finance-approval gate" }
+- { name: "gate:security", color: "f9d0c4", description: "Waiting on the security-compliance gate" }
+- { name: "gate:release", color: "f9d0c4", description: "Waiting on the release gate" }
+- { name: "priority:high", color: "e99695", description: "Do next" }
+- { name: "priority:low", color: "c2e0c6", description: "Do when capacity allows" }
+- { name: "dependencies", color: "0366d6", description: "Dependency update (Dependabot)" }

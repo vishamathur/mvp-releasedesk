@@ -11,6 +11,7 @@ import {
   createInMemoryCustomerStore,
   CUSTOMER_DB_PATH_ENV,
   defaultCustomerDbPath,
+  demoCustomerInputs,
   FileCustomerStore,
   InMemoryCustomerStore,
   resolveCustomerDbPath,
@@ -289,6 +290,18 @@ describe("customer store", () => {
 });
 
 describe("demo customer seed", () => {
+  it("targets Northwind Bank at its own customer repo", () => {
+    const byId = new Map(DEMO_PORTFOLIO.map((app) => [app.customerId, app]));
+    expect(byId.get("cust_northwind")).toMatchObject({
+      repository: "vishamathur/northwind-bank-kyc-identity",
+      baseRef: "main",
+    });
+    expect(byId.get("cust_contoso")?.repository).toBe("vishamathur/mvp-releasedesk");
+    expect(byId.get("cust_fabrikam")?.repository).toBe("vishamathur/mvp-releasedesk");
+    const northwind = demoCustomerInputs().find((row) => row.customerId === "cust_northwind");
+    expect(northwind?.metadata?.repository).toBe("vishamathur/northwind-bank-kyc-identity");
+  });
+
   it("seeds exactly the DEMO_PORTFOLIO customers when opted in", async () => {
     expect(DEMO_PORTFOLIO.map((app) => app.customerName).sort()).toEqual([
       "Contoso Retail",
