@@ -37,7 +37,18 @@ describe("Grok chat completion guardrails", () => {
     );
     expect(body).not.toHaveProperty("stop");
     expect(body).not.toHaveProperty("n");
+    expect(body).not.toHaveProperty("prompt_cache_key");
     expect(JSON.stringify(body)).not.toMatch(/@/);
+  });
+
+  it("sets prompt_cache_key when a stable cache key is given", () => {
+    const body = buildGrokChatCompletionBody({
+      model: "grok-4.3",
+      safetySource: "lead:vishamathur/mvp-releasedesk",
+      promptCacheKey: "  release-intel:v2:vishamathur/mvp-releasedesk:pr:41  ",
+      messages: [{ role: "user", content: "ping" }],
+    });
+    expect(body.prompt_cache_key).toBe("release-intel:v2:vishamathur/mvp-releasedesk:pr:41");
   });
 
   it("rejects a multi-agent model", () => {
