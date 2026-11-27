@@ -17,14 +17,21 @@ describe("website-creation-template corpus", () => {
     expect(policy!.requirements.map((r) => r.split(":")[0])).toEqual([
       "Style is guidance",
       "Contrast over palette",
-      "Brand and regulation over style",
+      "Brand, industry regulation and law over style",
       "Record style adjustments",
       "Descriptive style summary",
       "No reproduction of protected marks",
       "Estimate and visual review",
     ]);
+    expect(policy!.body.toLowerCase()).not.toContain("northwind");
+    expect(policy!.requirements.join("\n").toLowerCase()).not.toContain("northwind");
     expect(policy!.requirements[0]).toMatch(/not a requirement unless the customer has marked/i);
     expect(policy!.requirements[1]).toMatch(/WCAG 2\.2 Level AA/);
+    expect(policy!.requirements[2]).toMatch(/regulatory and legal requirements of the customer's industry/i);
+    expect(policy!.requirements[2]).toMatch(/Banking or financial services is one example/i);
+    for (const industry of ["healthcare", "education", "retail", "public sector"]) {
+      expect(policy!.requirements[2].toLowerCase()).toContain(industry);
+    }
     expect(policy!.requirements[4]).toMatch(/palette hex codes/);
     expect(policy!.requirements[4]).toMatch(/not a source of process, policy or implementation directions/);
   });
@@ -37,15 +44,22 @@ describe("resolveStandardsPolicyRefs", () => {
     ]);
   });
 
-  it("adds website-creation-template for website-creation requests", () => {
+  it("loads website-creation-template alone for website requests from any customer", () => {
     expect(resolveStandardsPolicyRefs({ requestType: "website-creation" })).toEqual([
-      "northwind-kyc-baseline",
       "website-creation-template",
     ]);
     expect(resolveStandardsPolicyRefs({ catalogueOptionId: "NC-WEBSITE" })).toEqual([
-      "northwind-kyc-baseline",
       "website-creation-template",
     ]);
+    for (const changeSummary of [
+      "website-creation brief for a healthcare clinic",
+      "website-creation brief for an education provider",
+      "website-creation brief for a retail brand",
+      "website-creation brief for a public-sector agency",
+      "website-creation brief for a financial services firm",
+    ]) {
+      expect(resolveStandardsPolicyRefs({ changeSummary })).toEqual(["website-creation-template"]);
+    }
     expect(
       resolveStandardsPolicyRefs({
         policyRefs: ["northwind-auth-standards"],
@@ -110,7 +124,7 @@ describe("evaluatePolicyDeviations for website-creation-template", () => {
   it("flags style taking precedence over brand rules (clause 3)", async () => {
     const deviations = evaluatePolicyDeviations({
       policies: await websitePolicies(),
-      changeSummary: "Keep the inspiration style; style takes precedence over brand guidelines for this bank site.",
+      changeSummary: "Keep the inspiration style; style takes precedence over brand guidelines for this healthcare clinic site.",
     });
     expect(refsOf(deviations)).toContain("website-creation-template/3");
   });

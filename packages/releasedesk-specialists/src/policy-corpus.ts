@@ -104,13 +104,14 @@ export function resolveStandardsPolicyRefs(opts: {
     if (website && !hasWebsite) refs.push("website-creation-template");
     return refs;
   }
-  const refs = ["northwind-kyc-baseline"];
-  if (website) refs.push("website-creation-template");
-  return refs;
+  // Website requests from any customer load the industry-neutral template.
+  // Do not default those requests onto Northwind KYC policy.
+  if (website) return ["website-creation-template"];
+  return ["northwind-kyc-baseline"];
 }
 
 /**
- * Evaluate Northwind policies against change text / repo signals.
+ * Evaluate loaded policies against change text / repo signals.
  * Returns evidence-backed deviations (heuristic; Grok may enrich later).
  */
 export function evaluatePolicyDeviations(opts: {
@@ -243,16 +244,18 @@ export function evaluatePolicyDeviations(opts: {
           text.includes("style takes precedence over regulat") ||
           text.includes("override brand") ||
           text.includes("override regulatory") ||
+          text.includes("override legal") ||
           text.includes("ignore brand guidelines") ||
-          text.includes("ignore regulatory"))
+          text.includes("ignore regulatory") ||
+          text.includes("ignore legal"))
       ) {
         deviations.push({
           policyRef: `${policy.id}/3`,
           severity: "high",
           summary:
-            "Change text lets inspiration style take precedence over brand or regulatory requirements.",
+            "Change text lets inspiration style take precedence over brand or the industry's regulatory or legal requirements.",
           recommendation:
-            "Follow brand and regulatory requirements, and record any style cue that was adjusted.",
+            "Follow the customer's brand and their industry's regulatory and legal requirements, and record any style cue that was adjusted.",
         });
       }
 

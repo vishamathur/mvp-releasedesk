@@ -114,8 +114,12 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
       },
     });
 
+    const policyList = policies.map((p) => p.id).join(", ");
+    const usesWebsiteTemplate = policies.some((p) => p.id === "website-creation-template");
     const grok = await grokComplete(
-      `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
+      usesWebsiteTemplate
+        ? `Summarize standards deviations for ${repository} against ${policyList}: ${JSON.stringify(deviations)}`
+        : `Summarize Northwind standards deviations for ${repository}: ${JSON.stringify(deviations)}`,
       {
         ...options.grok,
         agentRole: options.grok?.agentRole ?? "standards",
@@ -131,8 +135,10 @@ export function createStandardsRunner(options: SpecialistRunnerOptions = {}): Ag
 
     const compliant = deviations.length === 0;
     const summary = compliant
-      ? `Standards check complete — compliant (${policies.map((p) => p.id).join(", ")})`
-      : `Standards check complete — ${deviations.length} deviation(s) against Northwind policies`;
+      ? `Standards check complete — compliant (${policyList})`
+      : usesWebsiteTemplate
+        ? `Standards check complete — ${deviations.length} deviation(s) against ${policyList}`
+        : `Standards check complete — ${deviations.length} deviation(s) against Northwind policies`;
 
     if (!compliant) {
       for (const d of deviations) {
