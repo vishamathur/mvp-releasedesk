@@ -31,7 +31,7 @@ Drop `--dry-run` to run it. Steps, in order. Any failure stops the run with the 
 | finance guard | Refuse unless `decisions[]` or a transition `humanDecision` has `gate: finance-approval`, `status: approved` and a named `decidedBy` | local |
 | check-free | Refuse if the repo already exists | `gh repo view` |
 | create | Private repo from the template | `gh repo create <owner>/<name> --private --template vishamathur/releasedesk-customer-template` |
-| protect | `main`: PR required, 1 approving review, required checks `ci`, `grok-review / review`, `owasp-review / review`, no force-push, no deletion. On GitHub's 403 plan-upgrade error: record `unavailable-free-plan`, warn, continue. Any other error stops before a key exists | `PUT /repos/{repo}/branches/main/protection` |
+| protect | `main`: PR required, 0 GitHub approvals, required checks `ci`, `grok-review / review`, `owasp-review / review`, no force-push, no deletion. On GitHub's 403 plan-upgrade error: record `unavailable-free-plan`, warn, continue. Any other error stops before a key exists | `PUT /repos/{repo}/branches/main/protection` |
 | labels | Labels from the template's `.github/labels.yml` | `gh label create --force` |
 | mint key | Per-repo Grok key `releasedesk-<owner>-<name>`, ACLs `api-key:endpoint:chat`, `api-key:model:grok-4.3` | xAI Management API `POST https://management-api.x.ai/auth/teams/{teamId}/api-keys` |
 | set secret | `RELEASEDESK_GROK_API_KEY_LEAD` from stdin; the value is never printed or put in argv. If this fails the new key is deleted | `gh secret set ... -R <repo>` |
@@ -56,8 +56,12 @@ It refuses unless the state has a rejected gate decision and the state's `target
 | `XAI_TEAM_ID` | Optional. When unset, the team is read from `GET /auth/management-keys/validation`. |
 | `gh` login | `repo` scope for create, protection, labels, secrets and archive. Pushing workflow files needs the `workflow` scope too. |
 
+## Review model
+
+No human GitHub approvals are required (`required_approving_review_count: 0`). Review means the required Grok release-intel (`grok-review`) and OWASP review (`owasp-review`) checks plus the typed Release Desk gates (security-compliance and release). A pull request is still required, and `ci` must pass.
+
 ## Known limits
 
-- **Branch protection on private repos (GitHub Free, no paid upgrade).** GitHub answers the protection call with 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." The script matches that exact message with HTTP 403 only. It then records `protection: "unavailable-free-plan"` in the request target and the audit line, prints a warning that `main` is **not enforced by GitHub** and that enforcement relies on the Release Desk gates (the typed security-compliance and release gates, and required reviews by the Release Desk bots), and continues with labels, key, customer record and target. Any other protection error (other 403s, 404, 422, network) still stops the run before a key exists. `protection` values: `applied`, `unavailable-free-plan`.
+- **Branch protection on private repos (GitHub Free, no paid upgrade).** GitHub answers the protection call with 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." The script matches that exact message with HTTP 403 only. It then records `protection: "unavailable-free-plan"` in the request target and the audit line, prints a warning that `main` is **not enforced by GitHub** and that enforcement relies on the Release Desk gates (the typed security-compliance and release gates, and required reviews by the Release Desk bots, i.e. the Grok release-intel and OWASP review checks), and continues with labels, key, customer record and target. Any other protection error (other 403s, 404, 422, network) still stops the run before a key exists. `protection` values: `applied`, `unavailable-free-plan`.
 - **Reusable review workflows.** The template's `grok-review.yml` and `owasp-review.yml` call `release-intel-reusable.yml` and `owasp-review-reusable.yml` in this repo (`workflow_call`). Those two files must land in `.github/workflows/` here first.
 - The tests (`packages/releasedesk-core/src/customer-repo/index.test.ts`) cover the name rule, the finance guard and dry-run planning. They make no network calls.

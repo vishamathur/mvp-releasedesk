@@ -145,7 +145,9 @@ export function branchProtectionBody(requiredChecks: string[]) {
     required_status_checks: { strict: true, contexts: requiredChecks },
     enforce_admins: false,
     required_pull_request_reviews: {
-      required_approving_review_count: 1,
+      // No human GitHub approvals: review is the required Grok release-intel and OWASP checks
+      // plus the typed Release Desk gates.
+      required_approving_review_count: 0,
       dismiss_stale_reviews: true,
       require_code_owner_reviews: false,
     },
@@ -164,7 +166,8 @@ export type ProtectionStatus = "applied" | "unavailable-free-plan" | "not-applie
 export const FREE_PLAN_PROTECTION_WARNING =
   "WARNING: GitHub branch protection is unavailable on this private repo (GitHub Free plan; no paid upgrade). " +
   "main is NOT enforced by GitHub. Enforcement relies on the Release Desk gates: the typed security-compliance " +
-  "and release gates, and required reviews by the Release Desk bots. Merge only through those gates.";
+  "and release gates, and required reviews by the Release Desk bots (the Grok release-intel and OWASP review checks). " +
+  "Merge only through those gates.";
 
 /**
  * True only for GitHub's 403 plan-upgrade error. Any other failure (auth, 404, 422, network)
@@ -256,7 +259,7 @@ export function planCreateCustomerRepo(options: CreateOptions, state: unknown): 
     { id: "wait-main", description: `wait for ${baseRef} to exist`, gh: ["api", `repos/${repository}/branches/${baseRef}`] },
     {
       id: "protect",
-      description: `protect ${baseRef}: PR required, 1 review, checks ${checks.join(", ")}, no force-push, no deletion (GitHub Free 403 plan-upgrade: record unavailable-free-plan, warn, continue; any other error stops)`,
+      description: `protect ${baseRef}: PR required, 0 GitHub approvals (review = Grok and OWASP checks + Release Desk gates), checks ${checks.join(", ")}, no force-push, no deletion (GitHub Free 403 plan-upgrade: record unavailable-free-plan, warn, continue; any other error stops)`,
       gh: ["api", "-X", "PUT", `repos/${repository}/branches/${baseRef}/protection`, "--input", "-"],
     },
     { id: "labels", description: "create labels from .github/labels.yml", gh: ["label", "create", "<name>", "--color", "<color>", "--description", "<desc>", "--force", "-R", repository] },
