@@ -10,7 +10,7 @@ Each customer request gets its own private repo, created from the template [vish
 
 1. Intake (Lead) → estimate (Change Analyst) → **finance-approval** (Vishal types it).
 2. `scripts/create-customer-repo.ts` creates the repo (below).
-3. Security review and the security-compliance gate.
+3. Security review and the security-compliance gate. The `owasp-review / review` check fails on any mandatory blocker (authentication failures, access control, hard-coded secrets, anything high or critical), see [OWASP review](security/owasp-review.md#mandatory-blockers).
 4. Build: Builder launches the coding agent on the repo from the request `target` (`repository`, `baseRef`). It opens a PR from `cursor/req-<id>-<slug>`.
 5. Release gate (Vishal types it) and a human merge.
 6. On a rejected gate: `--archive` archives the repo and revokes its key.

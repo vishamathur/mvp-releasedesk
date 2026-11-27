@@ -39,6 +39,7 @@ import {
   staticCheckCovers,
   type StaticFinding,
 } from "./static-checks.js";
+import { classifyMandatory } from "./mandatory-blockers.js";
 import {
   OWASP_REVIEW_SCHEMA,
   type OwaspControlResult,
@@ -90,6 +91,8 @@ const ModelControlSchema = z.object({
   evidence: z.string(),
   severity: z.enum(MODEL_SEVERITIES),
   autoFixable: z.boolean(),
+  /** CWE id for the finding, such as CWE-307. Empty when none applies. */
+  cwe: z.string().default(""),
   suggestedFix: ModelFixSchema,
 });
 
@@ -172,6 +175,7 @@ export function owaspModelJsonSchema(ids: readonly string[]): Record<string, unk
             "evidence",
             "severity",
             "autoFixable",
+            "cwe",
             "suggestedFix",
           ],
           properties: {
@@ -183,6 +187,7 @@ export function owaspModelJsonSchema(ids: readonly string[]): Record<string, unk
             evidence: { type: "string" },
             severity: { type: "string", enum: [...MODEL_SEVERITIES] },
             autoFixable: { type: "boolean" },
+            cwe: { type: "string" },
             suggestedFix: {
               type: "object",
               additionalProperties: false,
@@ -237,6 +242,7 @@ function shell(
     | "advisory"
     | "humanGateStillRequired"
     | "noAutoApprove"
+    | "mandatoryBlockers"
     | "headSha"
     | "priorHeadSha"
     | "generatedAt"
@@ -258,6 +264,7 @@ function shell(
     pullRequest: input.pullRequest,
     title: input.title?.trim() || "pull request",
     ...fields,
+    mandatoryBlockers: fields.failures.filter((failure) => failure.mandatory).length,
   };
 }
 
@@ -384,6 +391,8 @@ function systemPrompt(): string {
     "Each listed control has verdict PASS, FAIL, NOT_APPLICABLE, or UNDECIDED, and confidence from 0 to 1.",
     "UNDECIDED is the verdict when the case is not decided. Confidence below 0.6 is not a PASS.",
     "A FAIL cites path, the L number as line, the changed line as evidence, and severity low, medium, high, or critical.",
+    "cwe is the CWE id of a FAIL, such as CWE-307, or an empty string when none applies.",
+    "For authentication code, a missing or bypassable lockout or rate limit, unthrottled guessing of a credential, token or one-time code, a way to lock out other users, and a way around sign-in are FAILs of A07.",
     "suggestedFix has what, where as path:line, why, and owaspId equal to the control id.",
     `autoFixable is false for a design decision (for example ${DESIGN_LEVEL_CONTROL_IDS.join(" and ")}).`,
     "A citation that is not a changed line uses NOT_APPLICABLE or UNDECIDED.",
@@ -564,6 +573,13 @@ function concreteFix(
 }
 
 function failureFromStatic(finding: StaticFinding): OwaspFailure {
+  const mandatory = classifyMandatory({
+    id: finding.id,
+    severity: finding.severity,
+    path: finding.path,
+    evidence: finding.evidence,
+    fixText: `${finding.suggestedFix.what} ${finding.suggestedFix.why}`,
+  });
   return {
     id: finding.id,
     path: finding.path,
@@ -572,6 +588,9 @@ function failureFromStatic(finding: StaticFinding): OwaspFailure {
     evidence: finding.evidence,
     suggestedFix: finding.suggestedFix,
     autoFixable: true,
+    mandatory: mandatory.mandatory,
+    mandatoryReasons: mandatory.reasons,
+    cwe: mandatory.cwes,
   };
 }
 
@@ -583,14 +602,26 @@ function failureFromModel(
   severity: OwaspSeverity,
   model: ModelControl,
 ): OwaspFailure {
+  const suggestedFix = concreteFix(id, path, line, evidence, model.suggestedFix);
+  const mandatory = classifyMandatory({
+    id,
+    severity,
+    path,
+    evidence,
+    fixText: `${suggestedFix.what} ${suggestedFix.why}`,
+    cwe: model.cwe,
+  });
   return {
     id,
     path,
     line,
     severity,
     evidence,
-    suggestedFix: concreteFix(id, path, line, evidence, model.suggestedFix),
+    suggestedFix,
     autoFixable: model.autoFixable,
+    mandatory: mandatory.mandatory,
+    mandatoryReasons: mandatory.reasons,
+    cwe: mandatory.cwes,
   };
 }
 
