@@ -56,6 +56,26 @@ function formatDropped(blocker: DroppedBlocker): string {
   return `- \`${where}\` — ${sanitizeInline(blocker.reason, 200)}`;
 }
 
+/**
+ * Comment for a call that failed before a report existed.
+ * It names the failure and does not invent a risk tier or blockers.
+ */
+export function renderReleaseIntelFailure(reason: string): string {
+  const safe = sanitizeInline(reason, 500) || "Grok request failed";
+  return [
+    RELEASE_INTEL_HEADING,
+    "",
+    "**Status** failed",
+    "",
+    safe,
+    "",
+    "No release-intel result. Risk was not assessed. No blockers were recorded.",
+    "",
+    "_Advisory only. Grok never approves a merge or a release. The Security gate and the human gates stay in force._",
+    "",
+  ].join("\n");
+}
+
 export function renderReleaseIntelComment(report: ReleaseIntelPrReport): string {
   const { intel } = report;
   const commit = report.headSha

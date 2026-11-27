@@ -100,6 +100,35 @@ export type GrokReleaseIntelResult = {
 export const RELEASE_INTEL_MAX_TOKENS = 4000;
 /** Diff review can outlast the shared 30s chat timeout. This call fails visibly at this limit. */
 export const RELEASE_INTEL_TIMEOUT_MS = 120_000;
+
+/**
+ * Timeout for one release-intel call. `override` wins, then `RELEASE_INTEL_TIMEOUT_MS`,
+ * then the 120000 ms default. A bad value throws. It never silently keeps going.
+ */
+export function resolveReleaseIntelTimeoutMs(
+  env: Record<string, string | undefined> = process.env,
+  override?: number,
+): number {
+  if (override !== undefined) {
+    if (!Number.isInteger(override) || override < 1) {
+      throw new Error("release-intel timeout must be a positive integer number of milliseconds");
+    }
+    return override;
+  }
+  const raw = env.RELEASE_INTEL_TIMEOUT_MS?.trim();
+  if (!raw) return RELEASE_INTEL_TIMEOUT_MS;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error("RELEASE_INTEL_TIMEOUT_MS must be a positive integer number of milliseconds");
+  }
+  return value;
+}
+
+function isTimeoutError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === "TimeoutError") return true;
+  return err.name === "AbortError" && /timeout/i.test(err.message);
+}
 const INTEL_ROLE = "lead" as const;
 const INTEL_KEY_ENV = GROK_API_KEY_ENV[INTEL_ROLE];
 
@@ -278,12 +307,18 @@ export async function runGrokReleaseIntel(
   opts?: {
     fetchImpl?: typeof fetch;
     env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
+    /** Fault-injection and tests only. Production leaves this unset and calls api.x.ai. */
+    endpoint?: string;
+    /** Overrides RELEASE_INTEL_TIMEOUT_MS for this call. */
+    timeoutMs?: number;
   },
 ): Promise<GrokReleaseIntelResult> {
   const env = (opts?.env ?? process.env) as NodeJS.ProcessEnv;
   const apiKey = resolveAgentGrokApiKey(INTEL_ROLE, env);
   if (!apiKey) throw new MissingCredentialError(INTEL_KEY_ENV);
   const requestedModel = resolveGrokModel(env);
+  const timeoutMs = resolveReleaseIntelTimeoutMs(env, opts?.timeoutMs);
+  const endpoint = opts?.endpoint?.trim() || GROK_CHAT_COMPLETIONS_URL;
 
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const promptCacheKey = releaseIntelPromptCacheKey(input.repository, input.pullRequest);
@@ -297,7 +332,7 @@ export async function runGrokReleaseIntel(
 
   try {
     const startedAt = performance.now();
-    const res = await fetchImpl(GROK_CHAT_COMPLETIONS_URL, {
+    const res = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -325,7 +360,7 @@ export async function runGrokReleaseIntel(
           ],
         }),
       ),
-      signal: AbortSignal.timeout(RELEASE_INTEL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     assertGrokChatStatus(res.status);
@@ -333,10 +368,20 @@ export async function runGrokReleaseIntel(
       throw new Error(`Grok request failed (${res.status})`);
     }
 
-    const body = (await res.json()) as {
+    const raw = await res.text();
+    if (!raw.trim()) throw new Error("Grok response content was empty");
+    let body: {
       model?: string;
       choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
     };
+    try {
+      body = JSON.parse(raw) as typeof body;
+    } catch {
+      throw new Error("Grok response was not JSON");
+    }
+    if (!Array.isArray(body.choices) || body.choices.length === 0) {
+      throw new Error("Grok response had no choices");
+    }
     const telemetry = buildGrokTelemetry({
       requestedModel,
       body,
@@ -347,7 +392,8 @@ export async function runGrokReleaseIntel(
         `Grok response was cut off at max_tokens=${RELEASE_INTEL_MAX_TOKENS}. Raise RELEASE_INTEL_MAX_TOKENS in grok-release-intel.ts or shorten the input.`,
       );
     }
-    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+    const text = body.choices[0]?.message?.content?.trim() ?? "";
+    if (!text) throw new Error("Grok response content was empty");
     const parsed = parseIntelJson(text);
     const trusted = parsed
       ? trustCheckGrokIntelPayload(parsed)
@@ -404,6 +450,10 @@ export async function runGrokReleaseIntel(
     };
   } catch (err) {
     if (err instanceof MissingCredentialError || err instanceof GrokGuidelineError) throw err;
+    if (isTimeoutError(err)) {
+      throw new Error(`Grok request timed out after ${timeoutMs} ms`);
+    }
+    if (err instanceof Error && err.message.startsWith("Grok ")) throw err;
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Grok request failed: ${message}`);
   }
