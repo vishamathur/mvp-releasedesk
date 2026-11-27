@@ -1,0 +1,49 @@
+name: User story
+description: A small, valuable slice of work for one sprint.
+title: "story: "
+labels: ["type:story", "status:needs-refinement"]
+body:
+  - type: input
+    id: request
+    attributes:
+      label: Release Desk request id
+      placeholder: REQ-2026-0001
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      value: |
+        As a <role>
+        I want <capability>
+        So that <benefit>
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria (Given / When / Then)
+      value: |
+        Scenario: <name>
+          Given <context>
+          When <action>
+          Then <outcome>
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Estimate (story points)
+      options: ["1", "2", "3", "5", "8", "13 (split it)"]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Data, security and dependencies
+      description: PII touched, auth changes, other stories this depends on.
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: Story, acceptance criteria and estimate agreed (see docs/DEFINITION_OF_READY.md)

@@ -1,0 +1,45 @@
+name: Enhancement request (ER)
+description: Ask for a change to the existing product. Becomes a Release Desk PID-ER request.
+title: "ER: "
+labels: ["type:enhancement", "status:needs-refinement"]
+body:
+  - type: input
+    id: customer
+    attributes:
+      label: Customer and product
+      placeholder: Northwind Bank, KYC Onboarding
+    validations:
+      required: true
+  - type: textarea
+    id: ask
+    attributes:
+      label: The ask
+      description: What should change, in plain words.
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Business value
+      value: |
+        As a <role>
+        I want <capability>
+        So that <benefit>
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria (Given / When / Then)
+      value: |
+        Given <context>
+        When <action>
+        Then <outcome>
+  - type: input
+    id: sprint
+    attributes:
+      label: Target sprint
+      placeholder: next
+  - type: textarea
+    id: data
+    attributes:
+      label: Data and compliance
+      description: Personal data touched, retention, regulatory notes.

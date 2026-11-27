@@ -1,0 +1,6 @@
+# Default owner for everything in this customer repo.
+* @vishamathur
+
+# Process and CI files need the owner's review.
+/.github/ @vishamathur
+/SECURITY.md @vishamathur
