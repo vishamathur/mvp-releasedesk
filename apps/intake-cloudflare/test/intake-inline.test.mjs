@@ -19,7 +19,7 @@ const VERIFY = join(REPO, "grok-bots", "tools", "verify_intake.py");
 const E2E = join(REPO, "scripts", "intake-inline-e2e.py");
 const FETCH_KEY = randomBytes(32).toString("hex");
 
-let dir, secrets, inbox, env, site, sink, siteUrl, sinkUrl, intakeSecretDir;
+let dir, inbox, env, site, sink, siteUrl, sinkUrl;
 
 function adapt(handler) {
   return http.createServer(async (req, res) => {
@@ -32,12 +32,8 @@ const listen = (s) => new Promise((r) => s.listen(0, "127.0.0.1", () => r(`http:
 
 before(async () => {
   dir = mkdtempSync(join(tmpdir(), "intake-inline-"));
-  secrets = join(dir, "secrets"); inbox = join(dir, "inbox"); intakeSecretDir = secrets;
+  inbox = join(dir, "inbox");
   env = testEnv({ LEAD_FETCH_KEY: FETCH_KEY });
-  for (const d of [secrets]) { rmSync(d, { recursive: true, force: true }); }
-  const { mkdirSync } = await import("node:fs"); mkdirSync(secrets, { recursive: true });
-  writeFileSync(join(secrets, "intake-site-lead-hmac-secret"), env.LEAD_HMAC_SECRET + "\n", { mode: 0o600 });
-  writeFileSync(join(secrets, "intake-site-fetch-key"), FETCH_KEY + "\n", { mode: 0o600 });
   site = adapt(async (req, body) => {
     const headers = { "CF-Connecting-IP": "203.0.113.7", Origin: ORIGIN };
     if (req.headers["content-type"]) headers["Content-Type"] = req.headers["content-type"];
@@ -50,7 +46,18 @@ before(async () => {
 });
 after(() => { site.close(); sink?.close(); rmSync(dir, { recursive: true, force: true }); });
 
-const childEnv = (extra = {}) => ({ PATH: process.env.PATH, INTAKE_SECRETS_DIR: secrets, INTAKE_INBOX_DIR: inbox, INTAKE_BASE_URL: siteUrl, ...extra });
+const childEnv = (extra = {}) => {
+  const e = {
+    PATH: process.env.PATH,
+    INTAKE_INBOX_DIR: inbox,
+    INTAKE_BASE_URL: siteUrl,
+    RELEASEDESK_INTAKE_HMAC_SECRET: env.LEAD_HMAC_SECRET,
+    RELEASEDESK_INTAKE_FETCH_KEY: FETCH_KEY,
+    ...extra,
+  };
+  for (const k of Object.keys(e)) if (e[k] === undefined) delete e[k];
+  return e;
+};
 async function py(args, extra) {
   try { const r = await run("python3", args, { env: childEnv(extra), timeout: 60000 }); return { code: 0, json: JSON.parse(r.stdout.trim().split("\n").pop()), out: r.stdout }; }
   catch (e) { return { code: e.code, json: JSON.parse(String(e.stdout).trim().split("\n").pop() || "{}"), out: String(e.stdout) }; }
@@ -97,6 +104,24 @@ test("verify_intake: rejects a notice signed with a different secret (the INTAKE
   assert.equal(r.json.noticeSig, false); assert.equal(r.json.ok, false); assert.equal(r.json.fetched, null);
 });
 
+test("verify_intake: missing secrets fail closed with missing_secret and never print values", async () => {
+  const rid = "REQ-20261128-000001";
+  const dummy = [VERIFY, rid, "1".repeat(10), "a".repeat(64), "b".repeat(64), "intake-card"];
+  const unsetBoth = await py(dummy, { RELEASEDESK_INTAKE_HMAC_SECRET: undefined, RELEASEDESK_INTAKE_FETCH_KEY: undefined });
+  assert.equal(unsetBoth.json.ok, false);
+  assert.equal(unsetBoth.json.error, "missing_secret:RELEASEDESK_INTAKE_HMAC_SECRET");
+  assert.equal(unsetBoth.code, 0);
+  const unsetFetch = await py(dummy, { RELEASEDESK_INTAKE_FETCH_KEY: undefined });
+  assert.equal(unsetFetch.json.ok, false);
+  assert.equal(unsetFetch.json.error, "missing_secret:RELEASEDESK_INTAKE_FETCH_KEY");
+  const emptyHmac = await py(dummy, { RELEASEDESK_INTAKE_HMAC_SECRET: "" });
+  assert.equal(emptyHmac.json.ok, false);
+  assert.equal(emptyHmac.json.error, "missing_secret:RELEASEDESK_INTAKE_HMAC_SECRET");
+  const missingFile = await py([VERIFY, "--file", join(inbox, "REQ-20261128-000001-1.json")], { RELEASEDESK_INTAKE_HMAC_SECRET: undefined });
+  assert.equal(missingFile.json.ok, false);
+  assert.equal(missingFile.json.error, "missing_secret:RELEASEDESK_INTAKE_HMAC_SECRET");
+});
+
 test("verify_intake: stale ts, wrong sha, bad ids, bad base url, wrong fetch key and tampered file all fail", async () => {
   const rid = await submitCard();
   const old = String(Math.floor(Date.now() / 1000) - 700);
@@ -107,9 +132,7 @@ test("verify_intake: stale ts, wrong sha, bad ids, bad base url, wrong fetch key
   assert.equal((await py([VERIFY, "REQ-1", "1", "x", "y"])).json.ok, false);
   const { args } = await noticeFor(rid);
   assert.equal((await py([VERIFY, ...args], { INTAKE_BASE_URL: "https://evil.example" })).json.error, "bad base url");
-  const wrongDir = join(dir, "secrets-wrong-fetch"); (await import("node:fs")).mkdirSync(wrongDir, { recursive: true });
-  writeFileSync(join(wrongDir, "intake-site-lead-hmac-secret"), env.LEAD_HMAC_SECRET); writeFileSync(join(wrongDir, "intake-site-fetch-key"), randomBytes(32).toString("hex"));
-  const wf = await py([VERIFY, ...args], { INTAKE_SECRETS_DIR: wrongDir });
+  const wf = await py([VERIFY, ...args], { RELEASEDESK_INTAKE_FETCH_KEY: randomBytes(32).toString("hex") });
   assert.equal(wf.json.fetched, 401); assert.equal(wf.json.ok, false);
   const good = await py([VERIFY, ...args]);
   const t = JSON.parse(readFileSync(good.json.savedTo, "utf8")); t.payloadJson = t.payloadJson.replace("Rename", "Rename!");
@@ -118,22 +141,22 @@ test("verify_intake: stale ts, wrong sha, bad ids, bad base url, wrong fetch key
   assert.equal((await py([VERIFY, "--file", join(dir, "outside.json")])).json.error, "path is not an inbox file");
 });
 
-function startSink(secretsForIntake) {
+function startSink(secretEnv = {}) {
   // Stands in for Intake's webhook routine: it runs the same verifier the Intake bot runs, with the secrets it was given.
   sink = adapt(async (req, body) => {
     const auth = req.headers.authorization === "Bearer sink-key-for-test";
     if (!auth) return { status: 401, body: "no" };
     const n = JSON.parse(body.toString());
-    execFile("python3", [VERIFY, n.requestId, n.ts, n.payloadSha256, n.sig, n.kind], { env: childEnv({ INTAKE_SECRETS_DIR: secretsForIntake }) }, () => {});
+    execFile("python3", [VERIFY, n.requestId, n.ts, n.payloadSha256, n.sig, n.kind], { env: childEnv(secretEnv) }, () => {});
     return { status: 202, body: "{}" };
   });
   return listen(sink);
 }
-const webhookFile = (url) => { const p = join(dir, "wh-" + randomBytes(3).toString("hex") + ".json"); writeFileSync(p, JSON.stringify({ url, key: "sink-key-for-test", auth: "bearer" })); return p; };
+const webhookEnv = (url) => ({ INTAKE_WEBHOOK_URL: url, INTAKE_WEBHOOK_KEY: "sink-key-for-test", INTAKE_WEBHOOK_AUTH: "bearer" });
 
 test("e2e script: PASS end to end when Intake holds the site's secret; no secret in its output", async () => {
-  sinkUrl = await startSink(intakeSecretDir);
-  const r = await py([E2E, "--webhook-file", webhookFile(sinkUrl), "--wait", "30"]);
+  sinkUrl = await startSink();
+  const r = await py([E2E, "--wait", "30"], webhookEnv(sinkUrl));
   assert.equal(r.code, 0, r.out); assert.equal(r.json.result, "PASS");
   assert.deepEqual(r.json.steps.map((s) => s.step), ["preflight", "submit", "envelope", "card-is-probe", "notice", "webhook", "inbox-file", "inbox-envelope-hmac"]);
   assert.ok(!r.out.includes(env.LEAD_HMAC_SECRET) && !r.out.includes(FETCH_KEY) && !r.out.includes("sink-key-for-test"));
@@ -153,7 +176,7 @@ test("verify_intake: millisecond ts is rejected, a kind mismatch does not save, 
   const { args } = await noticeFor(rid);
   const first = await py([VERIFY, ...args]);
   assert.equal(first.json.ok, true, first.out);
-  const bound = await py(["-c", `import json, importlib.util\nspec = importlib.util.spec_from_file_location("verify_intake", ${JSON.stringify(VERIFY)})\nmod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)\nbody = open(${JSON.stringify(first.json.savedTo)}, "rb").read()\nfields = mod.envelope_fields(body, mod.read_key("intake-site-lead-hmac-secret"), ${JSON.stringify(rid)}, ${JSON.stringify(args[2])}, "visitor-message")\nprint(json.dumps(fields))\n`]);
+  const bound = await py(["-c", `import json, importlib.util\nspec = importlib.util.spec_from_file_location("verify_intake", ${JSON.stringify(VERIFY)})\nmod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)\nbody = open(${JSON.stringify(first.json.savedTo)}, "rb").read()\nfields = mod.envelope_fields(body, mod.read_secret("RELEASEDESK_INTAKE_HMAC_SECRET"), ${JSON.stringify(rid)}, ${JSON.stringify(args[2])}, "visitor-message")\nprint(json.dumps(fields))\n`]);
   assert.equal(bound.json.bound, false);
   assert.equal(bound.json.error, "payload binding");
   const jsons = () => readdirSync(inbox).filter((name) => name.endsWith(".json"));
@@ -165,16 +188,14 @@ test("verify_intake: millisecond ts is rejected, a kind mismatch does not save, 
 });
 
 test("e2e script: FAIL when Intake holds a different secret (nothing is saved), and --dry-run posts nothing", async () => {
-  const wrong = join(dir, "secrets-intake-wrong"); (await import("node:fs")).mkdirSync(wrong, { recursive: true });
-  writeFileSync(join(wrong, "intake-site-lead-hmac-secret"), randomBytes(32).toString("hex")); writeFileSync(join(wrong, "intake-site-fetch-key"), FETCH_KEY);
-  sinkUrl = await startSink(wrong);
+  sinkUrl = await startSink({ RELEASEDESK_INTAKE_HMAC_SECRET: randomBytes(32).toString("hex") });
   const before = readdirSync(inbox).length;
-  const r = await py([E2E, "--webhook-file", webhookFile(sinkUrl), "--wait", "4"]);
+  const r = await py([E2E, "--wait", "4"], webhookEnv(sinkUrl));
   assert.equal(r.code, 1); assert.equal(r.json.result, "FAIL");
   assert.equal(r.json.steps.at(-1).step, "inbox-file"); assert.equal(r.json.steps.at(-1).pass, false);
   assert.equal(readdirSync(inbox).length, before);
   sink.close();
   const n = env.DB.raw.prepare("SELECT COUNT(*) AS n FROM outbox").get().n;
-  const d = await py([E2E, "--dry-run", "--webhook-file", webhookFile("https://example.invalid/hook")]);
+  const d = await py([E2E, "--dry-run"], webhookEnv("https://example.invalid/hook"));
   assert.equal(d.json.result, "PASS"); assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM outbox").get().n, n);
 });

@@ -3,8 +3,8 @@
 # NO SECRETS IN THIS FILE. Set these with `npx wrangler pages secret put <NAME> --project-name vishalmathur-intake`:
 #   GROK_API_KEY       xAI key for chat and free-text finance estimates (server only)
 #   LEAD_HMAC_SECRET   >= 32 bytes (openssl rand -hex 32). Master key only.
-#                      On the box the same value is the file /workspace/releasedesk-secrets/intake-site-lead-hmac-secret
-#                      (not a vault entry named intake-site-hmac). Purpose keys are derived in the worker.
+#                      On the box the same value is the secure secrets store variable RELEASEDESK_INTAKE_HMAC_SECRET
+#                      (not a login-vault entry named intake-site-hmac). Purpose keys are derived in the worker.
 #                      Do not rotate this secret from the repo and do not run `wrangler secret put` here.
 #   LEAD_WEBHOOK_KEY   the Lead intake routine's webhook secret key
 #   LEAD_WEBHOOK_URL   the Lead intake routine's webhook URL (https)

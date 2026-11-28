@@ -1,40 +1,55 @@
 #!/usr/bin/env python3
 """Pre-cutover end-to-end check of the Intake leg. The site keeps sending to Lead the whole time and is not repointed.
 
-What it does, in order (each step prints PASS or FAIL as one JSON line at the end; secrets are read from files on the
-shared box and are never printed, never put in env vars or on the command line):
-  1. preflight   secret files exist and are long enough; the Intake webhook file has an https url and a key.
+What it does, in order (each step prints PASS or FAIL as one JSON line at the end; secrets are read from the
+secure secrets store as environment variables and are never printed, never read from files, and never passed
+on the command line):
+  1. preflight   RELEASEDESK_INTAKE_HMAC_SECRET and RELEASEDESK_INTAKE_FETCH_KEY are set and long enough;
+                 INTAKE_WEBHOOK_URL and INTAKE_WEBHOOK_KEY are set; the webhook URL is https (or loopback http).
   2. submit      POST one real PROBE card to the live site, api/intake.php. The site stores the envelope in D1 and sends
                  its usual notice to Lead. Lead logs a probe and does not open a request (see skill public-intake-relay).
   3. envelope    GET api/envelope.php with the bearer fetch key; compute payloadSha256 of payloadJson.
   4. notice      Build the notice exactly as the site does: {source, kind, requestId, ts, payloadSha256, sig} with
                  sig = HMAC(k_notice, "notice.v1." + ts + "." + requestId + "." + payloadSha256).
-  5. webhook     POST the notice to Intake's webhook (url and key from the webhook file).
+  5. webhook     POST the notice to Intake's webhook (INTAKE_WEBHOOK_URL and INTAKE_WEBHOOK_KEY).
   6. inbox       Wait for Intake to save the verified envelope in the inbox directory, then re-check its HMAC with
                  verify_intake.py --file. This proves Intake used the same secret as the site.
 The hand-off from Intake to Lead is then confirmed in Release Desk Log or Lead's chat (the line "PROBE intake-request
 received from intake" for the printed requestId). This script cannot read those chats.
 
-Usage:  intake-inline-e2e.py [--dry-run] [--request-id REQ-...] [--webhook-file PATH] [--wait SECONDS]
-  --dry-run       steps 1 only, plus a check that the site answers; nothing is submitted or posted.
+Usage:  intake-inline-e2e.py [--dry-run] [--request-id REQ-...] [--wait SECONDS]
+  --dry-run       step 1 only, plus a check that the site answers; nothing is submitted or posted.
   --request-id    skip step 2 and re-send the notice for an existing probe card (envelopes live 24 h).
 Exit code 0 only when every step passed.
 """
 import sys, os, re, json, time, hmac, hashlib, argparse, subprocess, urllib.request, urllib.parse, urllib.error
 
-SECRETS = os.environ.get("INTAKE_SECRETS_DIR", "/workspace/releasedesk-secrets")
 INBOX = os.environ.get("INTAKE_INBOX_DIR", "/workspace/releasedesk-state/intake-inbox")
 BASE = os.environ.get("INTAKE_BASE_URL", "https://intake.vishalmathur.org")
 VERIFIER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "grok-bots", "tools", "verify_intake.py")
-DEFAULT_WEBHOOK_FILE = os.path.join(SECRETS, "intake-bot-public-intake-webhook.json")
 PROBE_PREFIX = "PROBE-E2E"
+HMAC_ENV = "RELEASEDESK_INTAKE_HMAC_SECRET"
+FETCH_ENV = "RELEASEDESK_INTAKE_FETCH_KEY"
 
-def secret(name):
-    with open(os.path.join(SECRETS, name)) as f: v = f.read().strip()
-    if len(v) < 32: raise ValueError(name + " is too short")
-    return v
+
+class MissingSecret(Exception):
+    def __init__(self, name):
+        self.name = name
+        super().__init__("missing_secret:" + name)
+
+
+def env_secret(name, min_len=32):
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        raise MissingSecret(name)
+    value = raw.strip()
+    if min_len and len(value) < min_len:
+        raise ValueError(name + " is too short")
+    return value
+
 
 def base_ok(u): return u == "https://intake.vishalmathur.org" or re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", u) is not None
+
 
 def http(method, url, headers=None, body=None, timeout=20):
     req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
@@ -56,7 +71,7 @@ def probe_card():
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--request-id")
-    ap.add_argument("--webhook-file", default=DEFAULT_WEBHOOK_FILE); ap.add_argument("--wait", type=int, default=180)
+    ap.add_argument("--wait", type=int, default=180)
     a = ap.parse_args()
     steps = []
     def step(name, ok, **kw):
@@ -66,10 +81,11 @@ def main():
         print(json.dumps({"result": "PASS" if allok else "FAIL", "steps": steps})); sys.exit(0 if allok else 1)
     try:
         # 1 preflight
-        hmac_key, fetch_key = secret("intake-site-lead-hmac-secret"), secret("intake-site-fetch-key")
-        with open(a.webhook_file) as f: wh = json.load(f)
-        url, wkey, auth = str(wh.get("url", "")), str(wh.get("key", "")), str(wh.get("auth", "bearer"))
-        pre = base_ok(BASE) and (url.startswith("https://") or re.match(r"http://127\.0\.0\.1:\d+", url) is not None) and len(wkey) >= 8 \
+        hmac_key, fetch_key = env_secret(HMAC_ENV), env_secret(FETCH_ENV)
+        url = env_secret("INTAKE_WEBHOOK_URL", min_len=1)
+        wkey = env_secret("INTAKE_WEBHOOK_KEY", min_len=8)
+        auth = (os.environ.get("INTAKE_WEBHOOK_AUTH") or "bearer").strip() or "bearer"
+        pre = base_ok(BASE) and (url.startswith("https://") or re.match(r"http://127\.0\.0\.1:\d+", url) is not None) \
               and (auth == "bearer" or re.fullmatch(r"header:[A-Za-z0-9-]{1,64}", auth) is not None)
         if not step("preflight", pre, webhookAuth=("bearer" if auth == "bearer" else "header"), webhookKeyChars=len(wkey)): done()
         if a.dry_run:
@@ -114,6 +130,8 @@ def main():
         p = subprocess.run([sys.executable, VERIFIER, "--file", found], capture_output=True, text=True, timeout=30)
         res = json.loads(p.stdout.strip().splitlines()[-1]) if p.stdout.strip() else {}
         step("inbox-envelope-hmac", res.get("ok") is True, requestId=rid, file=os.path.basename(found))
+    except MissingSecret as e:
+        step("preflight", False, error="missing_secret:" + e.name)
     except Exception as e:
         step("error", False, error=type(e).__name__ + ": " + str(e)[:200])
     done()

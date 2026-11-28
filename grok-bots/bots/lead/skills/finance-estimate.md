@@ -1,7 +1,7 @@
 Skill: finance-estimate (Release Desk Lead; also readable by Change Analyst)
 Calls the Grok-backed finance model on the intake site. Output is a RECOMMENDATION for Change Analyst's human finance-approval gate. It never approves.
 
-Call (from your computer, secret "intake-site-hmac" from your vault; never print it):
+Call (from your computer, signing secret RELEASEDESK_INTAKE_HMAC_SECRET from the secure secrets store; never print it, never read it from a file):
   BODY='{"requestId":"REQ-…","pid":"PID-ER","text":"<title + description>","urgency":"standard|expedited|critical","customerBudgetInr":600000,"catalogueOptionId":"ER-KYC-LABELS","addOns":[],"lines":[]}'
   TS=$(date +%s); SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/^.* //')
   curl -sS https://intake.vishalmathur.org/api/finance-estimate.php -H 'Content-Type: application/json' -H "X-Intake-Timestamp: $TS" -H "X-Intake-Signature: $SIG" --data "$BODY"
