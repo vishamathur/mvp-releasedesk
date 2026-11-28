@@ -296,5 +296,9 @@ function intake_cleanup(array $cfg): void {
     $envelopeCut = time() - 86400;
     foreach (['submissions', 'status'] as $d) foreach (glob("$base/$d/*.json") ?: [] as $f) if (filemtime($f) < $cut) @unlink($f);
     foreach (['outbox', 'sent'] as $d) foreach (glob("$base/$d/*.json") ?: [] as $f) if (filemtime($f) < $envelopeCut) @unlink($f);
-    foreach (glob("$base/ratelimit/*.json") ?: [] as $f) if (filemtime($f) < time() - 7200) @unlink($f);
+    $daily = $base . '/ratelimit/' . hash('sha256', 'chat-global-day:all') . '.json';
+    foreach (glob("$base/ratelimit/*.json") ?: [] as $f) {
+        $keep = ($f === $daily) ? 86400 : 7200;
+        if (filemtime($f) < time() - $keep) @unlink($f);
+    }
 }

@@ -34,6 +34,39 @@ test("G1: IPv6 /64 shares a bucket, the daily cap is global, and chat does not u
   assert.ok(events(daily).some((e) => e.event === "chat_rejected" && e.why === "daily_cap"));
 });
 
+test("N1: one IP past its limit cannot drain the global daily cap", async () => {
+  const env = testEnv({ CHAT_RATE_LIMIT_MAX: "1", CHAT_DAILY_MAX: "2" });
+  const body = { route: "er", messages: [{ role: "user", content: "Hello there" }] };
+  const ipA = { "CF-Connecting-IP": "198.51.100.10" };
+  const ipB = { "CF-Connecting-IP": "198.51.100.20" };
+  assert.equal((await call(worker, env, jsonReq("/api/chat.php", body, ipA))).status, 503);
+  for (let i = 0; i < 5; i++) {
+    const blocked = await call(worker, env, jsonReq("/api/chat.php", body, ipA));
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.json.error, "rate_limited");
+  }
+  const other = await call(worker, env, jsonReq("/api/chat.php", body, ipB));
+  assert.equal(other.status, 503);
+  assert.notEqual(other.json.error, "assistant_busy");
+  const dailyKey = await W.sha256Hex(W.CHAT_DAILY_RATE_KEY);
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ?").get(dailyKey).n, 2);
+});
+
+test("N2: cleanup keeps daily chat hits for 24 h and drops other buckets after 2 h", async () => {
+  const env = testEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const daily = await W.sha256Hex(W.CHAT_DAILY_RATE_KEY);
+  const ins = env.DB.raw.prepare("INSERT INTO rate_hits (bucket, ts) VALUES (?, ?)");
+  ins.run(daily, now - 3 * 3600);
+  ins.run(daily, now - 25 * 3600);
+  ins.run("other", now - 3 * 3600);
+  ins.run("fresh", now - 60);
+  assert.equal(await W.intakeCleanup({ env, cfg: W.appConfig(env), now, ip: "x", ipKey: "x", request: null }, { force: true }), true);
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = ?").get(daily).n, 1, "the 3 h daily hit stays");
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = 'other'").get().n, 0);
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = 'fresh'").get().n, 1);
+});
+
 test("G2: injection blanks the draft; links and markup never enter a field", async () => {
   const env = testEnv({ GROK_CHAT_API_KEY: testKey() });
   const base = {

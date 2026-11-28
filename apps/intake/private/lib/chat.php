@@ -54,12 +54,6 @@ function api_chat(array $cfg): void {
         app_respond(...$err);
         return;
     }
-    [$gok] = app_rate_limit($cfg, 'chat-global-day', 'all', (int)($cfg['CHAT_DAILY_MAX'] ?? 3000), 86400);
-    if (!$gok) {
-        app_log($cfg, ['event' => 'chat_rejected', 'why' => 'daily_cap']);
-        app_respond(429, ['ok' => false, 'error' => 'assistant_busy', 'message' => 'The assistant is busy. Please use the form directly.'], ['Retry-After' => '3600']);
-        return;
-    }
     [$ok, $retry] = app_rate_limit($cfg, 'chat', app_client_ip(), (int)($cfg['CHAT_RATE_LIMIT_MAX'] ?? 30), 600);
     if (!$ok) {
         app_log($cfg, ['event' => 'chat_rejected', 'why' => 'rate_limited']);
@@ -73,6 +67,13 @@ function api_chat(array $cfg): void {
         if ($c !== '') $msgs[] = "visitor: $c";
     }
     if (!$msgs) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['messages']]); return; }
+    // Charge the global ceiling only after the per-IP limit and message checks.
+    [$gok] = app_rate_limit($cfg, 'chat-global-day', 'all', (int)($cfg['CHAT_DAILY_MAX'] ?? 3000), 86400);
+    if (!$gok) {
+        app_log($cfg, ['event' => 'chat_rejected', 'why' => 'daily_cap']);
+        app_respond(429, ['ok' => false, 'error' => 'assistant_busy', 'message' => 'The assistant is busy. Please use the form directly.'], ['Retry-After' => '3600']);
+        return;
+    }
     $route = in_array($body['route'] ?? '', ['website', 'new_customer', 'er'], true) ? $body['route'] : 'unknown';
     $cat = catalogue_load($cfg);
     try {

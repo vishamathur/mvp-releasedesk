@@ -1077,7 +1077,9 @@ export async function intakeCleanup(c, opts = {}) {
     db.prepare("DELETE FROM status WHERE updated_at < ?1").bind(cut),
     db.prepare("DELETE FROM outbox WHERE created_at < ?1").bind(envelopeCut),
     db.prepare("DELETE FROM events WHERE at < ?1").bind(cut),
-    db.prepare("DELETE FROM rate_hits WHERE ts < ?1").bind(c.now - 7200),
+    // Other buckets are 10-minute windows. The daily chat cap must survive the 2 h sweep.
+    db.prepare("DELETE FROM rate_hits WHERE ts < ?1 AND bucket != ?2").bind(c.now - 7200, await sha256Hex(CHAT_DAILY_RATE_KEY)),
+    db.prepare("DELETE FROM rate_hits WHERE ts < ?1 AND bucket = ?2").bind(c.now - 86400, await sha256Hex(CHAT_DAILY_RATE_KEY)),
   ]);
   return true;
 }
@@ -1592,6 +1594,8 @@ export function chatRedact(s) {
 const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(/i;
 const CHAT_SHAPE = { email: /^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/, desiredBy: /^\d{4}-\d{2}-\d{2}$/ };
 const CHAT_INJECTION_REPLY = "I can only help prepare an intake request, so I haven't filled anything in. Please use the form directly.";
+/** Who-key for the global daily assistant cap. The stored bucket is SHA-256 of this string. */
+export const CHAT_DAILY_RATE_KEY = "chat-global-day:all";
 
 export function chatPublicReply(text, injected) {
   if (injected) return CHAT_INJECTION_REPLY;
@@ -1603,12 +1607,6 @@ async function apiChat(c) {
   if (err) {
     if (err[0] === 413) await appLog(c, { event: "chat_rejected", why: "too_large" });
     return respond(...err);
-  }
-  // Global daily ceiling across all visitors: protects the xAI budget and the intake submit path.
-  const [gok] = await appRateLimit(c, "chat-global-day", phpInt(c.cfg.CHAT_DAILY_MAX ?? 3000), 86400, "all");
-  if (!gok) {
-    await appLog(c, { event: "chat_rejected", why: "daily_cap" });
-    return respond(429, { ok: false, error: "assistant_busy", message: "The assistant is busy. Please use the form directly." }, { "Retry-After": "3600" });
   }
   const [ok, retry] = await appRateLimit(c, "chat", phpInt(c.cfg.CHAT_RATE_LIMIT_MAX ?? 30), 600);
   if (!ok) {
@@ -1623,6 +1621,12 @@ async function apiChat(c) {
     if (content !== "") msgs.push(`visitor: ${content}`);
   }
   if (!msgs.length) return respond(400, { ok: false, error: "validation", fields: ["messages"] });
+  // Charge the global ceiling only for requests that passed the /64 limit and will reach the model.
+  const [gok] = await appRateLimit(c, "chat-global-day", phpInt(c.cfg.CHAT_DAILY_MAX ?? 3000), 86400, "all");
+  if (!gok) {
+    await appLog(c, { event: "chat_rejected", why: "daily_cap" });
+    return respond(429, { ok: false, error: "assistant_busy", message: "The assistant is busy. Please use the form directly." }, { "Retry-After": "3600" });
+  }
   const route = ["website", "new_customer", "er"].includes(body.route ?? "") ? body.route : "unknown";
   const cat = catalogueLoad();
   let out;

@@ -261,6 +261,25 @@ t('status: Lead update validation (gate owner, approval wording, quote)', functi
     ok(status_validate_update(['message' => 'Finance approved by Vishal on 22 Nov.'] + $u)[0] === [], 'named approval');
     ok(status_validate_update(['from' => 'change-analyst'] + $u)[0] === ['from'], 'from');
 });
+t('cleanup keeps the daily chat limiter for 24 h and drops other buckets after 2 h', function () use ($cfg) {
+    $dir = $cfg['DATA_DIR'] . '/ratelimit';
+    if (!is_dir($dir)) mkdir($dir, 0700, true);
+    $daily = $dir . '/' . hash('sha256', 'chat-global-day:all') . '.json';
+    $other = $dir . '/' . hash('sha256', 'chat:198.51.100.10') . '.json';
+    file_put_contents($daily, '[]');
+    file_put_contents($other, '[]');
+    touch($daily, time() - 3 * 3600);
+    touch($other, time() - 3 * 3600);
+    $marker = $cfg['DATA_DIR'] . '/.last-cleanup';
+    if (is_file($marker)) unlink($marker);
+    intake_cleanup($cfg);
+    ok(is_file($daily), 'daily kept');
+    ok(!is_file($other), 'other dropped');
+    touch($daily, time() - 25 * 3600);
+    if (is_file($marker)) unlink($marker);
+    intake_cleanup($cfg);
+    ok(!is_file($daily), 'daily dropped after 24 h');
+});
 foreach ($R as $r) echo $r, "\n";
 $f = count(array_filter($R, fn($r) => str_starts_with($r, 'FAIL')));
 echo '[unit] ', count($R) - $f, '/', count($R), " passed\n";
