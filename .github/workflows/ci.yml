@@ -33,3 +33,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y php-cli php-curl
           bash apps/intake/tests/run-tests.sh
+
+  intake-cloudflare:
+    # Cloudflare Pages port of apps/intake plus the Intake-inline verifier. No secrets, no network, no Cloudflare account:
+    # node:test against in-memory SQLite (node:sqlite needs Node 22.13+) and python3 for grok-bots/tools/verify_intake.py.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Build Pages output
+        run: node apps/intake-cloudflare/scripts/build.mjs
+      - name: Check the generated catalogue is committed
+        run: git diff --exit-code -- apps/intake-cloudflare/src/catalogue-data.mjs
+      - name: Cloudflare intake tests
+        run: node --test "apps/intake-cloudflare/test/*.test.mjs"
