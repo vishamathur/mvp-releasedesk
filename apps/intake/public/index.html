@@ -109,6 +109,39 @@
               <label>Change<select id="er-option"></select></label>
               <p id="er-option-desc" class="hint wide"></p>
             </div>
+            <div data-routes="er" id="repo-gate" class="repo-gate">
+              <fieldset class="repo-choice">
+                <legend>Does this application already have a repository or codebase?</legend>
+                <p class="hint">An enhancement changes something that already exists, so we need to be able to read its code. We ask this first, before the rest of the form.</p>
+                <label class="choice"><input type="radio" name="repoPresence" value="yes" data-required-for="er" /> <span>Yes, there is a repository or codebase</span></label>
+                <label class="choice"><input type="radio" name="repoPresence" value="no" data-required-for="er" /> <span>No, there isn't one</span></label>
+              </fieldset>
+              <div id="repo-no" class="notice" role="status" hidden>
+                <p><strong>An enhancement can't be acted on without an existing repository or codebase.</strong> If you are starting from scratch, choose New application or Website creation instead. Nothing will be submitted from this option.</p>
+                <p class="notice-actions"><button type="button" class="secondary" data-switch-route="new_customer">Choose New application</button> <button type="button" class="secondary" data-switch-route="website">Choose Website creation</button></p>
+              </div>
+              <div id="repo-yes" hidden>
+                <div class="grid">
+                  <label>Code host
+                    <select name="repoHost"><option value="github">GitHub</option><option value="gitlab">GitLab</option><option value="bitbucket">Bitbucket</option><option value="other">Other host</option></select>
+                  </label>
+                  <label><span id="repo-label">Repository (owner/repo or GitHub address)</span><input name="repo" data-required-for="er" maxlength="300" autocomplete="off" placeholder="e.g. your-org/your-app" /></label>
+                  <label>Default branch<input name="repoDefaultBranch" data-required-for="er" maxlength="100" value="main" autocomplete="off" /></label>
+                  <label>Technical contact (name, email or handle)<input name="repoContact" data-required-for="er" minlength="2" maxlength="150" autocomplete="off" placeholder="Who can answer questions about the code?" /></label>
+                  <label class="wide">What is in the codebase (stack, in a sentence or two)<textarea name="repoStack" data-required-for="er" rows="2" minlength="10" maxlength="400" placeholder="e.g. Node and React web app, Postgres, deployed on AWS"></textarea></label>
+                </div>
+                <p class="repo-actions"><button type="button" id="repo-check" class="secondary">Check repository</button> <button type="button" id="repo-recheck" class="secondary" hidden>I've granted access: check again</button></p>
+                <p id="repo-status" class="hint" role="status" aria-live="polite"></p>
+                <div id="repo-access" class="notice" hidden>
+                  <p><strong>Please give us read access.</strong></p>
+                  <ul id="repo-access-steps">
+                    <li data-host="github">GitHub: open the repository, then Settings, Collaborators, Add people. Invite the user <code>vishamathur</code> with the <em>Read</em> role. Organisation repositories offer Read; a personal repository only offers write access, so for those you may prefer to make the repository public for the review or copy it into an organisation.</li>
+                    <li data-host="gitlab bitbucket other">Other hosts: invite the account <code>vishamathur</code> with the read-only role (GitLab: Members, role Reporter. Bitbucket: Repository settings, User and group access, Read). Release Desk can only confirm repositories that answer over HTTPS without signing in.</li>
+                  </ul>
+                  <p class="hint">Then choose "I've granted access: check again". Your request can't be submitted until access is verified.</p>
+                </div>
+              </div>
+            </div>
             <div data-routes="new_customer website" id="catalogue-nc">
               <label>Template<select id="nc-template"></select></label>
               <p id="nc-template-desc" class="hint"></p>

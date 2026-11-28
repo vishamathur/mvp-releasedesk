@@ -12,6 +12,7 @@ Notable changes to the Release Desk harness. The format follows [Keep a Changelo
 - Validate-handoff again rejects a message from Intake that is not addressed to Lead (`intake_only_to_lead`). A missing or short `CONTACT_REF_SALT` refuses the card before any submission or outbox row is written.
 
 ### Added
+- Intake: enhancement requests need a verified repository. The form asks first, the server checks GitHub (or HTTPS reachability for other hosts) and returns 422 without one; access steps and an "I've granted access" re-check for private repos.
 - Agile process files: PR and issue templates (user story, bug, ER with Given/When/Then), CODEOWNERS, Definition of Ready and Done, working agreement, CONTRIBUTING (trunk-based, conventional commits), SECURITY, labels, dependabot.
 - OWASP review on every pull request to main: 26 controls, rule-based selection, exception-only human review (#46).
 - release-intel v2: grounded blockers, injection fencing, billed cost, fault-injection tests (#44).
