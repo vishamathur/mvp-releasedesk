@@ -10,8 +10,11 @@
       Re-checks a saved inbox envelope: 10-digit signature.ts and envelope.v1 purpose-key HMAC.
 
 Prints one JSON line and exits 0 for any checked result (read the ok field); exit 2 is a usage error.
-The HMAC value and the fetch key are read from files. They are never printed and never passed on the command line.
-INTAKE_SECRETS_DIR, INTAKE_INBOX_DIR and INTAKE_BASE_URL only name directories and the site origin.
+The HMAC value and the fetch key are read from the secure secrets store as environment variables
+RELEASEDESK_INTAKE_HMAC_SECRET and RELEASEDESK_INTAKE_FETCH_KEY. They are never printed, never
+read from files, and never passed on the command line. A missing or empty variable fails closed
+with ok:false and error "missing_secret:<NAME>".
+INTAKE_INBOX_DIR and INTAKE_BASE_URL only name the inbox directory and the site origin.
 """
 from __future__ import annotations
 
@@ -31,19 +34,34 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "apps" / "intake-cloudflare" / "scripts"))
 import verify_intake_ref as ref  # noqa: E402
 
-SECRETS = os.environ.get("INTAKE_SECRETS_DIR", "/workspace/releasedesk-secrets")
 INBOX = os.environ.get("INTAKE_INBOX_DIR", "/workspace/releasedesk-state/intake-inbox")
 BASE = os.environ.get("INTAKE_BASE_URL", "https://intake.vishalmathur.org")
-HMAC_FILE, FETCH_FILE = "intake-site-lead-hmac-secret", "intake-site-fetch-key"
+HMAC_ENV = "RELEASEDESK_INTAKE_HMAC_SECRET"
+FETCH_ENV = "RELEASEDESK_INTAKE_FETCH_KEY"
 WINDOW_SEC = 600
 
 
-def read_key(name: str) -> bytes:
-    with open(os.path.join(SECRETS, name)) as handle:
-        value = handle.read().strip()
+class MissingSecret(Exception):
+    def __init__(self, name: str):
+        self.name = name
+        super().__init__("missing_secret:" + name)
+
+
+def read_secret(name: str) -> bytes:
+    """Read a secret from the process environment. Never print the value."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        raise MissingSecret(name)
+    value = raw.strip()
     if len(value) < 32:
         raise ValueError(name + " is too short")
     return value.encode()
+
+
+def missing_secret_result(out: dict, error: MissingSecret) -> dict:
+    out["error"] = "missing_secret:" + error.name
+    out["ok"] = False
+    return out
 
 
 def base_ok(url: str) -> bool:
@@ -99,6 +117,11 @@ def verify_notice(rid, ts, psha, sig, kind):
     out = {"requestId": rid, "kind": kind, "noticeSig": False, "fresh": False, "fetched": None,
            "envelopeSig": False, "shaMatch": False, "ok": False}
     try:
+        key = read_secret(HMAC_ENV)
+        fetch_key = read_secret(FETCH_ENV)
+    except MissingSecret as error:
+        return missing_secret_result(out, error)
+    try:
         ref.check_notice(rid, ts, psha, sig, kind)
     except ref.VerifyError as error:
         out["error"] = error.code
@@ -107,7 +130,6 @@ def verify_notice(rid, ts, psha, sig, kind):
         out["error"] = "bad base url"
         return out
     try:
-        key = read_key(HMAC_FILE)
         exp = ref.sign_purpose(key, "notice", f"notice.v1.{ts}.{rid}.{psha}")
         out["noticeSig"] = hmac.compare_digest(exp, sig.lower())
         out["fresh"] = abs(time.time() - int(ts)) <= WINDOW_SEC
@@ -117,7 +139,7 @@ def verify_notice(rid, ts, psha, sig, kind):
         if kind:
             query["kind"] = kind
         url = BASE + "/api/envelope.php?" + urllib.parse.urlencode(query)
-        body, code = fetch_envelope(url, read_key(FETCH_FILE))
+        body, code = fetch_envelope(url, fetch_key)
         out["fetched"] = code
         if body is None:
             return out
@@ -139,6 +161,8 @@ def verify_notice(rid, ts, psha, sig, kind):
         ref.save_verified(path, body)
         out["savedTo"] = path
         out["bodyBytes"] = len(body)
+    except MissingSecret as error:
+        return missing_secret_result(out, error)
     except Exception as error:
         out["error"] = type(error).__name__ + ": " + str(error)[:200]
         out["ok"] = False
@@ -147,6 +171,10 @@ def verify_notice(rid, ts, psha, sig, kind):
 
 def verify_file(path):
     out = {"file": path, "envelopeSig": False, "ok": False}
+    try:
+        key = read_secret(HMAC_ENV)
+    except MissingSecret as error:
+        return missing_secret_result(out, error)
     try:
         real = os.path.realpath(path)
         if os.path.dirname(real) != os.path.realpath(INBOX) or not re.fullmatch(r"REQ-\d{8}-\d{6}-\d+\.json", os.path.basename(real)):
@@ -160,9 +188,11 @@ def verify_file(path):
         if not re.fullmatch(r"\d{10}", ts):
             out["error"] = "bad envelope ts"
             return out
-        exp = ref.sign_purpose(read_key(HMAC_FILE), "envelope", f"envelope.v1.{ts}.{pj}")
+        exp = ref.sign_purpose(key, "envelope", f"envelope.v1.{ts}.{pj}")
         out["envelopeSig"] = hmac.compare_digest(exp, str(sg.get("hex", "")).lower())
         out["ok"] = out["envelopeSig"]
+    except MissingSecret as error:
+        return missing_secret_result(out, error)
     except Exception as error:
         out["error"] = type(error).__name__ + ": " + str(error)[:200]
     return out

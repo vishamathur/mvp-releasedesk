@@ -125,7 +125,7 @@ All commands run from `apps/intake-cloudflare/`. Use `npx wrangler@latest` or a 
 7. **Secrets** (prompted, never on the command line or in git):
    ```bash
    npx wrangler pages secret put GROK_API_KEY     --project-name vishalmathur-intake
-   npx wrangler pages secret put LEAD_HMAC_SECRET --project-name vishalmathur-intake   # openssl rand -hex 32; same file on the box: /workspace/releasedesk-secrets/intake-site-lead-hmac-secret
+   npx wrangler pages secret put LEAD_HMAC_SECRET --project-name vishalmathur-intake   # openssl rand -hex 32; same value on the box: RELEASEDESK_INTAKE_HMAC_SECRET
    npx wrangler pages secret put LEAD_WEBHOOK_KEY --project-name vishalmathur-intake   # the Lead intake routine's secret key
    npx wrangler pages secret put LEAD_WEBHOOK_URL --project-name vishalmathur-intake   # the Lead intake routine's https URL
    ```
