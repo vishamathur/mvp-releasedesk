@@ -142,6 +142,25 @@ test("e2e script: PASS end to end when Intake holds the site's secret; no secret
   sink.close();
 });
 
+test("verify_intake: millisecond ts is rejected, a kind mismatch does not save, and a replay is a duplicate", async () => {
+  const rid = await submitCard();
+  const ms = await py([VERIFY, rid, "1700000000000", "ab".repeat(32), "cd".repeat(32), "intake-card"]);
+  assert.equal(ms.json.ok, false);
+  assert.equal(ms.json.error, "bad notice fields");
+  const { args } = await noticeFor(rid);
+  const first = await py([VERIFY, ...args]);
+  assert.equal(first.json.ok, true, first.out);
+  const bound = await py(["-c", `import json, importlib.util\nspec = importlib.util.spec_from_file_location("verify_intake", ${JSON.stringify(VERIFY)})\nmod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)\nbody = open(${JSON.stringify(first.json.savedTo)}, "rb").read()\nfields = mod.envelope_fields(body, mod.read_key("intake-site-lead-hmac-secret"), ${JSON.stringify(rid)}, ${JSON.stringify(args[2])}, "visitor-message")\nprint(json.dumps(fields))\n`]);
+  assert.equal(bound.json.bound, false);
+  assert.equal(bound.json.error, "payload binding");
+  const jsons = () => readdirSync(inbox).filter((name) => name.endsWith(".json"));
+  const before = jsons().length;
+  const again = await py([VERIFY, ...args]);
+  assert.equal(again.json.ok, false);
+  assert.equal(again.json.error, "duplicate");
+  assert.equal(jsons().length, before);
+});
+
 test("e2e script: FAIL when Intake holds a different secret (nothing is saved), and --dry-run posts nothing", async () => {
   const wrong = join(dir, "secrets-intake-wrong"); (await import("node:fs")).mkdirSync(wrong, { recursive: true });
   writeFileSync(join(wrong, "intake-site-lead-hmac-secret"), randomBytes(32).toString("hex")); writeFileSync(join(wrong, "intake-site-fetch-key"), FETCH_KEY);

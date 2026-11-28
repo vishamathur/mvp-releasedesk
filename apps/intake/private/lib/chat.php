@@ -88,7 +88,7 @@ function api_chat(array $cfg): void {
         return;
     }
     $injected = !empty($out['suspectedPromptInjection']);
-    $markup = '/<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(/i';
+    $markup = '/<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info)\b(?:\/|$)/i';
     $shape = ['email' => '/^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/', 'desiredBy' => '/^\d{4}-\d{2}-\d{2}$/'];
     $draft = [];
     if (!$injected) foreach (CHAT_DRAFT_FIELDS as $f) {

@@ -63,6 +63,7 @@ export function testEnv(overrides = {}) {
     CHAT_DAILY_MAX: "3000",
     LEAD_DELIVERY: "queue",
     LEAD_HMAC_SECRET: randomBytes(32).toString("hex"),
+    CONTACT_REF_SALT: randomBytes(32).toString("hex"),
     ...overrides,
   };
 }

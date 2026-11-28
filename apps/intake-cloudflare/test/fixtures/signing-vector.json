@@ -1,0 +1,29 @@
+{
+  "master": "sample-hmac-master-not-a-credential",
+  "contactSalt": "sample-contact-ref-salt-not-a-credential",
+  "email": "jane@example.com",
+  "contactMessage": "contact-ref.v1.jane@example.com",
+  "contactRef": "7e0f02631ddcf0912f2575c8e2ad5ef8c91d79d316820611b3ad9626236de82b",
+  "signatures": [
+    {
+      "purpose": "notice",
+      "message": "notice.v1.1700000000.REQ-20261128-000001.abababababababababababababababababababababababababababababababab",
+      "hex": "112bc9f7d81be1494f9705559be56c3c8b108e956f1682828a7debbaa0fa57b7"
+    },
+    {
+      "purpose": "envelope",
+      "message": "envelope.v1.1700000000.{\"requestId\":\"REQ-20261128-000001\"}",
+      "hex": "1cb30f9ff223704066c07eb979d406d0d7e502790beecdf81ed8f5b66a20ffea"
+    },
+    {
+      "purpose": "lead-to-site",
+      "message": "lead-to-site.v1.1700000000.{\"pid\":\"PID-ER\"}",
+      "hex": "2c2e754821f2613e17275a0351e51788fec2a50b9c07279ec1f40aab7b212cb8"
+    },
+    {
+      "purpose": "style",
+      "message": "style.v1.Palette sample",
+      "hex": "23658dbcf490b71800db2498aa97fe951789a1934c9fecf81df488cddb4592de"
+    }
+  ]
+}

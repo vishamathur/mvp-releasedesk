@@ -8,10 +8,18 @@ declare(strict_types=1);
  *   email   : mail() to Lead's bot inbox; a Lead routine filters on the sender.
  * Envelope carries an HMAC so Lead can verify origin with LEAD_HMAC_SECRET.
  */
-/** Envelope copy for Lead. Email stays in the submission file; the envelope gets contactRef instead. */
-function delivery_public_payload(array $payload): array {
+/** HMAC-SHA256(CONTACT_REF_SALT, "contact-ref.v1." + lower-cased email). An empty salt is refused. */
+function contact_ref(string $salt, string $email): string {
+    if (strlen($salt) < 32) {
+        throw new RuntimeException('CONTACT_REF_SALT is not set. Refusing to publish an unsalted contact hash.');
+    }
+    return hash_hmac('sha256', 'contact-ref.v1.' . strtolower($email), $salt);
+}
+
+/** Envelope copy for Lead. Email stays in the submission file; the envelope gets a salted contactRef. */
+function delivery_public_payload(array $cfg, array $payload): array {
     if (isset($payload['contact']['email']) && is_string($payload['contact']['email']) && $payload['contact']['email'] !== '') {
-        $payload['contact']['contactRef'] = hash('sha256', strtolower($payload['contact']['email']));
+        $payload['contact']['contactRef'] = contact_ref((string)($cfg['CONTACT_REF_SALT'] ?? ''), $payload['contact']['email']);
         unset($payload['contact']['email']);
     }
     unset($payload['leadBotId']);
@@ -35,7 +43,7 @@ function delivery_envelope(array $cfg, string $kind, string $requestId, array $p
 }
 
 function delivery_send(array $cfg, string $kind, string $requestId, array $payload): string {
-    $env = delivery_envelope($cfg, $kind, $requestId, delivery_public_payload($payload));
+    $env = delivery_envelope($cfg, $kind, $requestId, delivery_public_payload($cfg, $payload));
     $file = $cfg['DATA_DIR'] . '/outbox/' . gmdate('YmdHis') . "-$requestId-$kind-" . bin2hex(random_bytes(2)) . '.json';
     app_write_json($file, ['attempts' => 0, 'envelope' => $env]);
     return delivery_attempt($cfg, $file);

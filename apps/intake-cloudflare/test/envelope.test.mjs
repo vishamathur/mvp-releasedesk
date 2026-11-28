@@ -117,4 +117,5 @@ test("envelope endpoint: no LEAD_FETCH_KEY is a fixed 503; only failed auth is r
   assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001", "wrong-key"))).status, 401);
   const r = await call(worker, env, getEnv("requestId=REQ-20261127-000001", "wrong-key"));
   assert.equal(r.status, 429); assert.ok(Number(r.headers.get("Retry-After")) > 0);
+  assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001"))).status, 404, "a valid key still passes after the failed-auth limit");
 });

@@ -63,8 +63,8 @@ with `Authorization: Bearer <LEAD_FETCH_KEY>`. Envelopes can be fetched for 24 h
 | `intake-private/lib/*.php` | `src/worker.mjs`, bundled with the catalogue into `dist/_worker.js` |
 | `data/` JSON files with `flock` | D1 database bound as `DB` (`migrations/0001_init.sql`, same as `schema.sql`) |
 | `data/ratelimit/*.json` | `rate_hits` table, sliding window, one atomic batch per hit, IP stored only as a hash |
-| `bin/drain-outbox.php` on cPanel Cron | Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts. An hourly cron (`scheduled`) purges expired rows |
-| hourly `intake_cleanup()` | the same, from any API call and from the cron: submissions, finance artifacts, status and events older than `RETENTION_DAYS` (1 day), and every outbox state older than 24 h |
+| `bin/drain-outbox.php` on cPanel Cron | Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts. Pages has no Cron Triggers |
+| hourly `intake_cleanup()` | the same, from any API call through `waitUntil`: submissions, finance artifacts, status and events older than `RETENTION_DAYS` (1 day), and every outbox state older than 24 h |
 | `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets. Optional var: `GROK_VISION_MODEL`. Fifth secret: `LEAD_FETCH_KEY` |
 | `LEAD_DELIVERY=email` (`mail()`) | not available. Use `webhook`. Choosing `email` is a delivery error, never a silent success |
 | `REMOTE_ADDR` | `CF-Connecting-IP` |

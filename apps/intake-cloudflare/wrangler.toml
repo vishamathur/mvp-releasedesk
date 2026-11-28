@@ -13,6 +13,7 @@
 #                      It does not fall back to GROK_API_KEY. Not set by this change.
 #   STYLE_SIG_SECRET   optional, >= 32 bytes. When set, style signatures use it instead of the derived style key.
 #                      Not set by this change.
+#   CONTACT_REF_SALT   >= 32 bytes. Salts contactRef. Not set by this change. Do not commit a value.
 name = "vishalmathur-intake"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-01"
@@ -31,10 +32,9 @@ LEAD_BOT_ID = "46e50097-0409-4972-9be0-6ade37563135"
 LEAD_DELIVERY = "webhook"
 LEAD_WEBHOOK_AUTH = "bearer"
 
-# Hourly purge of rows past the 24 h window. The worker's scheduled() handler runs intakeCleanup.
-# API traffic also purges through waitUntil, so retention does not depend on the cron alone.
-[triggers]
-crons = ["17 * * * *"]
+# Pages has no Cron Triggers, so this file does not declare [triggers]. crons would not run.
+# Retention is enforced on API traffic: appRun calls intakeCleanup through waitUntil.
+# scheduled() remains for a Worker runtime. Pages does not call it.
 
 [[d1_databases]]
 binding = "DB"

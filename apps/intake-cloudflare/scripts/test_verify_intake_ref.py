@@ -87,6 +87,12 @@ class VerifyRefTest(unittest.TestCase):
         self.assertEqual(v.clamp_retry_after("nope"), 0)
         self.assertEqual(v.RETRY_CAP_SEC, 60)
 
+    def test_shared_signing_vector(self):
+        vector = json.loads((Path(__file__).resolve().parents[1] / "test" / "fixtures" / "signing-vector.json").read_text(encoding="utf-8"))
+        master = vector["master"].encode()
+        for row in vector["signatures"]:
+            self.assertEqual(v.sign_purpose(master, row["purpose"], row["message"]), row["hex"])
+
     def test_purpose_keys_differ(self):
         msg = "1700000000.REQ-20261128-000042." + ("a" * 64)
         notice = v.sign_purpose(self.master, "notice", "notice.v1." + msg)

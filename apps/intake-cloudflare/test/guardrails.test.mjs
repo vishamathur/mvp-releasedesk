@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import worker, * as W from "../src/worker.mjs";
-import { PHP_APP, testEnv, jsonReq, call, testKey, purposeSign } from "./helpers.mjs";
+import { PHP_APP, ROOT, testEnv, jsonReq, call, testKey, purposeSign } from "./helpers.mjs";
 
 const chatBody = (messages, extra = {}) => jsonReq("/api/chat.php", { route: "er", sessionId: "sess_abcdef12", messages, ...extra });
 const events = (env) => env.DB.raw.prepare("SELECT event_json FROM events").all().map((x) => JSON.parse(x.event_json));
@@ -15,6 +15,17 @@ function grokReply(content) {
     status: 200, headers: { "Content-Type": "application/json" },
   });
 }
+test("shared signing vector: JS matches the fixture for every purpose and the salted contact ref", async () => {
+  const vector = JSON.parse(readFileSync(join(ROOT, "test/fixtures/signing-vector.json"), "utf8"));
+  for (const row of vector.signatures) {
+    assert.equal(purposeSign(vector.master, row.purpose, row.message), row.hex, row.purpose);
+  }
+  const led = await W.payloadForLead({ CONTACT_REF_SALT: vector.contactSalt }, { contact: { email: vector.email, name: "Jane" } });
+  assert.equal(led.contact.contactRef, vector.contactRef);
+  assert.ok(!("email" in led.contact));
+  await assert.rejects(() => W.payloadForLead({ CONTACT_REF_SALT: "" }, { contact: { email: vector.email } }));
+});
+
 test("G1: IPv6 /64 shares a bucket, the daily cap is global, and chat does not use GROK_API_KEY", async () => {
   assert.equal(W.appIpKey("203.0.113.7"), "203.0.113.7");
   assert.equal(W.appIpKey("2001:db8:1:2::1"), W.appIpKey("2001:DB8:1:2::abcd"));
@@ -72,7 +83,7 @@ test("G2: injection blanks the draft; links and markup never enter a field", asy
   const base = {
     reply: "Look at https://evil.example/a and <b>this</b>",
     route: "er",
-    draft: { ...Object.fromEntries(W.CHAT_DRAFT_FIELDS.map((f) => [f, null])), company: "Acme", email: "not an email", title: "Rename <b>labels</b>", desiredBy: "32-13-99", contactName: "Jane Doe" },
+    draft: { ...Object.fromEntries(W.CHAT_DRAFT_FIELDS.map((f) => [f, null])), company: "Acme", email: "not an email", title: "Rename <b>labels</b>", desiredBy: "32-13-99", contactName: "Jane Doe", purpose: "Read [notes](evil.com/x)", audience: "evil.com/x" },
     missingFields: [], readyToSubmit: true, suggestedServiceIds: [], suspectedPromptInjection: false,
   };
   globalThis.fetch = async () => grokReply(base);
@@ -80,6 +91,8 @@ test("G2: injection blanks the draft; links and markup never enter a field", asy
   assert.equal(r.status, 200, r.text);
   assert.equal(r.json.draft.contactName, "Jane Doe");
   assert.equal(r.json.draft.company, "Acme");
+  assert.ok(!("purpose" in r.json.draft), "markdown links are dropped");
+  assert.ok(!("audience" in r.json.draft), "bare domains are dropped");
   assert.ok(!("email" in r.json.draft));
   assert.ok(!("title" in r.json.draft));
   assert.ok(!("desiredBy" in r.json.draft));

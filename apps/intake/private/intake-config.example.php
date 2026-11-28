@@ -24,6 +24,7 @@ return [
     'LEAD_EMAIL_TO'         => '',                      // Lead's bot inbox, only if LEAD_DELIVERY=email
     'LEAD_EMAIL_FROM'       => 'intake@vishalmathur.org',
     'LEAD_HMAC_SECRET'      => '',                      // master key; file on the box is /workspace/releasedesk-secrets/intake-site-lead-hmac-secret
+    'CONTACT_REF_SALT'      => '',                      // >= 32 bytes; salts contactRef. Leave empty here. Do not commit a value.
     'GROK_CHAT_API_KEY'     => '',                      // chat only. Empty means chat refuses. It does not borrow GROK_API_KEY.
     'STYLE_SIG_SECRET'      => '',                      // optional. When set, style signatures use it instead of the derived style key.
 ];

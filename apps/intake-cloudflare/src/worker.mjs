@@ -118,6 +118,8 @@ export async function hmacHex(secret, data) {
 }
 /** Purpose labels for k_p = HMAC(LEAD_HMAC_SECRET, "releasedesk-intake/<purpose>/v1"). */
 export const HMAC_PURPOSES = ["notice", "envelope", "lead-to-site", "style"];
+/** Draft fields and replies must not carry links, markup, markdown links, or bare domains. */
+export const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info)\b(?:\/|$)/i;
 /** Fixed text for every public 503. The real reason is logged, never returned. */
 export const PUBLIC_UNAVAILABLE_MESSAGE = "This service is temporarily unavailable. Please try again later.";
 
@@ -1267,11 +1269,19 @@ export function jsonAsciiSafe(value) {
  * Full signed envelope, stored in the D1 outbox and served to Lead by GET api/envelope.php. Lead verifies the
  * signature over payloadJson (ts + "." + payloadJson), then parses it. signature comes before payloadJson.
  */
-/** Copy sent to Lead. The email stays in D1 submissions; the envelope carries contactRef (SHA-256 of the lower-cased address) instead. */
-export async function payloadForLead(payload) {
+/** HMAC-SHA256(CONTACT_REF_SALT, "contact-ref.v1." + lower-cased email). An empty salt is refused. */
+export async function contactRefFor(salt, email) {
+  if (ENC.encode(String(salt ?? "")).length < 32) {
+    throw new RuntimeError("CONTACT_REF_SALT is not set. Refusing to publish an unsalted contact hash.");
+  }
+  return hmacHex(String(salt), "contact-ref.v1." + String(email).toLowerCase());
+}
+
+/** Copy sent to Lead. The email stays in D1 submissions; the envelope carries a salted contactRef instead. */
+export async function payloadForLead(cfg, payload) {
   const copy = JSON.parse(JSON.stringify(payload));
   if (isPlainObject(copy.contact) && typeof copy.contact.email === "string" && copy.contact.email !== "") {
-    copy.contact.contactRef = await sha256Hex(copy.contact.email.toLowerCase());
+    copy.contact.contactRef = await contactRefFor(cfg.CONTACT_REF_SALT, copy.contact.email);
     delete copy.contact.email;
   }
   delete copy.leadBotId;
@@ -1314,7 +1324,7 @@ export async function deliveryNotice(cfg, envelope, now = nowSec()) {
 
 /** Writes the full envelope to the D1 outbox first (queue + audit + fetch-back), then sends the notice. */
 export async function deliverySend(c, kind, requestId, payload) {
-  const env = await deliveryEnvelope(c.cfg, kind, requestId, await payloadForLead(payload), c.now);
+  const env = await deliveryEnvelope(c.cfg, kind, requestId, await payloadForLead(c.cfg, payload), c.now);
   const id = `${gmdate.ymdhis(c.now)}-${requestId}-${kind}-${randomHex(2)}`;
   await c.env.DB.prepare("INSERT INTO outbox (id, request_id, kind, envelope_json, attempts, state, last_error, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 0, 'queued', NULL, ?5, ?5)")
     .bind(id, requestId, kind, JSON.stringify(env), c.now).run();
@@ -1591,7 +1601,6 @@ export function chatRedact(s) {
     .replace(/\b(?:xai|sk|ghp|gho|AKIA)[-_A-Za-z0-9]{16,}\b/g, "[secret hidden]");
 }
 
-const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(/i;
 const CHAT_SHAPE = { email: /^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/, desiredBy: /^\d{4}-\d{2}-\d{2}$/ };
 const CHAT_INJECTION_REPLY = "I can only help prepare an intake request, so I haven't filled anything in. Please use the form directly.";
 /** Who-key for the global daily assistant cap. The stored bucket is SHA-256 of this string. */
@@ -1599,7 +1608,7 @@ export const CHAT_DAILY_RATE_KEY = "chat-global-day:all";
 
 export function chatPublicReply(text, injected) {
   if (injected) return CHAT_INJECTION_REPLY;
-  return appClean(text, 1200).replace(/<[^>]*>|https?:\/\/\S+/g, "");
+  return appClean(text, 1200).replace(new RegExp(CHAT_MARKUP_OR_URL.source, "gi"), "");
 }
 
 async function apiChat(c) {
@@ -1698,6 +1707,7 @@ export function appConfig(env) {
     LEAD_FETCH_KEY: v("LEAD_FETCH_KEY", ""),
     ENVELOPE_RATE_LIMIT_MAX: v("ENVELOPE_RATE_LIMIT_MAX", 120),
     LEAD_HMAC_SECRET: v("LEAD_HMAC_SECRET", ""),
+    CONTACT_REF_SALT: v("CONTACT_REF_SALT", ""),
     STYLE_SIG_SECRET: v("STYLE_SIG_SECRET", ""),
     GROK_CHAT_API_KEY: v("GROK_CHAT_API_KEY", ""),
   };

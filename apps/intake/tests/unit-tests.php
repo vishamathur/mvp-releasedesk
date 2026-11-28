@@ -280,6 +280,13 @@ t('cleanup keeps the daily chat limiter for 24 h and drops other buckets after 2
     intake_cleanup($cfg);
     ok(!is_file($daily), 'daily dropped after 24 h');
 });
+t('shared signing vector matches PHP purpose keys and the salted contact ref', function () {
+    $vector = json_decode((string)file_get_contents(dirname(__DIR__, 2) . '/intake-cloudflare/test/fixtures/signing-vector.json'), true);
+    foreach ($vector['signatures'] as $row) {
+        ok(intake_sign($vector['master'], $row['purpose'], $row['message']) === $row['hex'], $row['purpose']);
+    }
+    ok(contact_ref($vector['contactSalt'], $vector['email']) === $vector['contactRef'], 'contact ref');
+});
 foreach ($R as $r) echo $r, "\n";
 $f = count(array_filter($R, fn($r) => str_starts_with($r, 'FAIL')));
 echo '[unit] ', count($R) - $f, '/', count($R), " passed\n";
