@@ -52,7 +52,15 @@ FREE_TEXT_PATHS = (
     "requestDetails.website.budgetBand",
     "requestDetails.website.deadline",
     "requestDetails.website.styleSource",
+    "repository.stack",
+    "repository.technicalContact",
+    "repository.url",
 )
+
+REPO_HOSTS = {"github", "gitlab", "bitbucket", "other"}
+REPO_STATES = {"verified", "unverified-host"}
+REPO_VISIBILITY = {"public", "private", "unknown"}
+CHECKED_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def _digest(text: str) -> dict:
@@ -86,6 +94,47 @@ def load_catalogue(path: Path) -> dict[str, set[str]]:
 
 def _fail(error: str, quarantine: dict) -> dict:
     return {"ok": False, "error": error, "quarantine": quarantine}
+
+
+def _repository(repo: object) -> tuple[dict | None, str | None]:
+    """Typed repository record for a PID-ER card. Free text (stack, contact, url) is not copied."""
+    if not isinstance(repo, dict):
+        return None, "bad repository"
+    host = repo.get("host")
+    name = repo.get("repo")
+    branch = repo.get("defaultBranch")
+    if host not in REPO_HOSTS or not isinstance(name, str) or name == "" or not isinstance(branch, str) or branch == "":
+        return None, "bad repository"
+    ver = repo.get("verification")
+    if not isinstance(ver, dict):
+        return None, "bad repository"
+    state = ver.get("state")
+    method = ver.get("method")
+    visibility = ver.get("visibility")
+    checked = ver.get("checkedAt")
+    status = ver.get("httpStatus")
+    host_branch = ver.get("defaultBranchFromHost")
+    if state not in REPO_STATES or not isinstance(method, str) or method == "":
+        return None, "bad repository"
+    if visibility not in REPO_VISIBILITY or not isinstance(checked, str) or not CHECKED_AT_RE.fullmatch(checked):
+        return None, "bad repository"
+    if type(status) is not int or status < 0 or status > 599:
+        return None, "bad repository"
+    if host_branch is not None and not isinstance(host_branch, str):
+        return None, "bad repository"
+    return {
+        "host": host,
+        "repo": name,
+        "defaultBranch": branch,
+        "verification": {
+            "state": state,
+            "method": method,
+            "httpStatus": status,
+            "visibility": visibility,
+            "defaultBranchFromHost": host_branch if isinstance(host_branch, str) else "",
+            "checkedAt": checked,
+        },
+    }, None
 
 
 def quarantine_for(path: str | None) -> tuple[dict, str | None]:
@@ -145,6 +194,7 @@ def extract(document: dict, catalogue: dict[str, set[str]], quarantine: dict) ->
         "addOns": [],
         "customerBudgetInr": None,
         "contactRef": None,
+        "repository": None,
         "freeText": free,
         "quarantine": quarantine,
     }
@@ -188,6 +238,15 @@ def extract(document: dict, catalogue: dict[str, set[str]], quarantine: dict) ->
     out["catalogueOptionId"] = option
     out["addOns"] = list(raw_adds)
     out["customerBudgetInr"] = budget_out
+
+    repo = payload.get("repository")
+    if pid == "PID-ER":
+        extracted, err = _repository(repo)
+        if err:
+            return _fail(err, quarantine)
+        out["repository"] = extracted
+    elif repo is not None:
+        return _fail("unexpected repository", quarantine)
     return out
 
 

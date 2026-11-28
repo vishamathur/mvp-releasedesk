@@ -48,7 +48,10 @@ def probe_card():
             "customerId": "cust_probe", "projectRef": "PRJ-PROBE", "changeType": "enhancement",
             "title": f"{PROBE_PREFIX} Intake leg check {stamp}",
             "description": "Automated pre-cutover probe of the Intake leg. Log only. Do not open a request.",
-            "urgency": "standard", "artifactLinks": [], "website": "", "consent": True}
+            "urgency": "standard", "artifactLinks": [], "website": "", "consent": True,
+            "hasRepo": True, "repoHost": "github", "repo": "octocat/Hello-World",
+            "repoDefaultBranch": "master", "repoStack": "Public sample repository used for the Intake probe",
+            "repoContact": "Release Desk Probe"}
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--request-id")

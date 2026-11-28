@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, testKey, purposeSign } from "./helpers.mjs";
+import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, testKey, isRepoHostUrl, liveRepoFetch, purposeSign } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 let restore;
@@ -13,6 +13,7 @@ afterEach(() => restore());
 
 function recorder(status, calls) {
   return async (url, init) => {
+    if (isRepoHostUrl(url)) return liveRepoFetch(url, init);
     if (url !== HOOK) throw new Error("unexpected url " + url);
     calls.push({ url, headers: init.headers, raw: init.body, body: JSON.parse(init.body), hasTimeout: init.signal instanceof AbortSignal });
     return new Response("{}", { status });

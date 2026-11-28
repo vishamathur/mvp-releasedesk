@@ -141,7 +141,10 @@ test("e2e script: PASS end to end when Intake holds the site's secret; no secret
   assert.deepEqual(r.json.steps.map((s) => s.step), ["preflight", "submit", "envelope", "card-is-probe", "notice", "webhook", "inbox-file", "inbox-envelope-hmac"]);
   assert.ok(!r.out.includes(env.LEAD_HMAC_SECRET) && !r.out.includes(FETCH_KEY) && !r.out.includes("sink-key-for-test"));
   const card = JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox ORDER BY created_at DESC, rowid DESC LIMIT 1").get().envelope_json);
-  assert.match(JSON.parse(card.payloadJson).ask.title, /^PROBE-E2E /);
+  const payload = JSON.parse(card.payloadJson);
+  assert.match(payload.ask.title, /^PROBE-E2E /);
+  assert.equal(payload.repository.repo, "octocat/Hello-World");
+  assert.equal(payload.repository.verification.state, "verified");
   sink.close();
 });
 

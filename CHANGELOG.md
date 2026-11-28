@@ -13,6 +13,7 @@ Notable changes to the Release Desk harness. The format follows [Keep a Changelo
 - The verifier requires `kind`, records a seen signature under a lock, and does not follow redirects. A corrupt seen-set is rejected. The 24 h purge also runs on a catalogue read, at most once a minute. The chat denylist covers shorteners, more domains, bare domains, `hxxp://` and protocol-relative links. A visitor message with a missing salt is the same fixed 503. `intake-request` is not a handoff kind, and Intake does not send consult or stage-return.
 
 ### Added
+- Intake: enhancement requests need a verified repository. The form asks first, the server checks GitHub (or HTTPS reachability for other hosts) and returns 422 without one; access steps and an "I've granted access" re-check for private repos.
 - Agile process files: PR and issue templates (user story, bug, ER with Given/When/Then), CODEOWNERS, Definition of Ready and Done, working agreement, CONTRIBUTING (trunk-based, conventional commits), SECURITY, labels, dependabot.
 - OWASP review on every pull request to main: 26 controls, rule-based selection, exception-only human review (#46).
 - release-intel v2: grounded blockers, injection fencing, billed cost, fault-injection tests (#44).

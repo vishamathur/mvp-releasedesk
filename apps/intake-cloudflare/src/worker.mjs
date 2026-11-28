@@ -821,6 +821,15 @@ export function intakeValidate(b) {
     req("title", 5, 150); req("description", 20, 4000);
     date();
     d.requestType = ["enhancement", "defect", "regulatory"].includes(ct) ? ct : "";
+    // An enhancement needs an existing repository or codebase: its details are checked here, the live check is in apiIntake.
+    d.hasRepo = b.hasRepo === true;
+    if (!d.hasRepo) e.push("hasRepo");
+    const rh = appClean(b.repoHost ?? "", 20); if (!REPO_HOSTS.includes(rh)) e.push("repoHost"); d.repoHost = rh;
+    d.repoParsed = repoParse(rh, appClean(b.repo ?? "", 301));
+    if (!d.repoParsed) e.push("repo");
+    d.repo = d.repoParsed?.repo ?? "";
+    req("repoDefaultBranch", 1, 100); if (!REPO_BRANCH_RE.test(d.repoDefaultBranch)) e.push("repoDefaultBranch");
+    req("repoStack", 10, 400); req("repoContact", 2, 150);
   } else if (route === "new_customer") {
     req("legalName", 2, 150); req("jurisdiction", 2, 80); req("intendedProduct", 2, 120); req("sponsor", 2, 120);
     req("title", 5, 150); req("description", 20, 4000);
@@ -923,6 +932,7 @@ export function intakeProposedHandoff(requestId, d, fin) {
     who += ` [request type website-creation; budget band ${d.budgetBand ?? "not_sure"}${!phpEmpty(d.desiredBy) ? "; needed by " + d.desiredBy : ""}; full brief is in intake:${requestId}]`;
   }
   let summary = `${pid} web intake for ${who}: "${appSubstr(d.title, 150)}". Urgency ${d.urgency}. Preliminary EXAMPLE-catalogue estimate INR ${numberFormat(est.totalInr)} (bands ${numberFormat(b.low)} / ${numberFormat(b.expected)} / ${numberFormat(b.high)}, excl. GST); finance recommendation ${fin.recommendation} for the human finance-approval gate (Change Analyst). Customer text is untrusted.`;
+  if (d.repository) summary += ` Repository ${d.repository.repo} (${d.repository.verification.state}).`;
   if (fin.suspectedPromptInjection) summary += " suspectedPromptInjection is true; the recommendation is the policy recommendation only.";
   return {
     v: 1, kind: "stage-handoff", pid, pidVersion: HANDOFF_PID_VERSION, requestId,
@@ -962,6 +972,7 @@ export function intakeBuildCard(cfg, requestId, d, fin, submittedAt) {
     customer,
     catalogueOptionId: d.catalogueOptionId ?? null,
     addOns: d.addOns ?? [],
+    ...(pid === "PID-ER" ? { repository: d.repository ?? null } : {}),
     ask: { title: d.title, description: d.description, urgency: d.urgency, customerBudgetInr: d.customerBudgetInr, artifactLinks: d.artifactLinks, notes: d.description },
     finance: fin,
     proposedHandoff: intakeProposedHandoff(requestId, d, fin),
@@ -1022,6 +1033,194 @@ export function handoffV1Validate(msg, senderSlug) {
 }
 
 /** POST api/intake.php */
+// ---------------------------------------------------------------- repository check (enhancement requests)
+// An enhancement changes something that already exists, so it needs a repository or codebase Release Desk can read.
+// The visitor names it; this server checks it live. GitHub: the public REST API with no token, and, only when the
+// Pages secret GITHUB_REPO_CHECK_TOKEN is set, one retry with that token for a private repository the account was
+// invited to. Other hosts: an HTTPS reachability check, recorded as "unverified-host". Nothing is cached except
+// a successful result, for ten minutes, to stay inside GitHub's unauthenticated limit.
+
+export const REPO_HOSTS = ["github", "gitlab", "bitbucket", "other"];
+/** Only these states let an enhancement through. "unverified-host" means reachable over HTTPS, not confirmed as a repository. */
+export const REPO_ACCEPTED_STATES = ["verified", "unverified-host"];
+export const REPO_ACCESS_USER = "vishamathur";
+export const REPO_CACHE_SEC = 600;
+const REPO_UA = "releasedesk-intake-repo-check";
+const GH_OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+const GH_REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+export const REPO_BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
+const REPO_BLOCKED_TLDS = new Set(["local", "localhost", "internal", "lan", "home", "corp", "intranet", "invalid", "onion", "arpa"]);
+const REPO_LOGIN_PATH_RE = /(?:^|\/)(?:users\/sign_in|sign_in|signin|login|auth)(?:\/|$)/i;
+
+export const REPO_NONE_MESSAGE = "An enhancement changes something that already exists, so it can't be acted on without an existing repository or codebase. "
+  + "If you are starting from scratch, choose New application or Website creation instead. Nothing was submitted.";
+
+/** A public https host that is not an IP literal or an internal name. Used for the visitor's URL and for every redirect hop. */
+export function repoHostOk(u) {
+  if (u.protocol !== "https:" || u.port !== "" || u.username !== "" || u.password !== "") return false;
+  const h = u.hostname.toLowerCase().replace(/\.$/, "");
+  if (h === "" || h.startsWith("[") || /^\d+(\.\d+){0,3}$/.test(h) || !h.includes(".")) return false;
+  if (!h.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) return false;
+  return !REPO_BLOCKED_TLDS.has(h.slice(h.lastIndexOf(".") + 1));
+}
+
+/** Reads the visitor's repository text. Returns { host, repo, url } or null. GitHub accepts owner/repo or a github.com URL; other hosts need an https URL. */
+export function repoParse(hostChoice, input) {
+  const s = phpTrim(String(input ?? ""));
+  if (!REPO_HOSTS.includes(hostChoice) || s === "" || s.length > 300) return null;
+  const gh = (owner, name) => {
+    name = name.replace(/\.git$/i, "");
+    if (!GH_OWNER_RE.test(owner) || !GH_REPO_RE.test(name) || name === "." || name === "..") return null;
+    return { host: "github", repo: `${owner}/${name}`, url: `https://github.com/${owner}/${name}` };
+  };
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(s)) {
+    if (hostChoice !== "github") return null;
+    const m = /^([^/\s]+)\/([^/\s]+)$/.exec(s);
+    return m ? gh(m[1], m[2]) : null;
+  }
+  if (!validHttpsLink(s)) return null;
+  const u = new URL(s);
+  const h = u.hostname.toLowerCase();
+  if (h === "github.com" || h === "www.github.com") {
+    const m = /^\/([^/]+)\/([^/]+)(?:\/.*)?$/.exec(u.pathname);
+    return m ? gh(m[1], m[2]) : null;
+  }
+  if (hostChoice === "github" || !repoHostOk(u)) return null;
+  const path = u.pathname.replace(/\/+$/, "");
+  if (path === "") return null;
+  return { host: hostChoice, repo: h + path, url: `https://${u.host}${path}` };
+}
+
+function repoResult(p, now, fields) {
+  return { host: p.host, repo: p.repo, url: p.url, state: "access-pending", method: "", httpStatus: 0, visibility: "unknown", defaultBranch: "", checkedAt: gmdate.iso(now), ...fields };
+}
+
+/** Always https://api.github.com. Owner and name must already have passed repoParse. */
+export function repoGithubApiUrl(owner, name) {
+  if (!GH_OWNER_RE.test(owner) || !GH_REPO_RE.test(name) || name === "." || name === "..") return null;
+  const url = new URL("https://api.github.com/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name));
+  if (url.origin !== "https://api.github.com" || url.username !== "" || url.password !== "" || url.port !== "") return null;
+  return url;
+}
+
+async function repoGithubGet(p, token) {
+  const [owner, name] = p.repo.split("/");
+  const url = repoGithubApiUrl(owner, name);
+  if (!url) return { status: 0, json: null };
+  const headers = { Accept: "application/vnd.github+json", "User-Agent": REPO_UA, "X-GitHub-Api-Version": "2022-11-28" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+  let json = null;
+  if (res.status === 200) json = await res.json().catch(() => null); else await res.body?.cancel().catch(() => {});
+  return { status: res.status, json };
+}
+
+async function repoVerifyGithub(cfg, p, now) {
+  const token = phpTrim(String(cfg.GITHUB_REPO_CHECK_TOKEN ?? ""));
+  let method = "github-api-public";
+  try {
+    let r = await repoGithubGet(p, "");
+    if (r.status === 404 && token !== "") { r = await repoGithubGet(p, token); method = "github-api-token"; }
+    if (r.status === 200 && isPlainObject(r.json) && typeof r.json.full_name === "string") {
+      const j = r.json;
+      return repoResult(p, now, {
+        state: "verified", method, httpStatus: 200, repo: j.full_name.slice(0, 140),
+        url: typeof j.html_url === "string" && j.html_url.startsWith("https://github.com/") ? j.html_url.slice(0, 200) : p.url,
+        visibility: j.private === true ? "private" : "public",
+        defaultBranch: typeof j.default_branch === "string" ? j.default_branch.slice(0, 100) : "",
+        archived: j.archived === true,
+      });
+    }
+    if (r.status === 404) return repoResult(p, now, { state: "access-pending", method, httpStatus: 404, reason: "not_found_or_private" });
+    return repoResult(p, now, { state: "check-unavailable", method, httpStatus: r.status, reason: r.status === 403 || r.status === 429 ? "rate_limited" : "unexpected_status" });
+  } catch (e) {
+    return repoResult(p, now, { state: "check-unavailable", method, reason: e?.name === "TimeoutError" ? "timeout" : "network_error" });
+  }
+}
+
+async function repoVerifyHttps(p, now) {
+  const method = "https-reachability";
+  let url = p.url;
+  try {
+    for (let hops = 0; ; hops++) {
+      const u = new URL(url);
+      if (!repoHostOk(u)) return repoResult(p, now, { method, reason: "redirect_not_allowed" });
+      const res = await fetch(u, { method: "GET", headers: { "User-Agent": REPO_UA, Accept: "text/html,*/*;q=0.5" }, redirect: "manual", signal: AbortSignal.timeout(8000) });
+      await res.body?.cancel().catch(() => {});
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("Location");
+        if (!loc || hops >= 3) return repoResult(p, now, { method, httpStatus: res.status, reason: "redirect_loop" });
+        url = new URL(loc, u).href;
+        continue;
+      }
+      if (res.status === 200 && !REPO_LOGIN_PATH_RE.test(new URL(url).pathname)) return repoResult(p, now, { state: "unverified-host", method, httpStatus: 200 });
+      if (res.status === 200 || [401, 403, 404, 410, 451].includes(res.status)) return repoResult(p, now, { method, httpStatus: res.status, reason: "not_reachable_without_sign_in" });
+      return repoResult(p, now, { state: "check-unavailable", method, httpStatus: res.status, reason: "unexpected_status" });
+    }
+  } catch (e) {
+    return repoResult(p, now, { state: "check-unavailable", method, reason: e?.name === "TimeoutError" ? "timeout" : "network_error" });
+  }
+}
+
+const repoCache = new Map();
+/** Live check of a parsed repository. Returns the verification record: state is verified, unverified-host, access-pending or check-unavailable. */
+export async function repoVerify(cfg, p, now = nowSec()) {
+  const hit = repoCache.get(p.url);
+  if (hit && now - hit.at < REPO_CACHE_SEC) return hit.result;
+  const result = p.host === "github" ? await repoVerifyGithub(cfg, p, now) : await repoVerifyHttps(p, now);
+  if (REPO_ACCEPTED_STATES.includes(result.state)) {
+    if (repoCache.size >= 200) repoCache.clear();
+    repoCache.set(p.url, { at: now, result });
+  }
+  return result;
+}
+
+/** What the visitor reads for a verification record. Never mentions keys or internals. */
+export function repoMessage(v, cfg = {}) {
+  if (v.state === "verified") {
+    return `Verified: ${v.repo}${v.defaultBranch ? ` (default branch ${v.defaultBranch})` : ""}${v.visibility === "private" ? ". Read access to this private repository is confirmed" : ""}.`;
+  }
+  if (v.state === "unverified-host") {
+    return `${v.url} answered over HTTPS. This host can't be checked further, so the repository is recorded as unverified-host.`;
+  }
+  if (v.state === "check-unavailable") {
+    return "We couldn't check the repository just now because the code host didn't answer or is limiting requests. Please try again in a few minutes. Nothing was submitted.";
+  }
+  if (v.host === "github") {
+    const hasToken = phpTrim(String(cfg.GITHUB_REPO_CHECK_TOKEN ?? "")) !== "";
+    return `We couldn't verify ${v.repo}. It wasn't found, or it is private. If it is private, invite the GitHub user "${REPO_ACCESS_USER}" as a collaborator with Read access (Settings, Collaborators, Add people), then choose "I've granted access". `
+      + (hasToken ? "" : "Access to private repositories can't be confirmed automatically yet, so a private repository stays \"access pending\" for now. ")
+      + "The request can't be submitted until access is verified.";
+  }
+  return `We couldn't reach ${v.url} without signing in. If it is private, give the account "${REPO_ACCESS_USER}" read-only access on your host (for example GitLab: Members, role Reporter; Bitbucket: Repository settings, User and group access, Read), then choose "I've granted access". `
+    + "Private access on this host can't be confirmed automatically, so it stays \"access pending\" until the repository is reachable over HTTPS without signing in. The request can't be submitted until then.";
+}
+
+/** The record that goes into the signed card. */
+export function repoCardRecord(d, v) {
+  return {
+    host: v.host, repo: v.repo, url: v.url,
+    defaultBranch: d.repoDefaultBranch, stack: d.repoStack, technicalContact: d.repoContact,
+    verification: { state: v.state, method: v.method, httpStatus: v.httpStatus, visibility: v.visibility, defaultBranchFromHost: v.defaultBranch, checkedAt: v.checkedAt },
+  };
+}
+
+async function apiRepoCheck(c) {
+  if (submissionsPaused(c.cfg)) return submissionsPausedResponse();
+  const [body, err] = await appReadJson(c);
+  if (err) return respond(...err);
+  const [ok, retry] = await appRateLimit(c, "repo", phpInt(c.cfg.REPO_RATE_LIMIT_MAX ?? 20), 600);
+  if (!ok) return respond(429, { ok: false, error: "rate_limited", message: "Too many checks. Please try again in a few minutes." }, { "Retry-After": String(retry) });
+  const hostChoice = appClean(body.repoHost ?? "", 20);
+  if (!REPO_HOSTS.includes(hostChoice)) return respond(400, { ok: false, error: "validation", fields: ["repoHost"] });
+  const p = repoParse(hostChoice, appClean(body.repo ?? "", 301));
+  if (!p) return respond(400, { ok: false, error: "validation", fields: ["repo"], message: hostChoice === "github" ? "Enter the repository as owner/repo or a github.com address." : "Enter the full https address of the repository." });
+  const v = await repoVerify(c.cfg, p, c.now);
+  await appLog(c, { event: "repo_check", host: v.host, state: v.state, method: v.method, http: v.httpStatus, recheck: body.recheck === true });
+  if (v.state === "check-unavailable") return respond(503, { ok: false, error: "repo_check_unavailable", state: v.state, message: repoMessage(v, c.cfg) });
+  return respond(200, { ok: true, state: v.state, canSubmit: REPO_ACCEPTED_STATES.includes(v.state), host: v.host, repo: v.repo, url: v.url,
+    visibility: v.visibility, defaultBranch: v.defaultBranch, checkedAt: v.checkedAt, message: repoMessage(v, c.cfg) });
+}
 
 /** Visitor submissions are paused when INTAKE_SUBMISSIONS_PAUSED is 1, true, yes or on (any case, surrounding space ignored). */
 export function submissionsPaused(cfg) {
@@ -1043,9 +1242,21 @@ async function apiIntake(c) {
   const [ok, retry] = await appRateLimit(c, "intake", phpInt(c.cfg.RATE_LIMIT_MAX ?? 5), phpInt(c.cfg.RATE_LIMIT_WINDOW_SEC ?? 600));
   if (!ok) return respond(429, { ok: false, error: "rate_limited", message: "Too many submissions. Please try again later." }, { "Retry-After": String(retry) });
   if (appClean(body.website ?? "") !== "") return respond(200, { ok: true, referenceId: appRequestId(c.now), statusToken: randomHex(16), message: "Thanks. Your request has been received." });
+  // Enhancements need an existing repository or codebase. Say so first, whatever else the form holds.
+  if (body.route === "er" && body.hasRepo !== true) {
+    return respond(422, { ok: false, error: "repo_required", reason: "no_repository", message: REPO_NONE_MESSAGE, suggestedRoutes: ["new_customer", "website"] });
+  }
   const [errors, d] = intakeValidate(body);
   if ((d.inspirationStyle ?? "") !== "" && !errors.includes("inspirationStyle") && !(await styleSigValid(c.cfg, d.inspirationStyle, d.inspirationStyleSig))) errors.push("inspirationStyle");
   if (errors.length) return respond(400, { ok: false, error: "validation", fields: errors });
+  if (d.route === "er") {
+    const v = await repoVerify(c.cfg, d.repoParsed, c.now);
+    if (v.state === "check-unavailable") return respond(503, { ok: false, error: "repo_check_unavailable", reason: v.reason, state: v.state, message: repoMessage(v, c.cfg) });
+    if (!REPO_ACCEPTED_STATES.includes(v.state)) {
+      return respond(422, { ok: false, error: "repo_not_verified", reason: v.reason ?? v.state, state: v.state, fields: ["repo"], message: repoMessage(v, c.cfg) });
+    }
+    d.repository = repoCardRecord(d, v);
+  }
 
   const db = c.env.DB;
   let requestId = appRequestId(c.now);
@@ -1714,6 +1925,7 @@ export const ROUTES = {
   "/api/lead-update.php": apiLeadUpdate,
   "/api/finance-estimate.php": apiFinanceEstimate,
   "/api/style.php": apiStyle, // Cloudflare build only (inspiration photo style); the PHP build has no equivalent
+  "/api/repo-check.php": apiRepoCheck, // Cloudflare build only: live repository check for enhancement requests
   "/api/envelope.php": apiEnvelope, // Cloudflare build only: Lead fetches the full envelope named in a webhook notice
 };
 
@@ -1744,6 +1956,8 @@ export function appConfig(env) {
     STYLE_SIG_SECRET: v("STYLE_SIG_SECRET", ""),
     GROK_CHAT_API_KEY: v("GROK_CHAT_API_KEY", ""),
     INTAKE_SUBMISSIONS_PAUSED: v("INTAKE_SUBMISSIONS_PAUSED", ""),
+    GITHUB_REPO_CHECK_TOKEN: v("GITHUB_REPO_CHECK_TOKEN", ""), // optional Pages secret: read access to private repos the account was invited to
+    REPO_RATE_LIMIT_MAX: v("REPO_RATE_LIMIT_MAX", 20),
   };
 }
 

@@ -3,7 +3,7 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, ORIGIN, testKey } from "./helpers.mjs";
+import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, ORIGIN, testKey, isRepoHostUrl, liveRepoFetch } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 const FETCH_KEY = "f".repeat(64);
@@ -15,6 +15,7 @@ beforeEach(() => {
   hookCalls = [];
   restore = blockNetwork();
   globalThis.fetch = async (url, init) => {
+    if (isRepoHostUrl(url)) return liveRepoFetch(url, init);
     if (url !== HOOK) throw new Error("unexpected url " + url);
     hookCalls.push(init?.body ?? "");
     return new Response("{}", { status: 202 });
@@ -167,4 +168,13 @@ test("paused: chat still applies the per-IP limit, daily cap and markup filter, 
   assert.ok(!("audience" in reply.json.draft), "N8: bare domains are still dropped while paused");
   assert.ok(!reply.json.reply.includes("https://"));
   assert.ok(!reply.json.reply.includes("<b>"));
+});
+
+test("paused: POST repo-check.php is 503 submissions_paused and does not call the code host", async () => {
+  const env = webhookEnv(PAUSED);
+  const r = await call(worker, env, jsonReq("/api/repo-check.php", { repoHost: "github", repo: "octocat/Hello-World" }));
+  assert.equal(r.status, 503);
+  assert.equal(r.json.error, "submissions_paused");
+  assert.equal(r.json.message, MSG);
+  assert.equal(hookCalls.length, 0);
 });

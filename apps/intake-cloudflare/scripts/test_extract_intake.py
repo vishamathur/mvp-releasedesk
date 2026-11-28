@@ -36,6 +36,22 @@ def card():
             "customerBudgetInr": 150000,
             "artifactLinks": ["https://example.com/" + SENTINEL],
         },
+        "repository": {
+            "host": "github",
+            "repo": "octocat/Hello-World",
+            "url": "https://github.com/octocat/Hello-World",
+            "defaultBranch": "master",
+            "stack": SENTINEL + " Node and React",
+            "technicalContact": "dev+" + SENTINEL + "@example.com",
+            "verification": {
+                "state": "verified",
+                "method": "github-api-public",
+                "httpStatus": 200,
+                "visibility": "public",
+                "defaultBranchFromHost": "master",
+                "checkedAt": "2026-11-28T08:00:00Z",
+            },
+        },
     }
 
 
@@ -59,6 +75,21 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(title["len"], len(SENTINEL + " title"))
         self.assertEqual(title["sha256"], hashlib.sha256((SENTINEL + " title").encode()).hexdigest())
         self.assertEqual(out["freeText"]["contact.email"]["sha256"], hashlib.sha256(EMAIL.encode()).hexdigest())
+        repo = out["repository"]
+        self.assertEqual(repo["host"], "github")
+        self.assertEqual(repo["repo"], "octocat/Hello-World")
+        self.assertEqual(repo["defaultBranch"], "master")
+        self.assertEqual(repo["verification"]["state"], "verified")
+        self.assertEqual(repo["verification"]["method"], "github-api-public")
+        self.assertEqual(repo["verification"]["httpStatus"], 200)
+        self.assertEqual(repo["verification"]["checkedAt"], "2026-11-28T08:00:00Z")
+        self.assertNotIn("url", repo)
+        self.assertNotIn("stack", repo)
+        self.assertNotIn("technicalContact", repo)
+        stack = SENTINEL + " Node and React"
+        self.assertEqual(out["freeText"]["repository.stack"]["len"], len(stack))
+        self.assertEqual(out["freeText"]["repository.stack"]["sha256"], hashlib.sha256(stack.encode()).hexdigest())
+        self.assertIn("repository.url", out["freeText"])
 
     def test_rejects_bad_enum_budget_and_catalogue(self):
         cat = ex.load_catalogue(ex.CATALOGUE)
@@ -95,7 +126,27 @@ class ExtractTest(unittest.TestCase):
         web["requestType"] = "website-creation"
         web["catalogueOptionId"] = "NC-WEBSITE"
         web["addOns"] = ["ADD-NC-WEB-FORMS"]
+        del web["repository"]
         self.assertTrue(ex.extract(web, cat, q)["ok"])
+
+    def test_pid_er_requires_a_verified_repository_and_hides_free_text(self):
+        cat = ex.load_catalogue(ex.CATALOGUE)
+        q = {"path": None, "mode": None, "note": "test"}
+        missing = card()
+        del missing["repository"]
+        self.assertEqual(ex.extract(missing, cat, q)["error"], "bad repository")
+        pending = card()
+        pending["repository"]["verification"]["state"] = "access-pending"
+        self.assertEqual(ex.extract(pending, cat, q)["error"], "bad repository")
+        nc = card()
+        nc["pid"] = "PID-NC"
+        nc["requestType"] = "new-application"
+        nc["catalogueOptionId"] = "NC-KYC"
+        self.assertEqual(ex.extract(nc, cat, q)["error"], "unexpected repository")
+        del nc["repository"]
+        out = ex.extract(nc, cat, q)
+        self.assertTrue(out["ok"])
+        self.assertIsNone(out["repository"])
 
     def test_cli_refuses_loose_inbox_and_accepts_mode_600(self):
         payload = json.dumps(card()).encode()
