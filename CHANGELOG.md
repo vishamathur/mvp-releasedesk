@@ -10,6 +10,7 @@ Notable changes to the Release Desk harness. The format follows [Keep a Changelo
 - Follow-ups: salted contactRef, markdown and bare-domain filtering, a shared signing vector, a strict repo verifier, and Python intake tests in CI. Pages does not use Cron Triggers; the 24 h purge runs on API traffic.
 - Merged `INTAKE_SUBMISSIONS_PAUSED` from main. A pause refuses new cards and visitor messages, and still leaves chat limits, markup filtering, status reads, and the retention purge in place.
 - Validate-handoff again rejects a message from Intake that is not addressed to Lead (`intake_only_to_lead`). A missing or short `CONTACT_REF_SALT` refuses the card before any submission or outbox row is written.
+- The verifier requires `kind`, records a seen signature under a lock, and does not follow redirects. The 24 h purge also runs on a catalogue read. The chat denylist covers shorteners, more domains, `hxxp://` and protocol-relative links. A visitor message with a missing salt is the same fixed 503. `intake-request` is not a handoff kind.
 
 ### Added
 - Agile process files: PR and issue templates (user story, bug, ER with Given/When/Then), CODEOWNERS, Definition of Ready and Done, working agreement, CONTRIBUTING (trunk-based, conventional commits), SECURITY, labels, dependabot.

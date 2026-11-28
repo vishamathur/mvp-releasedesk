@@ -422,7 +422,7 @@ describe("intake front door", () => {
   const processes = loadProcessDefinitionsSync(workspaceRoot);
   const card = "intake:REQ-2026-0001@2026-11-22T15:40:00+05:30";
 
-  it("accepts an intake-request from intake to lead", () => {
+  it("rejects kind intake-request as invalid_schema", () => {
     const result = validateHandoffMessage(
       {
         v: 1,
@@ -440,14 +440,14 @@ describe("intake front door", () => {
         artifactRefs: [card],
         memoryKey: "pid.state.REQ-2026-0001",
         humanGate: null,
-        catalogueOptionId: "ER-KYC-LABELS",
       },
       processes,
     );
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("invalid_schema");
   });
 
-  it("rejects an intake-request that is not addressed to lead", () => {
+  it("rejects a removed intake-request kind even when it is not addressed to lead", () => {
     const result = validateHandoffMessage(
       {
         v: 1,
@@ -469,7 +469,7 @@ describe("intake front door", () => {
       processes,
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("intake_only_to_lead");
+    if (!result.ok) expect(result.code).toBe("invalid_schema");
   });
 
   it("rejects pid.state writes from intake", () => {
@@ -548,7 +548,7 @@ describe("intake front door", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects catalogueOptionId on a message that is not an intake-request", () => {
+  it("rejects catalogueOptionId on a handoff", () => {
     const result = validateHandoffMessage(
       {
         v: 1,

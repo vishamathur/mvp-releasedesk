@@ -103,6 +103,23 @@ test("drain moves a message to dead after 50 attempts", async () => {
   assert.equal(env.DB.raw.prepare("SELECT state FROM outbox WHERE id = 'm1'").get().state, "dead");
 });
 
+test("N17: a visitor message with a missing or short salt is a fixed 503 and adds no outbox row", async () => {
+  for (const salt of ["", "x".repeat(21), "x".repeat(31)]) {
+    const env = testEnv();
+    const created = await call(worker, env, jsonReq("/api/intake.php", ER));
+    assert.equal(created.status, 200, created.text);
+    const before = count(env, "outbox");
+    env.CONTACT_REF_SALT = salt;
+    const msg = await call(worker, env, jsonReq("/api/status.php", { ref: created.json.referenceId, token: created.json.statusToken, message: "Any update?" }));
+    assert.equal(msg.status, 503, salt || "empty");
+    assert.equal(msg.json.error, "not_configured");
+    assert.equal(msg.json.message, W.PUBLIC_UNAVAILABLE_MESSAGE);
+    assert.equal(msg.text.includes("CONTACT_REF_SALT"), false);
+    assert.equal(count(env, "outbox"), before);
+    assert.equal(count(env, "submissions"), 1);
+  }
+});
+
 test("N10: a missing or short CONTACT_REF_SALT stores no submission and no outbox", async () => {
   for (const salt of ["", "x".repeat(21), "x".repeat(31)]) {
     const env = testEnv({ CONTACT_REF_SALT: salt, LEAD_DELIVERY: "webhook", LEAD_WEBHOOK_URL: HOOK, LEAD_WEBHOOK_KEY: "routine-key-not-real" });

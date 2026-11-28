@@ -34,8 +34,8 @@ LEAD_DELIVERY = "webhook"
 LEAD_WEBHOOK_AUTH = "bearer"
 
 # Pages has no Cron Triggers, so this file does not declare [triggers]. crons would not run.
-# Retention is enforced on API traffic: appRun calls intakeCleanup through waitUntil.
-# scheduled() remains for a Worker runtime. Pages does not call it.
+# Retention is 24 h plus the next API call, including catalogue. An idle site keeps rows until then.
+# appRun calls intakeCleanup through waitUntil. scheduled() remains for a Worker runtime. Pages does not call it.
 
 [[d1_databases]]
 binding = "DB"

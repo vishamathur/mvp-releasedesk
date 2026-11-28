@@ -280,6 +280,55 @@ t('cleanup keeps the daily chat limiter for 24 h and drops other buckets after 2
     intake_cleanup($cfg);
     ok(!is_file($daily), 'daily dropped after 24 h');
 });
+t('N17: a visitor message with a missing or short salt is a fixed 503 and writes no outbox', function () use ($cfg) {
+    $priv = getenv('PRIVATE_DIR');
+    $pub = dirname(__DIR__) . '/public';
+    $port = 9925;
+    foreach (['', str_repeat('b', 31)] as $salt) {
+        $dir = sys_get_temp_dir() . '/intake-n17-' . bin2hex(random_bytes(4));
+        foreach (['/submissions', '/status', '/outbox', '/ratelimit', '/sent'] as $d) mkdir($dir . $d, 0700, true);
+        $bare = $cfg;
+        $bare['CONTACT_REF_SALT'] = $salt;
+        $bare['DATA_DIR'] = $dir;
+        $bare['LEAD_DELIVERY'] = 'queue';
+        $rid = 'REQ-20261128-000111';
+        $token = status_create($bare, $rid, 'PID-ER');
+        $conf = $dir . '/intake-config.php';
+        file_put_contents($conf, '<?php return ' . var_export($bare, true) . ';');
+        $log = $dir . '/php-server.log';
+        $proc = proc_open(
+            ['php', '-S', '127.0.0.1:' . $port, '-t', $pub],
+            [1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']],
+            $pipes,
+            null,
+            ['INTAKE_PRIVATE_DIR' => $priv, 'INTAKE_CONFIG' => $conf, 'PATH' => getenv('PATH') ?: '/usr/bin']
+        );
+        ok(is_resource($proc), 'server');
+        usleep(300000);
+        $ch = curl_init("http://127.0.0.1:$port/api/status.php");
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Origin: https://intake.vishalmathur.org'], CURLOPT_POSTFIELDS => json_encode(['ref' => $rid, 'token' => $token, 'message' => 'Any update?'])]);
+        $raw = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        proc_terminate($proc);
+        proc_close($proc);
+        $j = json_decode((string)$raw, true);
+        ok($code === 503 && ($j['error'] ?? '') === 'not_configured', json_encode($j) . " code=$code");
+        ok(($j['message'] ?? '') === 'This service is temporarily unavailable. Please try again later.', 'fixed message');
+        ok(!str_contains((string)$raw, 'CONTACT_REF_SALT'), 'no salt name');
+        ok(count(glob("$dir/outbox/*") ?: []) === 0, 'outbox=0');
+        ok(count(glob("$dir/submissions/*") ?: []) === 0, 'submissions=0');
+        $port++;
+    }
+});
+t('N15: chat markup drops shorteners, extra TLDs, hxxp and protocol-relative links', function () {
+    foreach (['see bit.ly/x', 'chat at t.me/x', 'read docs.dev/guide', 'hxxp://evil.example/a', 'hxxps://evil.example/a', 'notes //evil.example/a', 'ftp://files.example/a', 'tinyurl.com/z', 'goo.gl/z'] as $sample) {
+        ok(chat_has_markup($sample), $sample);
+        $stripped = preg_replace(chat_markup_re(), '', $sample);
+        ok(!str_contains((string)$stripped, $sample), $sample);
+    }
+    ok(!chat_has_markup('Jane Doe at Acme'), 'plain text');
+});
 t('missing or short CONTACT_REF_SALT stores no submission and no outbox', function () use ($cfg) {
     $dir = sys_get_temp_dir() . '/intake-nosalt-' . bin2hex(random_bytes(4));
     foreach (['/submissions', '/status', '/outbox', '/ratelimit', '/sent'] as $d) mkdir($dir . $d, 0700, true);

@@ -13,18 +13,20 @@ capped at 60 seconds, and retries once.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import hmac
 import json
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
 
 REQUEST_ID_RE = re.compile(r"REQ-\d{8}-\d{6}\Z")
 DIGITS_10 = re.compile(r"\d{10}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
-KINDS = {None, "intake-card", "visitor-message"}
+KINDS = {"intake-card", "visitor-message"}
 PURPOSES = ("notice", "envelope", "lead-to-site", "style")
 RETRY_CAP_SEC = 60
 
@@ -46,7 +48,7 @@ def check_notice(rid: str, ts: str, psha: str, sig: str, kind) -> None:
 
 def notice_ts(ts: str) -> int:
     """10 decimal digits only. Floats, scientific notation and millisecond values are rejected."""
-    check_notice("REQ-20260101-000000", ts, "a" * 64, "b" * 64, None)
+    check_notice("REQ-20260101-000000", ts, "a" * 64, "b" * 64, "intake-card")
     return int(ts)
 
 
@@ -90,26 +92,42 @@ class SeenSet:
         return {k: int(v) for k, v in data.items() if isinstance(k, str) and isinstance(v, int) and v > now}
 
     def _store(self, data: dict) -> None:
-        parent = os.path.dirname(self.path)
-        if parent:
-            os.makedirs(parent, mode=0o700, exist_ok=True)
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        """Replace the set by writing a temp file and renaming it. A crash leaves the previous set."""
+        parent = os.path.dirname(self.path) or "."
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".seen.", dir=parent)
         try:
             os.write(fd, json.dumps(data, sort_keys=True).encode("utf-8"))
-        finally:
+            os.fchmod(fd, 0o600)
+        except Exception:
             os.close(fd)
+            os.unlink(tmp)
+            raise
+        os.close(fd)
+        os.replace(tmp, self.path)
 
     def reject_or_record(self, sig: str, now: int, ttl: int = 600) -> bool:
-        """Return True when `sig` was already seen and is still inside its window."""
+        """Return True when `sig` was already seen and is still inside its window.
+
+        The check and the record share one exclusive lock, so two callers cannot both accept the same sig.
+        """
         if not HEX_64.fullmatch(sig or ""):
             raise VerifyError("bad notice fields")
-        data = self._load(now)
-        if sig in data:
+        parent = os.path.dirname(self.path) or "."
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        lock_fd = os.open(self.path + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            data = self._load(now)
+            if sig in data:
+                self._store(data)
+                return True
+            data[sig] = now + ttl
             self._store(data)
-            return True
-        data[sig] = now + ttl
-        self._store(data)
-        return False
+            return False
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
 
 
 def verify_envelope(body: bytes, rid: str, ts: str, psha: str, sig: str, kind, master: bytes, now: int | None = None) -> dict:
@@ -151,7 +169,7 @@ def verify_envelope(body: bytes, rid: str, ts: str, psha: str, sig: str, kind, m
     except json.JSONDecodeError:
         out["error"] = "bad payloadJson"
         return out
-    bound = isinstance(payload, dict) and payload.get("requestId") == rid and (kind is None or payload.get("kind") == kind)
+    bound = isinstance(payload, dict) and payload.get("requestId") == rid and payload.get("kind") == kind
     out["ok"] = bool(bound)
     if out["ok"]:
         out["kind"] = payload.get("kind")

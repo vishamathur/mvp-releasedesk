@@ -118,8 +118,8 @@ export async function hmacHex(secret, data) {
 }
 /** Purpose labels for k_p = HMAC(LEAD_HMAC_SECRET, "releasedesk-intake/<purpose>/v1"). */
 export const HMAC_PURPOSES = ["notice", "envelope", "lead-to-site", "style"];
-/** Draft fields and replies must not carry links, markup, markdown links, or bare domains. */
-export const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info)\b(?:\/|$)/i;
+/** Draft fields and replies must not carry links, markup, markdown links, shorteners, or bare domains. */
+export const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|hxxps?:\/\/|ftp:\/\/|(?<![a-z0-9:])\/\/[a-z0-9]|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl|is\.gd|ow\.ly|buff\.ly|cutt\.ly|rb\.gy|t\.co)\b|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info|dev|app|ai|me|ly|cc|uk|de|gl|gd|page|site|link|cloud|shop|online)\b(?:\/|$)/i;
 /** Fixed text for every public 503. The real reason is logged, never returned. */
 export const PUBLIC_UNAVAILABLE_MESSAGE = "This service is temporarily unavailable. Please try again later.";
 
@@ -1242,6 +1242,7 @@ async function apiStatus(c) {
     return respond(200, statusView(s));
   }
   if (submissionsPaused(c.cfg)) return submissionsPausedResponse();
+  if (!contactRefSaltOk(c.cfg.CONTACT_REF_SALT)) return respondUnavailable(c, "not_configured", "CONTACT_REF_SALT is not set. Refusing to send a visitor message.");
   const [ok, retry] = await appRateLimit(c, "visitor-msg", 10, 600);
   if (!ok) return respond(429, { ok: false, error: "rate_limited" }, { "Retry-After": String(retry) });
   const s = await statusLoadForVisitor(db, appClean(body.ref ?? "", 30), appClean(body.token ?? "", 40));
@@ -1748,9 +1749,10 @@ export async function appRun(handler, request, env, ctx) {
     try { await appLog(c, { event: "unhandled", handler: handler.name, reason: String(e?.message ?? e).slice(0, 160) }); } catch { /* the 500 below is the real error */ }
     res = respond(500, { ok: false, error: "server_error", message: "Something went wrong. Please try again later." });
   }
-  if (handler !== apiCatalogue && ctx && typeof ctx.waitUntil === "function") {
+  if (ctx && typeof ctx.waitUntil === "function") {
+    // Catalogue is the low-traffic page load. It still runs the purge. It does not deliver the outbox.
     // Pause stops delivery of new and queued cards. Retention, including the 24 h daily chat bucket, still runs.
-    if (!submissionsPaused(c.cfg)) ctx.waitUntil(drainOutbox({ ...c, now: nowSec() }).catch(() => {}));
+    if (handler !== apiCatalogue && !submissionsPaused(c.cfg)) ctx.waitUntil(drainOutbox({ ...c, now: nowSec() }).catch(() => {}));
     ctx.waitUntil(intakeCleanup({ ...c, now: nowSec() }).catch(() => {}));
   }
   return res;

@@ -44,7 +44,7 @@ flowchart TB
   end
 
   Vishal --> Thread --> Lead
-  Intake -->|"intake-request"| Lead
+  Intake -->|"signed notice"| Lead
   Lead -->|"public-status"| Intake
   Lead --> CA & Std & Sec & Bld
   CA & Sec & Bld --> Vishal

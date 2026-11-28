@@ -14,7 +14,6 @@ export const HANDOFF_KINDS = [
   "consult",
   "stage-return",
   "build-result",
-  "intake-request",
   "public-status",
 ] as const;
 export const HANDOFF_ACTIONS = ["start", "consult", "return", "remediate", "block", "request", "status"] as const;
@@ -24,9 +23,6 @@ export const THREAD_CHANNELS = ["lead-chat"] as const;
 export const VERBATIM_NOTE = /^\d{4}-\d{2}-\d{2}T[^|]+\| verbatim: .+/;
 
 const STATE_WRITE_KEYS = ["pidState", "writesPidState", "statePatch"] as const;
-
-/** Public card reference copied onto an intake-request. */
-export const INTAKE_ARTIFACT = /^intake:[^@\s]+@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export const HumanGateSchema = z
   .object({
@@ -59,8 +55,6 @@ export const HandoffMessageSchema = z
     memoryKey: z.string().min(1),
     humanGate: HumanGateSchema.nullable(),
     referenceId: z.string().min(1).optional(),
-    /** Catalogue option chosen by the visitor. Only on intake-request. */
-    catalogueOptionId: z.string().min(1).optional(),
     proposedBranch: z.string().min(1).optional(),
     prUrl: z.string().min(1).optional(),
     testsPassed: z.boolean().optional(),
@@ -221,34 +215,14 @@ export function validateHandoffMessage(
       `Intake talks only to Lead. Refusing a message to ${message.to}.`,
     );
   }
-  if (message.kind === "intake-request" && (message.from !== "intake" || message.to !== "lead")) {
-    setCode("intake_only_to_lead");
-    errors.push("intake-request is sent by Intake to Lead only.");
-  }
-  if (message.from === "intake" && message.kind !== "intake-request") {
-    errors.push("Intake sends intake-request only.");
-  }
-  if (message.kind === "intake-request") {
-    if (message.action !== "request") errors.push("intake-request action must be request");
-    if (!message.referenceId) errors.push("intake-request carries referenceId");
-    if (
-      message.artifactRefs.length === 0 ||
-      message.artifactRefs.some((ref) => !INTAKE_ARTIFACT.test(ref))
-    ) {
-      errors.push("intake-request artifactRefs are intake:<ref>@<ISO-8601>");
-    }
-  }
   if (message.kind === "public-status") {
     if (message.from !== "lead" || message.to !== "intake") {
       errors.push("public-status is sent by Lead to Intake.");
     }
     if (message.action !== "status") errors.push("public-status action must be status");
     if (!message.referenceId) errors.push("public-status carries referenceId");
-  } else if (message.referenceId !== undefined && message.kind !== "intake-request") {
-    errors.push("referenceId belongs on intake-request and public-status");
-  }
-  if (message.catalogueOptionId !== undefined && message.kind !== "intake-request") {
-    errors.push("catalogueOptionId belongs on intake-request");
+  } else if (message.referenceId !== undefined) {
+    errors.push("referenceId belongs on public-status");
   }
 
   if (message.kind === "stage-handoff" && message.from !== "lead") {

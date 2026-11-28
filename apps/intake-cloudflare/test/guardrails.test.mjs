@@ -78,6 +78,14 @@ test("N2: cleanup keeps daily chat hits for 24 h and drops other buckets after 2
   assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = 'fresh'").get().n, 1);
 });
 
+test("N15: shorteners, more TLDs, hxxp and protocol-relative links are dropped", () => {
+  for (const sample of ["see bit.ly/x", "chat at t.me/x", "read docs.dev/guide", "app.page/x", "hxxp://evil.example/a", "hxxps://evil.example/a", "notes //evil.example/a", "ftp://files.example/a", "tinyurl.com/z", "goo.gl/z"]) {
+    assert.equal(W.CHAT_MARKUP_OR_URL.test(sample), true, sample);
+    assert.equal(W.chatPublicReply(sample, false).includes(sample), false, sample);
+  }
+  assert.equal(W.CHAT_MARKUP_OR_URL.test("Jane Doe at Acme"), false);
+});
+
 test("G2: injection blanks the draft; links and markup never enter a field", async () => {
   const env = testEnv({ GROK_CHAT_API_KEY: testKey() });
   const base = {
