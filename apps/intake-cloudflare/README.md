@@ -18,7 +18,7 @@ endpoints keep their paths and their request and response shapes, so the front e
 |---|---|---|
 | `GET /api/catalogue.php` | public | EXAMPLE catalogue, `Cache-Control: public, max-age=300` |
 | `POST /api/chat.php` | public, 30 per 10 min per IP | Grok strict-schema call, emails and phones redacted first |
-| `POST /api/intake.php` | public, 5 per 10 min per IP | validate, price the catalogue option, store the card, signed outbox to Lead |
+| `POST /api/intake.php` | public, 5 per 10 min per IP | validate, price the catalogue option, store the card, signed outbox to Lead. When Pages secret `INTAKE_SUBMISSIONS_PAUSED` is `1` (or `true`/`yes`/`on`), this and visitor-message POSTs to `status.php` return `503 submissions_paused` and store or send nothing. Catalogue, status reads and envelope fetch stay up. |
 | `GET/POST /api/status.php` | visitor with ref + token | 60 reads and 10 messages per 10 min per IP |
 | `POST /api/finance-estimate.php` | Lead, HMAC | `X-Intake-Timestamp` (±300 s) + `X-Intake-Signature` |
 | `POST /api/lead-update.php` | Lead, HMAC | idempotent on `updateId`, backwards moves are 409 |

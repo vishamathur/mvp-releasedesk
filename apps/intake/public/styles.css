@@ -20,6 +20,8 @@ a{color:var(--accent)}
 .skip:focus{top:12px}
 :focus-visible{outline:3px solid var(--focus);outline-offset:2px}
 [hidden]{display:none!important}
+.pause-banner{background:var(--warn-bg);color:var(--warn-ink);padding:12px 24px;text-align:center;font-weight:600;border-bottom:1px solid var(--line)}
+body.submissions-paused #submit,body.submissions-paused #reply-send{cursor:not-allowed}
 
 /* header */
 .top{position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;border-bottom:1px solid rgba(255,255,255,.08)}
