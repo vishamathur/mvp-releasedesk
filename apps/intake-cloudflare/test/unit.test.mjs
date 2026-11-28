@@ -136,7 +136,8 @@ test("assess: the Grok finance prompt fences visitor text and escapes slashes li
 
 const base = { route: "er", pid: "PID-ER", catalogueOptionId: "ER-KYC-LABELS", addOns: [],
   contactName: "Jane Doe", email: "jane@example.com", company: "Acme", customerId: "cust_1042", projectRef: "PRJ-ONB-7",
-  changeType: "enhancement", title: "Rename two labels", description: "Rename two labels on the onboarding screen for clarity.", urgency: "standard", consent: true };
+  changeType: "enhancement", title: "Rename two labels", description: "Rename two labels on the onboarding screen for clarity.", urgency: "standard", consent: true,
+  hasRepo: true, repoHost: "github", repo: "octocat/Hello-World", repoDefaultBranch: "master", repoStack: "Plain text sample repository used for tests", repoContact: "dev@example.com" };
 
 test("validation: valid ER passes; bad ids/date/budget/route caught", () => {
   assert.deepEqual(W.intakeValidate(base)[0], []);

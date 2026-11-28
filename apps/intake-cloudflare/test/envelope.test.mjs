@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac, createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { ORIGIN, testEnv, jsonReq, call, blockNetwork, ER } from "./helpers.mjs";
+import { ORIGIN, testEnv, jsonReq, call, blockNetwork, ER, isRepoHostUrl, liveRepoFetch } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 const FETCH_KEY = "f".repeat(64);
@@ -12,6 +12,7 @@ let restore, calls;
 beforeEach(() => {
   restore = blockNetwork(); calls = [];
   globalThis.fetch = async (url, init) => {
+    if (isRepoHostUrl(url)) return liveRepoFetch(url, init);
     if (url !== HOOK) throw new Error("unexpected url " + url);
     calls.push({ raw: init.body, body: JSON.parse(init.body) });
     return new Response("{}", { status: 202 });

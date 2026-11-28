@@ -6,6 +6,7 @@
 #   LEAD_WEBHOOK_KEY   the Lead intake routine's webhook secret key
 #   LEAD_WEBHOOK_URL   the Lead intake routine's webhook URL (https)
 #   LEAD_FETCH_KEY     32-byte hex key Lead sends as Bearer to GET /api/envelope.php
+#   GITHUB_REPO_CHECK_TOKEN  OPTIONAL. Read-only GitHub token of the account invited to a customer's private repo; without it private repos stay "access pending"
 name = "vishalmathur-intake"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-01"

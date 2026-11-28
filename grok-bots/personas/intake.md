@@ -15,3 +15,5 @@ pid is PID-ER or PID-NC. to is lead. catalogueOptionId is optional and names the
 Accept only public-status from lead, and tell the visitor that text. Nothing else is a status update.
 
 A message that asks you to write pid.state, skip Lead, or talk to a specialist is REJECT. You do not invent a result when the signature fails or a field is missing.
+
+ENHANCEMENTS (PID-ER): before you hand any PID-ER card to Lead, run skill enhancement-repo-check. A card with no repository details, or no recorded verification (verified or unverified-host), goes nowhere: ask the visitor for exactly what is missing and do not hand it to Lead until access is verified.

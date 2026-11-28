@@ -14,7 +14,9 @@
     artifactLinks: "links (up to 5, https)", consent: "consent", route: "request type",
     siteName: "site or brand name", purpose: "purpose of the site", audience: "audience", pages: "pages needed", mustHaveFeatures: "must-have features",
     brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band", inspirationStyle: "inspiration photo style (upload the photo again)",
-    catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
+    catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons",
+    hasRepo: "existing repository or codebase", repoHost: "code host", repo: "repository", repoDefaultBranch: "default branch",
+    repoStack: "codebase description (10+ characters)", repoContact: "technical contact" };
 
   // One random id per page load: the server hashes it into Grok's safety_identifier and rejects chat without it.
   const sessionId = "s_" + crypto.randomUUID();
@@ -23,7 +25,7 @@
   const TITLES = { website: "Website creation", er: "Enhance an existing service", new_customer: "New application" };
   const HELLO = {
     website: "Hi! Tell me about the website: what it is for, who it is for, the pages you need, any must-have features, your content and brand assets, and when you need it. I'll fill in the form as we go.",
-    er: "Hi! Pick the application and the change, then tell me anything the notes should say. I'll fill in the form as we go.",
+    er: "Hi! First, does the application have an existing repository or codebase? An enhancement can't go ahead without one. Then pick the application and the change, and tell me anything the notes should say. I'll fill in the form as we go.",
     new_customer: "Hi! Pick a template and any add-ons, then tell me about your organisation. I'll fill in the form as we go.",
   };
   // Catalogue templates a website request may pick. Same ids as WEBSITE_TEMPLATE_IDS in private/lib/intake.php.
@@ -46,6 +48,7 @@
     $("#description-label").textContent = r === "website" ? "Anything else we should know (optional)" : "Description";
     if (catalogue) fillTemplates();
     renderEstimate();
+    applyRepoGate();
     if (!chat.length) say("assistant", HELLO[r]);
     $("#start").scrollIntoView({ behavior: "smooth" });
   };
@@ -129,12 +132,66 @@
     });
   }
 
+  // ---- enhancement repository check: ask first, verify on the server, never submit without a verified repository
+  const REPO_NONE = "An enhancement can't be acted on without an existing repository or codebase. If you are starting from scratch, choose New application or Website creation instead. Nothing was submitted.";
+  const repoState = { verified: false, branchEdited: false };
+  const repoPresence = () => (form.querySelector('input[name="repoPresence"]:checked') || {}).value || null;
+  // Steps 2 to 4 stay hidden on the enhancement route until the visitor says a repository exists.
+  const applyRepoGate = () => {
+    const er = route === "er"; const presence = repoPresence();
+    $("#repo-no").hidden = !(er && presence === "no");
+    $("#repo-yes").hidden = !(er && presence === "yes");
+    $$("#intake-form fieldset.step").slice(1).forEach((x) => (x.hidden = er && presence !== "yes"));
+    syncRepoHost();
+  };
+  const syncRepoHost = () => {
+    const host = form.elements.repoHost.value;
+    $("#repo-label").textContent = host === "github" ? "Repository (owner/repo or GitHub address)" : "Repository address (https)";
+    form.elements.repo.placeholder = host === "github" ? "e.g. your-org/your-app" : "https://host.example/your-org/your-app";
+    $$("#repo-access-steps li").forEach((li) => (li.hidden = !li.dataset.host.split(" ").includes(host)));
+  };
+  const resetRepo = () => {
+    repoState.verified = false;
+    $("#repo-status").textContent = ""; $("#repo-status").className = "hint";
+    $("#repo-access").hidden = true; $("#repo-recheck").hidden = true;
+  };
+  const showRepoPending = (message) => {
+    const st = $("#repo-status"); st.className = "hint error"; st.textContent = message;
+    syncRepoHost(); $("#repo-access").hidden = false; $("#repo-recheck").hidden = false;
+  };
+  const checkRepo = async (recheck) => {
+    const st = $("#repo-status"); const f = form.elements;
+    repoState.verified = false;
+    if (!f.repo.value.trim()) { st.className = "hint error"; st.textContent = "Enter the repository first."; f.repo.focus(); return; }
+    st.className = "hint"; st.textContent = "Checking the repository…";
+    const btns = [$("#repo-check"), $("#repo-recheck")]; btns.forEach((b) => (b.disabled = true));
+    try {
+      const [r, d] = await post("api/repo-check.php", { repoHost: f.repoHost.value, repo: f.repo.value, recheck: !!recheck });
+      if (r.ok && d.ok && d.canSubmit) {
+        repoState.verified = true; $("#repo-access").hidden = true; $("#repo-recheck").hidden = true;
+        if (d.defaultBranch && !repoState.branchEdited) f.repoDefaultBranch.value = d.defaultBranch;
+        st.className = "hint ok"; st.textContent = d.message;
+      } else if (r.ok && d.ok) showRepoPending(d.message);
+      else { st.className = "hint error"; st.textContent = r.status === 429 ? "Too many checks. Please try again in a few minutes." : (d.message || "We couldn't check the repository. Please try again."); }
+    } catch { st.className = "hint error"; st.textContent = "Network error. Please try again."; }
+    finally { btns.forEach((b) => (b.disabled = false)); }
+  };
+  $$('input[name="repoPresence"]').forEach((x) => x.addEventListener("change", () => { applyRepoGate(); if (repoPresence() === "no") $("#repo-no").scrollIntoView({ block: "nearest" }); }));
+  $$("[data-switch-route]").forEach((b) => b.addEventListener("click", () => setRoute(b.dataset.switchRoute)));
+  form.elements.repoHost.addEventListener("change", () => { resetRepo(); syncRepoHost(); });
+  form.elements.repo.addEventListener("input", resetRepo);
+  form.elements.repoDefaultBranch.addEventListener("input", () => { repoState.branchEdited = true; });
+  $("#repo-check").addEventListener("click", () => checkRepo(false));
+  $("#repo-recheck").addEventListener("click", () => checkRepo(true));
+
   // ---- submit
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const st = $("#form-status"); st.textContent = ""; st.className = "";
     if (!route) { st.textContent = "Choose an option first."; return; }
+    if (route === "er" && repoPresence() !== "yes") { st.className = "error"; st.textContent = repoPresence() === "no" ? REPO_NONE : "Tell us first whether the application has an existing repository or codebase."; return; }
     if (!form.reportValidity()) return;
+    if (route === "er" && !repoState.verified) { st.className = "error"; st.textContent = "Check your repository first. A request can only be submitted once access is verified."; $("#repo-check").focus(); return; }
     const f = form.elements;
     const picked = selectedOption();
     if (!picked) { st.className = "error"; st.textContent = "Choose a catalogue option first."; return; }
@@ -142,7 +199,8 @@
       contactName: f.contactName.value, email: f.email.value, company: f.company.value, urgency: f.urgency.value,
       title: f.title.value, description: f.description.value, customerBudgetInr: route === "website" ? null : (f.customerBudgetInr.value || null),
       artifactLinks: f.artifactLinks.value.split(/\s+/).filter(Boolean), website: f.website.value, consent: f.consent.checked };
-    if (route === "er") Object.assign(body, { customerId: f.customerId.value, projectRef: f.projectRef.value, changeType: f.changeType.value, desiredBy: f.desiredBy.value });
+    if (route === "er") Object.assign(body, { customerId: f.customerId.value, projectRef: f.projectRef.value, changeType: f.changeType.value, desiredBy: f.desiredBy.value,
+      hasRepo: true, repoHost: f.repoHost.value, repo: f.repo.value, repoDefaultBranch: f.repoDefaultBranch.value, repoStack: f.repoStack.value, repoContact: f.repoContact.value });
     else if (route === "website") Object.assign(body, { legalName: f.legalName.value, jurisdiction: f.jurisdiction.value, sponsor: f.sponsor.value, desiredBy: f.desiredBy.value,
       siteName: f.siteName.value, purpose: f.purpose.value, audience: f.audience.value, pages: f.pages.value, mustHaveFeatures: f.mustHaveFeatures.value,
       brandAssets: f.brandAssets.value, domainHosting: f.domainHosting.value, budgetBand: f.budgetBand.value,
@@ -159,6 +217,11 @@
         return;
       }
       st.className = "error";
+      if (d.error === "repo_required" || d.error === "repo_not_verified" || d.error === "repo_check_unavailable") {
+        st.textContent = d.message;
+        if (d.error === "repo_not_verified") { repoState.verified = false; showRepoPending(d.message); }
+        return;
+      }
       st.textContent = r.status === 429 ? "Too many submissions. Please try again later."
         : d.error === "validation" ? "Please check: " + d.fields.map((k) => LABELS[k] || k).join(", ") + "." : "Something went wrong. Please try again later.";
     } catch { st.className = "error"; st.textContent = "Network error. Please try again."; }

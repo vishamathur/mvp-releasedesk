@@ -201,3 +201,18 @@ form{display:grid;gap:16px}
   .drawer{padding:16px}
   .fab{right:14px;bottom:14px}
 }
+
+/* enhancement repository check */
+.repo-gate{display:grid;gap:14px;margin:0 0 16px}
+.repo-gate[hidden]{display:none}
+.repo-choice{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;display:grid;gap:8px}
+.repo-choice legend{font-weight:700;padding:0 6px}
+.choice{display:flex;gap:10px;align-items:center;font-weight:400;font-size:1rem}
+.choice input[type=radio]{width:18px;height:18px;min-height:0;padding:0;flex:none;accent-color:var(--accent)}
+.notice{background:var(--warn-bg);color:var(--warn-ink);border-left:4px solid var(--warn-ink);border-radius:var(--r-sm);padding:12px 14px;display:grid;gap:8px}
+.notice[hidden]{display:none}
+.notice ul{margin:0;padding-left:18px}
+.notice .hint{color:var(--warn-ink)}
+.repo-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0}
+#repo-status.ok{color:var(--ok)}
+#repo-status.error{color:var(--err)}

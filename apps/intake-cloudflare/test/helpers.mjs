@@ -105,10 +105,18 @@ export async function call(worker, env, req) {
 
 export const count = (env, table, where = "1=1") => env.DB.raw.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).get().n;
 
-/** Fails any network call made while a test runs, unless the test installs its own recorder. */
+const REAL_FETCH = globalThis.fetch;
+/** Live GitHub / GitLab / Bitbucket calls for the repository check. These are real requests, never stubbed. */
+export const isRepoHostUrl = (url) => /^https:\/\/(api\.github\.com|gitlab\.com|bitbucket\.org)\//.test(String(url));
+export const liveRepoFetch = (url, init) => REAL_FETCH(url, init);
+
+/** Fails any network call made while a test runs, except the live repository-host checks, unless the test installs its own recorder. */
 export function blockNetwork() {
   const real = globalThis.fetch;
-  globalThis.fetch = async (url) => { throw new Error(`network disabled in tests: ${String(url).slice(0, 40)}`); };
+  globalThis.fetch = async (url, init) => {
+    if (isRepoHostUrl(url)) return REAL_FETCH(url, init);
+    throw new Error(`network disabled in tests: ${String(url).slice(0, 40)}`);
+  };
   return () => { globalThis.fetch = real; };
 }
 
@@ -116,5 +124,6 @@ export const ER = {
   route: "er", pid: "PID-ER", catalogueOptionId: "ER-KYC-LABELS", addOns: [],
   contactName: "Jane Doe", email: "jane@example.com", company: "Acme", customerId: "cust_1042", projectRef: "PRJ-ONB-7",
   changeType: "enhancement", title: "Rename two labels", description: "Rename two labels on the onboarding screen for clarity.", urgency: "standard",
+  hasRepo: true, repoHost: "github", repo: "octocat/Hello-World", repoDefaultBranch: "master", repoStack: "Plain text sample repository used for tests", repoContact: "dev@example.com",
   artifactLinks: ["https://example.com/shot.png"], website: "", consent: true,
 };
