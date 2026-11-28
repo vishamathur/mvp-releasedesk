@@ -9,9 +9,9 @@ import { mkdtempSync, writeFileSync, readdirSync, rmSync, existsSync, readFileSy
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHmac, createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import worker from "../src/worker.mjs";
-import { ORIGIN, testEnv, testCtx, ER } from "./helpers.mjs";
+import { ORIGIN, testEnv, testCtx, ER, purposeSign } from "./helpers.mjs";
 
 const run = promisify(execFile);
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -76,7 +76,7 @@ async function noticeFor(rid, { ts = String(Math.floor(Date.now() / 1000)), key 
   const r = await local(`/api/envelope.php?requestId=${rid}&kind=intake-card`, { headers: { Authorization: "Bearer " + FETCH_KEY } });
   const e = r.json();
   const payloadSha256 = sha ?? createHash("sha256").update(e.payloadJson).digest("hex");
-  return { env: e, args: [rid, ts, payloadSha256, createHmac("sha256", key).update(`${ts}.${rid}.${payloadSha256}`).digest("hex"), "intake-card"] };
+  return { env: e, args: [rid, ts, payloadSha256, purposeSign(key, "notice", `notice.v1.${ts}.${rid}.${payloadSha256}`), "intake-card"] };
 }
 
 test("verify_intake: real notice from the site verifies, saves 0600, and --file re-verifies", async () => {
@@ -140,6 +140,25 @@ test("e2e script: PASS end to end when Intake holds the site's secret; no secret
   const card = JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox ORDER BY created_at DESC, rowid DESC LIMIT 1").get().envelope_json);
   assert.match(JSON.parse(card.payloadJson).ask.title, /^PROBE-E2E /);
   sink.close();
+});
+
+test("verify_intake: millisecond ts is rejected, a kind mismatch does not save, and a replay is a duplicate", async () => {
+  const rid = await submitCard();
+  const ms = await py([VERIFY, rid, "1700000000000", "ab".repeat(32), "cd".repeat(32), "intake-card"]);
+  assert.equal(ms.json.ok, false);
+  assert.equal(ms.json.error, "bad notice fields");
+  const { args } = await noticeFor(rid);
+  const first = await py([VERIFY, ...args]);
+  assert.equal(first.json.ok, true, first.out);
+  const bound = await py(["-c", `import json, importlib.util\nspec = importlib.util.spec_from_file_location("verify_intake", ${JSON.stringify(VERIFY)})\nmod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)\nbody = open(${JSON.stringify(first.json.savedTo)}, "rb").read()\nfields = mod.envelope_fields(body, mod.read_key("intake-site-lead-hmac-secret"), ${JSON.stringify(rid)}, ${JSON.stringify(args[2])}, "visitor-message")\nprint(json.dumps(fields))\n`]);
+  assert.equal(bound.json.bound, false);
+  assert.equal(bound.json.error, "payload binding");
+  const jsons = () => readdirSync(inbox).filter((name) => name.endsWith(".json"));
+  const before = jsons().length;
+  const again = await py([VERIFY, ...args]);
+  assert.equal(again.json.ok, false);
+  assert.equal(again.json.error, "duplicate");
+  assert.equal(jsons().length, before);
 });
 
 test("e2e script: FAIL when Intake holds a different secret (nothing is saved), and --dry-run posts nothing", async () => {

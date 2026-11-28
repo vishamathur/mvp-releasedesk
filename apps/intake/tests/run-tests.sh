@@ -8,11 +8,12 @@ unset GROK_API_KEY XAI_API_KEY
 TMP=$(mktemp -d); mkdir -p "$TMP/private"
 cp -r private/. "$TMP/private/"
 export TEST_HMAC=$(php -r 'echo bin2hex(random_bytes(32));')
+export TEST_CONTACT_SALT=$(php -r 'echo bin2hex(random_bytes(32));')
 cat > "$TMP/private/intake-config.php" <<CFG
 <?php return ['GROK_API_KEY'=>'','GROK_BASE_URL'=>'https://api.x.ai/v1','GROK_MODEL'=>'grok-4.3',
 'ALLOWED_ORIGINS'=>'https://intake.vishalmathur.org','PUBLIC_HOST'=>'intake.vishalmathur.org','RATE_LIMIT_MAX'=>12,'RATE_LIMIT_WINDOW_SEC'=>600,
 'CHAT_RATE_LIMIT_MAX'=>30,'RETENTION_DAYS'=>30,'CATALOGUE_FILE'=>'$TMP/private/catalogue.example.json','DATA_DIR'=>'$TMP/data',
-'LEAD_DELIVERY'=>'queue','LEAD_HMAC_SECRET'=>'$TEST_HMAC'];
+'LEAD_DELIVERY'=>'queue','LEAD_HMAC_SECRET'=>'$TEST_HMAC','CONTACT_REF_SALT'=>'$TEST_CONTACT_SALT'];
 CFG
 cp "$TMP/private/intake-config.php" "$TMP/unit-config.php"; sed -i "s#'$TMP/data'#'$TMP/unitdata'#" "$TMP/unit-config.php"
 UNIT_CONFIG="$TMP/unit-config.php" PRIVATE_DIR="$TMP/private" php tests/unit-tests.php; R1=$?

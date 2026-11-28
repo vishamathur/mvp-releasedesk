@@ -2,9 +2,9 @@
 // The webhook receiver here is a local recorder that checks the HMAC; nothing leaves the process.
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createHmac, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, call, count, blockNetwork, ER, testKey } from "./helpers.mjs";
+import { testEnv, jsonReq, call, count, blockNetwork, ER, testKey, purposeSign } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 let restore;
@@ -35,8 +35,8 @@ test("webhook delivery: bearer auth, signed envelope, outbox marked sent", async
   assert.equal(body.kind, "intake-card"); assert.equal(body.requestId, r.json.referenceId); assert.equal(body.source, "intake.vishalmathur.org");
   const stored = JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox").get().envelope_json);
   assert.equal(body.payloadSha256, createHash("sha256").update(stored.payloadJson).digest("hex"));
-  assert.equal(body.sig, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${body.ts}.${body.requestId}.${body.payloadSha256}`).digest("hex"));
-  assert.equal(stored.signature.hex, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${stored.signature.ts}.${stored.payloadJson}`).digest("hex"));
+  assert.equal(body.sig, purposeSign(env.LEAD_HMAC_SECRET, "notice", `notice.v1.${body.ts}.${body.requestId}.${body.payloadSha256}`));
+  assert.equal(stored.signature.hex, purposeSign(env.LEAD_HMAC_SECRET, "envelope", `envelope.v1.${stored.signature.ts}.${stored.payloadJson}`));
   assert.ok(!("payload" in stored), "the payload travels once, as payloadJson");
   const payload = JSON.parse(stored.payloadJson);
   assert.equal(payload.humanGate, null); assert.equal(payload.finance.gate.decidedBy, null);
@@ -54,7 +54,7 @@ test("payloadJson is printable ASCII with no short escapes, parses to the same c
   const secret = testKey();
   const env = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: secret }, "intake-card", "REQ-20261127-000001", card, 1795813322);
   assert.equal(env.payloadJson, t);
-  assert.equal(env.signature.hex, createHmac("sha256", secret).update(`${env.signature.ts}.${env.payloadJson}`).digest("hex"));
+  assert.equal(env.signature.hex, purposeSign(secret, "envelope", `envelope.v1.${env.signature.ts}.${env.payloadJson}`));
   const env2 = await W.deliveryEnvelope({ LEAD_HMAC_SECRET: secret }, "intake-card", "REQ-20261127-000001", { d: "Line one\nLine two\r\nLine three" }, 1795813322);
   assert.ok(!JSON.stringify(env2).includes("\\\\n") && !env2.payloadJson.includes("\\n"), "a multi-line brief has no newline escape in payloadJson or the body");
 });
@@ -103,10 +103,26 @@ test("drain moves a message to dead after 50 attempts", async () => {
   assert.equal(env.DB.raw.prepare("SELECT state FROM outbox WHERE id = 'm1'").get().state, "dead");
 });
 
-test("retention: rows older than RETENTION_DAYS are removed at most once an hour", async () => {
-  const env = testEnv();
+test("N10: a missing or short CONTACT_REF_SALT stores no submission and no outbox", async () => {
+  for (const salt of ["", "x".repeat(21), "x".repeat(31)]) {
+    const env = testEnv({ CONTACT_REF_SALT: salt, LEAD_DELIVERY: "webhook", LEAD_WEBHOOK_URL: HOOK, LEAD_WEBHOOK_KEY: "routine-key-not-real" });
+    const r = await call(worker, env, jsonReq("/api/intake.php", ER));
+    assert.equal(r.status, 503, salt.length ? `len ${salt.length}` : "empty");
+    assert.equal(r.json.error, "not_configured");
+    assert.equal(r.json.message, W.PUBLIC_UNAVAILABLE_MESSAGE);
+    assert.equal(r.text.includes("CONTACT_REF_SALT"), false);
+    assert.equal(count(env, "submissions"), 0);
+    assert.equal(count(env, "outbox"), 0);
+    assert.equal(count(env, "status"), 0);
+    await assert.rejects(() => W.deliverySend({ env, cfg: W.appConfig(env), now: Math.floor(Date.now() / 1000) }, "intake-card", "REQ-20261128-000001", { contact: { email: "jane@example.com", name: "Jane" } }));
+    assert.equal(count(env, "outbox"), 0);
+  }
+});
+
+test("retention: 24 h window removes every outbox state and logs dead rows", async () => {
+  const env = testEnv({ RETENTION_DAYS: "1" });
   const now = Math.floor(Date.now() / 1000);
-  const old = now - 31 * 86400, fresh = now - 86400;
+  const old = now - 2 * 86400, fresh = now - 3600;
   const ins = (table, sql, ...p) => env.DB.raw.prepare(`INSERT INTO ${table} ${sql}`).run(...p);
   for (const [rid, t] of [["REQ-20261001-000001", old], ["REQ-20261120-000002", fresh]]) {
     ins("submissions", "(request_id, pid, card_json, created_at) VALUES (?, 'PID-ER', '{}', ?)", rid, t);
@@ -116,12 +132,18 @@ test("retention: rows older than RETENTION_DAYS are removed at most once an hour
     ins("events", "(at, event_json) VALUES (?, '{}')", t);
   }
   ins("outbox", "(id, request_id, kind, envelope_json, state, created_at, updated_at) VALUES ('q-old', 'REQ-20261001-000003', 'intake-card', '{}', 'queued', ?, ?)", old, old);
+  ins("outbox", "(id, request_id, kind, envelope_json, state, created_at, updated_at) VALUES ('d-old', 'REQ-20261001-000004', 'intake-card', '{}', 'dead', ?, ?)", old, old);
   ins("rate_hits", "(bucket, ts) VALUES ('b', ?)", now - 8000);
   assert.equal(await W.intakeCleanup(ctxOf(env, now)), true);
-  for (const t of ["submissions", "finance_artifacts", "status", "events"]) assert.equal(count(env, t), 1, t);
-  assert.equal(count(env, "outbox", "state = 'sent'"), 1);
-  assert.equal(count(env, "outbox", "state = 'queued'"), 1, "undelivered messages are kept, as in the PHP");
+  for (const t of ["submissions", "finance_artifacts", "status"]) assert.equal(count(env, t), 1, t);
+  assert.equal(count(env, "events", "at = " + fresh), 1, "the fresh event stays");
+  assert.equal(count(env, "outbox"), 1, "only the fresh envelope remains, in any state");
   assert.equal(count(env, "rate_hits"), 0);
+  const ev = env.DB.raw.prepare("SELECT event_json FROM events").all().map((x) => JSON.parse(x.event_json));
+  assert.ok(ev.some((e) => e.event === "outbox_dead_purged" && e.ids.includes("d-old")));
   assert.equal(await W.intakeCleanup(ctxOf(env, now + 60)), false, "hourly");
   assert.equal(await W.intakeCleanup(ctxOf(env, now + 3601)), true);
+  const ctx = { pending: [], waitUntil(p) { this.pending.push(p); } };
+  await worker.scheduled({ cron: "17 * * * *" }, env, ctx);
+  await Promise.all(ctx.pending);
 });

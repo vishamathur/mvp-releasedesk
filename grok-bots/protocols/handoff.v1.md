@@ -23,7 +23,7 @@ Bots talk to each other with teammate messages. The request thread is Lead's cha
 }
 ```
 
-`kind` is `stage-handoff`, `consult`, `stage-return`, or `build-result`.
+`kind` is `stage-handoff`, `consult`, `stage-return`, or `build-result`. `intake-request` is not a kind. Public intake reaches Lead as a signed notice and a fetch-back envelope (`docs/intake/lead-integration.md`), not as a handoff. A future Intake-to-Lead teammate message, if one is ever required, has to be a `consult` with `action` `consult`.
 
 `build-result` adds `proposedBranch`, `prUrl`, `testsPassed`, and `testsSummary`. Lead uses that message for the test gate. Builder copies the release-intel result into `testsSummary`.
 

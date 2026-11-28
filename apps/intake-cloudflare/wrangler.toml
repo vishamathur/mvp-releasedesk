@@ -2,10 +2,18 @@
 # Build first: node apps/intake-cloudflare/scripts/build.mjs
 # NO SECRETS IN THIS FILE. Set these with `npx wrangler pages secret put <NAME> --project-name vishalmathur-intake`:
 #   GROK_API_KEY       xAI key for chat and free-text finance estimates (server only)
-#   LEAD_HMAC_SECRET   >= 32 chars (openssl rand -hex 32); the same value as Lead's vault entry intake-site-hmac
+#   LEAD_HMAC_SECRET   >= 32 bytes (openssl rand -hex 32). Master key only.
+#                      On the box the same value is the file /workspace/releasedesk-secrets/intake-site-lead-hmac-secret
+#                      (not a vault entry named intake-site-hmac). Purpose keys are derived in the worker.
+#                      Do not rotate this secret from the repo and do not run `wrangler secret put` here.
 #   LEAD_WEBHOOK_KEY   the Lead intake routine's webhook secret key
 #   LEAD_WEBHOOK_URL   the Lead intake routine's webhook URL (https)
 #   LEAD_FETCH_KEY     32-byte hex key Lead sends as Bearer to GET /api/envelope.php
+#   GROK_CHAT_API_KEY  optional separate xAI key for the assistant only. When unset, chat refuses.
+#                      It does not fall back to GROK_API_KEY. Not set by this change.
+#   STYLE_SIG_SECRET   optional, >= 32 bytes. When set, style signatures use it instead of the derived style key.
+#                      Not set by this change.
+#   CONTACT_REF_SALT   >= 32 bytes. Salts contactRef. Not set by this change. Do not commit a value.
 # Optional (set only when pausing, not a default var): INTAKE_SUBMISSIONS_PAUSED=1 rejects new cards and visitor messages with 503.
 name = "vishalmathur-intake"
 pages_build_output_dir = "dist"
@@ -19,10 +27,15 @@ PUBLIC_HOST = "intake.vishalmathur.org"
 RATE_LIMIT_MAX = "5"
 RATE_LIMIT_WINDOW_SEC = "600"
 CHAT_RATE_LIMIT_MAX = "30"
-RETENTION_DAYS = "30"
+RETENTION_DAYS = "1"
+CHAT_DAILY_MAX = "3000"
 LEAD_BOT_ID = "46e50097-0409-4972-9be0-6ade37563135"
 LEAD_DELIVERY = "webhook"
 LEAD_WEBHOOK_AUTH = "bearer"
+
+# Pages has no Cron Triggers, so this file does not declare [triggers]. crons would not run.
+# Retention is enforced on API traffic: appRun calls intakeCleanup through waitUntil.
+# scheduled() remains for a Worker runtime. Pages does not call it.
 
 [[d1_databases]]
 binding = "DB"

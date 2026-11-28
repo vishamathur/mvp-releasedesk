@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { ROOT, ORIGIN, testEnv, jsonReq, call, count, blockNetwork, testKey } from "./helpers.mjs";
+import { ROOT, ORIGIN, testEnv, jsonReq, call, count, blockNetwork, testKey, purposeSign } from "./helpers.mjs";
 
 const PNG = readFileSync(join(ROOT, "test", "fixtures", "stripes.png"));
 const imgReq = (bytes, type = "image/png", headers = {}) => new Request(ORIGIN + "/api/style.php", {
@@ -42,7 +42,7 @@ test("style: endpoint rejects bad origin, type, size, session and fake images be
 
 test("style: no key is an honest configuration error, not an invented style", async () => {
   const r = await call(worker, testEnv({ LEAD_HMAC_SECRET: testKey() }), imgReq(PNG));
-  assert.equal(r.status, 503); assert.equal(r.json.error, "grok_unavailable"); assert.match(r.json.message, /Refusing to invent a style/);
+  assert.equal(r.status, 503); assert.equal(r.json.error, "grok_unavailable"); assert.equal(r.json.message, W.PUBLIC_UNAVAILABLE_MESSAGE);
 });
 
 test("style: Grok vision request carries the image as a data URI, the vision model, strict schema; a failure is a real 503", async () => {
@@ -51,7 +51,8 @@ test("style: Grok vision request carries the image as a data URI, the vision mod
   const env = testEnv({ GROK_API_KEY: testKey(), LEAD_HMAC_SECRET: testKey(), GROK_VISION_MODEL: "grok-vision-test" });
   const r = await call(worker, env, imgReq(PNG));
   assert.equal(r.status, 503); assert.equal(r.json.error, "grok_unavailable");
-  assert.ok(r.json.message.includes("grok_transport:network disabled in tests") && r.json.message.includes("Nothing was invented"), r.json.message);
+  assert.equal(r.json.message, W.PUBLIC_UNAVAILABLE_MESSAGE);
+  assert.ok(env.DB.raw.prepare("SELECT event_json FROM events").all().some((row) => row.event_json.includes("grok_transport:network disabled in tests")));
   assert.equal(seen.url, "https://api.x.ai/v1/chat/completions");
   const body = JSON.parse(seen.init.body);
   assert.equal(body.model, "grok-vision-test");
@@ -95,9 +96,8 @@ test("intake: a signed style goes into the website brief as text; an edited or u
   const cfg = W.appConfig(env);
   const text = W.styleText(W.styleClean({ palette: [{ hex: "#1F4E5F", name: "petrol blue" }, { hex: "#E9D6B4", name: "sand" }], mood: "Calm, coastal",
     textures: "Smooth flat fills", typography: "Clean geometric sans", layout: "Large hero block, generous white space" }));
-  // Same HMAC the endpoint issues (inspiration-style.v1.<text>).
-  const { createHmac } = await import("node:crypto");
-  const sig = createHmac("sha256", cfg.LEAD_HMAC_SECRET).update("inspiration-style.v1." + text).digest("hex");
+  // Purpose key "style", signed string "style.v1." + text. A separate STYLE_SIG_SECRET replaces the derived key.
+  const sig = purposeSign(cfg.LEAD_HMAC_SECRET, "style", "style.v1." + text);
   assert.equal(await W.styleSigValid(cfg, text, sig), true);
   let r = await call(worker, env, jsonReq("/api/intake.php", { ...web, inspirationStyle: text, inspirationStyleSig: sig }));
   assert.equal(r.status, 200, r.text);

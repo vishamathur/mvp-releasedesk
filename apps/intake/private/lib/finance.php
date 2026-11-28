@@ -162,8 +162,9 @@ function finance_assess(array $cfg, array $req): array {
     $est = $priced ?? finance_estimate($cfg, $lines, $urgency, $confidence);
     [$policyRec, $reasons] = finance_policy($pid, $est, $confidence, $budget);
     $grokRec = $grok['recommendation'] ?? null;
+    $injection = !empty($grok['suspectedPromptInjection']);
     $final = ($grokRec !== null && FIN_RECS[$grokRec] > FIN_RECS[$policyRec]) ? $grokRec : $policyRec; // Grok can only tighten
-    if (!empty($grok['suspectedPromptInjection']) && FIN_RECS[$final] < FIN_RECS['review']) { $final = 'review'; $reasons[] = 'Possible prompt injection in the request text.'; }
+    if ($injection) { $final = $policyRec; $reasons[] = 'Possible prompt injection in the request text. The recommendation is the policy recommendation only.'; }
 
     return [
         'model' => 'releasedesk-finance-v1',
@@ -176,12 +177,12 @@ function finance_assess(array $cfg, array $req): array {
         'policyRecommendation' => $policyRec,
         'grokRecommendation' => $grokRec,
         'policyReasons' => $reasons,
-        'rationale' => $grok['rationale'] ?? implode(' ', $reasons),
+        'rationale' => $injection ? implode(' ', $reasons) : ($grok['rationale'] ?? implode(' ', $reasons)),
         'lineReasons' => $grok ? array_map(fn($l) => ['serviceId' => $l['serviceId'], 'reason' => $l['reason']], $grok['lines']) : [],
         'risks' => $grok['risks'] ?? [],
         'openQuestions' => $grok['openQuestions'] ?? [],
-        'suspectedPromptInjection' => (bool)($grok['suspectedPromptInjection'] ?? false),
-        'gate' => ['gate' => 'finance-approval', 'owner' => 'change-analyst', 'decidedBy' => null, 'status' => 'pending'],
+        'suspectedPromptInjection' => $injection,
+        'gate' => ['gate' => 'finance-approval', 'owner' => 'change-analyst', 'decidedBy' => null, 'status' => 'pending', 'suspectedPromptInjection' => $injection],
         'notice' => 'Recommendation only. The finance-approval decision is made by a human (Vishal / Finance partner) through Change Analyst.',
         'artifactRefs' => $est['artifactRefs'] ?? [],
     ];
@@ -207,7 +208,7 @@ function api_finance_estimate(array $cfg): void {
             'catalogueOptionId' => $optionId, 'addOns' => $addOns]);
     } catch (RuntimeException $e) {
         if (fin_is_catalogue_error($e)) { app_respond(400, ['ok' => false, 'error' => 'catalogue', 'message' => $e->getMessage()]); return; }
-        app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
+        app_respond_unavailable($cfg, 'grok_unavailable', $e->getMessage());
         return;
     }
     if (app_valid_request_id($rid)) {

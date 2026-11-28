@@ -66,7 +66,18 @@ function app_rate_limit(array $cfg, string $bucket, string $ip, int $max, int $w
     } finally { flock($fh, LOCK_UN); fclose($fh); }
 }
 
-function app_client_ip(): string { return $_SERVER['REMOTE_ADDR'] ?? 'unknown'; }
+/** Collapse IPv6 to its /64. IPv4 is unchanged. */
+function app_ip_key(string $ip): string {
+    if (!str_contains($ip, ':')) return $ip;
+    $parts = explode('::', $ip, 2);
+    $head = $parts[0] === '' ? [] : explode(':', $parts[0]);
+    $tail = ($parts[1] ?? '') === '' ? [] : explode(':', $parts[1]);
+    $full = str_contains($ip, '::') ? array_merge($head, array_fill(0, max(0, 8 - count($head) - count($tail)), '0'), $tail) : $head;
+    $out = [];
+    foreach (array_slice($full, 0, 4) as $x) $out[] = strtolower(str_pad($x, 4, '0', STR_PAD_LEFT));
+    return implode(':', $out);
+}
+function app_client_ip(): string { return app_ip_key($_SERVER['REMOTE_ADDR'] ?? 'unknown'); }
 
 function app_write_json(string $file, array $data): bool {
     $ok = @file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), LOCK_EX) !== false;
@@ -74,14 +85,29 @@ function app_write_json(string $file, array $data): bool {
     return $ok;
 }
 
-/** HMAC for Lead -> site calls: hex(HMAC-SHA256(secret, timestamp + "." + rawBody)), 5-minute window. */
+const PUBLIC_UNAVAILABLE_MESSAGE = 'This service is temporarily unavailable. Please try again later.';
+
+function app_respond_unavailable(array $cfg, string $error, string $reason): void {
+    app_log($cfg, ['event' => 'unavailable', 'error' => $error, 'reason' => substr($reason, 0, 160)]);
+    app_respond(503, ['ok' => false, 'error' => $error, 'message' => PUBLIC_UNAVAILABLE_MESSAGE]);
+}
+
+/** k_p = HMAC(master, "releasedesk-intake/<purpose>/v1"), raw bytes. */
+function intake_purpose_key(string $master, string $purpose): string {
+    return hash_hmac('sha256', "releasedesk-intake/$purpose/v1", $master, true);
+}
+function intake_sign(string $master, string $purpose, string $data): string {
+    return hash_hmac('sha256', $data, intake_purpose_key($master, $purpose));
+}
+
+/** HMAC for Lead -> site calls. Purpose "lead-to-site", string "lead-to-site.v1." + ts + "." + rawBody. 10-digit ts, 5-minute window. */
 function app_verify_lead_signature(array $cfg, string $raw): ?string {
     $secret = (string)($cfg['LEAD_HMAC_SECRET'] ?? '');
     if (strlen($secret) < 32) return 'lead_secret_not_configured';
     $ts = (string)($_SERVER['HTTP_X_INTAKE_TIMESTAMP'] ?? '');
     $sig = strtolower((string)($_SERVER['HTTP_X_INTAKE_SIGNATURE'] ?? ''));
-    if (!ctype_digit($ts) || abs(time() - (int)$ts) > 300) return 'stale_or_missing_timestamp';
-    if (!hash_equals(hash_hmac('sha256', $ts . '.' . $raw, $secret), $sig)) return 'bad_signature';
+    if (!preg_match('/^\d{10}$/', $ts) || abs(time() - (int)$ts) > 300) return 'stale_or_missing_timestamp';
+    if (!hash_equals(intake_sign($secret, 'lead-to-site', "lead-to-site.v1.$ts.$raw"), $sig)) return 'bad_signature';
     return null;
 }
 
