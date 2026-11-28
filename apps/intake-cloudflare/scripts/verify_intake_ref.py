@@ -27,6 +27,8 @@ REQUEST_ID_RE = re.compile(r"REQ-\d{8}-\d{6}\Z")
 DIGITS_10 = re.compile(r"\d{10}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = {"intake-card", "visitor-message"}
+INBOX_BASE = "/workspace/releasedesk-state"
+INBOX_STATE_NAMES = (".intake-request-seen", ".intake-request-rate")
 PURPOSES = ("notice", "envelope", "lead-to-site", "style", "intake-request")
 INTAKE_SENDER_ID = "ce1f6670-8b51-4478-8f61-42911ea3be41"
 INTAKE_REQUEST_WINDOW_SEC = 300
@@ -83,11 +85,63 @@ def clamp_retry_after(value, cap: int = RETRY_CAP_SEC) -> int:
     return min(n, cap)
 
 
+def _inside(path: str, root: str) -> bool:
+    try:
+        return os.path.commonpath([path, root]) == root
+    except ValueError:
+        return False
+
+
+def confine_file(path: str) -> str:
+    """Absolute file path that does not climb with `..` and whose parent or final component is not a symlink."""
+    if not isinstance(path, str) or path == "" or "\x00" in path or not os.path.isabs(path):
+        raise VerifyError("inbox path rejected")
+    if ".." in Path(path).parts:
+        raise VerifyError("inbox path rejected")
+    parent = os.path.dirname(path)
+    name = os.path.basename(path)
+    if name in ("", ".", ".."):
+        raise VerifyError("inbox path rejected")
+    if os.path.islink(parent) or os.path.islink(path):
+        raise VerifyError("inbox path rejected")
+    resolved = os.path.realpath(parent) + "/" + name
+    if os.path.dirname(resolved) != os.path.realpath(parent):
+        raise VerifyError("inbox path rejected")
+    return resolved
+
+
+def inbox_child(inbox: str, name: str, base: str | None = None) -> str:
+    """`<canonical inbox>/<name>` under the fixed base. Fail closed on escape or a symlink that leaves the base."""
+    if name not in INBOX_STATE_NAMES:
+        raise VerifyError("inbox path rejected")
+    root_setting = INBOX_BASE if base is None else base
+    if not isinstance(inbox, str) or not isinstance(root_setting, str):
+        raise VerifyError("inbox path rejected")
+    if inbox == "" or "\x00" in inbox or "\x00" in root_setting:
+        raise VerifyError("inbox path rejected")
+    if not os.path.isabs(inbox) or not os.path.isabs(root_setting):
+        raise VerifyError("inbox path rejected")
+    if ".." in Path(inbox).parts or ".." in Path(root_setting).parts:
+        raise VerifyError("inbox path rejected")
+    root = os.path.realpath(root_setting)
+    if os.path.islink(inbox):
+        raise VerifyError("inbox path rejected")
+    real_inbox = os.path.realpath(inbox)
+    if not _inside(real_inbox, root):
+        raise VerifyError("inbox path rejected")
+    child = real_inbox + "/" + name
+    if os.path.islink(child):
+        raise VerifyError("inbox path rejected")
+    if os.path.lexists(child) and not _inside(os.path.realpath(child), real_inbox):
+        raise VerifyError("inbox path rejected")
+    return child
+
+
 class SeenSet:
     """sig -> expiry unix time. Expired rows are dropped on each check."""
 
     def __init__(self, path: str):
-        self.path = path
+        self.path = confine_file(path)
 
     def _load(self, now: int) -> dict:
         """A missing file is an empty set. A file that exists but cannot be read or parsed is rejected."""
@@ -204,7 +258,7 @@ class IntakeRateLimit:
     """Per-sender and per-contactRef windows. In memory, or a locked file when path is set."""
 
     def __init__(self, path: str | None = None, sender_max: int = 10, contact_max: int = 5, window: int = 600):
-        self.path = path
+        self.path = None if path is None else confine_file(path)
         self.sender_max = sender_max
         self.contact_max = contact_max
         self.window = window

@@ -188,12 +188,25 @@ def verify_intake_request_message(message, master: bytes, now: int, seen, rates=
     return ref.verify_intake_request(message, master, now, seen, rates)
 
 
+def intake_request_state_paths(inbox: str | None = None, base: str | None = None) -> tuple[str, str]:
+    """Seen-set and rate-limit files under the canonical inbox. A path that leaves the base is rejected."""
+    directory = INBOX if inbox is None else inbox
+    return (
+        ref.inbox_child(directory, ".intake-request-seen", base=base),
+        ref.inbox_child(directory, ".intake-request-rate", base=base),
+    )
+
+
 def verify_intake_request_file(path: str) -> dict:
     with open(path, encoding="utf-8") as handle:
         message = json.load(handle)
-    os.makedirs(INBOX, exist_ok=True)
-    seen = ref.SeenSet(os.path.join(INBOX, ".intake-request-seen"))
-    rates = ref.IntakeRateLimit(os.path.join(INBOX, ".intake-request-rate"))
+    try:
+        seen_path, rate_path = intake_request_state_paths()
+    except ref.VerifyError as error:
+        return {"ok": False, "error": error.code}
+    os.makedirs(os.path.dirname(seen_path), mode=0o700, exist_ok=True)
+    seen = ref.SeenSet(seen_path)
+    rates = ref.IntakeRateLimit(rate_path)
     return verify_intake_request_message(message, read_key(HMAC_FILE), int(time.time()), seen, rates)
 
 

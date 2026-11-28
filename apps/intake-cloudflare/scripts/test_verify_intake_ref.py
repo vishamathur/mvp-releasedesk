@@ -157,6 +157,49 @@ class VerifyRefTest(unittest.TestCase):
         self.assertNotEqual(notice, other)
         self.assertEqual(len(notice), 64)
 
+    def test_inbox_child_rejects_traversal_and_accepts_a_normal_directory(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "verify_intake_tool_inbox",
+            Path(__file__).resolve().parents[3] / "grok-bots" / "tools" / "verify_intake.py",
+        )
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d) / "state"
+            inbox = base / "intake-inbox"
+            inbox.mkdir(parents=True)
+            seen, rate = tool.intake_request_state_paths(str(inbox), base=str(base))
+            self.assertEqual(seen, str(inbox.resolve()) + "/.intake-request-seen")
+            self.assertEqual(rate, str(inbox.resolve()) + "/.intake-request-rate")
+            self.assertTrue(v._inside(seen, str(base.resolve())))
+            record = v.SeenSet(seen)
+            self.assertFalse(record.reject_or_record("ab" * 32, 1_700_000_000))
+            self.assertTrue(Path(seen).is_file())
+            self.assertEqual(Path(seen).resolve().parent, inbox.resolve())
+            for escaped in (
+                str(inbox / ".." / ".." / "elsewhere"),
+                str(Path(d) / "elsewhere"),
+                "../intake-inbox",
+            ):
+                with self.assertRaises(v.VerifyError) as ctx:
+                    v.inbox_child(escaped, ".intake-request-seen", base=str(base))
+                self.assertEqual(ctx.exception.code, "inbox path rejected")
+            outside = Path(d) / "outside"
+            outside.mkdir()
+            link = base / "linked-inbox"
+            link.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(v.VerifyError) as ctx:
+                tool.intake_request_state_paths(str(link), base=str(base))
+            self.assertEqual(ctx.exception.code, "inbox path rejected")
+            planted = inbox / ".intake-request-seen"
+            planted.unlink()
+            planted.symlink_to(outside / "stolen")
+            with self.assertRaises(v.VerifyError) as ctx:
+                v.inbox_child(str(inbox), ".intake-request-seen", base=str(base))
+            self.assertEqual(ctx.exception.code, "inbox path rejected")
+            self.assertFalse((outside / "stolen").exists())
+
     def test_c2_intake_request_rejects_bad_signature_stale_and_reused_nonce(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
