@@ -498,6 +498,27 @@ describe("intake front door", () => {
     if (!result.ok) expect(result.code).toBe("only_lead_writes_pid_state");
   });
 
+  it("rejects consult and stage-return from intake to lead", () => {
+    for (const message of [
+      {
+        v: 1, kind: "consult", pid: "PID-ER", pidVersion: "1.1.0", requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" }, from: "intake", to: "lead",
+        stage: "estimation", action: "consult", summary: "Intake tried to consult Lead.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"], memoryKey: "pid.state.REQ-2026-0001", humanGate: null,
+      },
+      {
+        v: 1, kind: "stage-return", pid: "PID-ER", pidVersion: "1.1.0", requestId: "REQ-2026-0001",
+        thread: { channel: "lead-chat", threadId: "thr_2026-0001" }, from: "intake", to: "lead",
+        stage: "estimation", action: "return", summary: "Intake tried to return a stage.",
+        artifactRefs: ["memory:pid.artifacts.REQ-2026-0001"], memoryKey: "pid.state.REQ-2026-0001", humanGate: null,
+      },
+    ] as const) {
+      const result = validateHandoffMessage(message, processes);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.code).toBe("invalid_schema");
+    }
+  });
+
   it("rejects any intake message to a specialist", () => {
     for (const to of ["change-analyst", "standards", "security", "builder"] as const) {
       const result = validateHandoffMessage(

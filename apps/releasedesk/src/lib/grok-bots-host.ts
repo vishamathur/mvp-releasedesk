@@ -165,7 +165,7 @@ async function intakePack(
     routines: [],
     connectors: ["Public site HMAC (verify)"],
     teammates: ["lead", "log"],
-    channels: ["public site — visitors", "lead — intake-request and public-status"],
+    channels: ["public site — visitors", "lead — signed notice and public-status"],
     memoryNotes: [],
   };
 }

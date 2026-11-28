@@ -98,6 +98,21 @@ class VerifyRefTest(unittest.TestCase):
             stored = json.loads(Path(seen.path).read_text(encoding="utf-8"))
             self.assertEqual(stored[sig], 2_600)
 
+    def test_corrupt_seen_set_is_rejected_and_not_replaced(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".seen"
+            path.write_text("{not-json", encoding="utf-8")
+            seen = v.SeenSet(str(path))
+            with self.assertRaises(v.VerifyError) as ctx:
+                seen.reject_or_record("ab" * 32, 1_000)
+            self.assertEqual(ctx.exception.code, "seen set unreadable")
+            self.assertEqual(path.read_text(encoding="utf-8"), "{not-json")
+            path.write_text("[]", encoding="utf-8")
+            with self.assertRaises(v.VerifyError) as ctx:
+                seen.reject_or_record("ab" * 32, 1_000)
+            self.assertEqual(ctx.exception.code, "seen set unreadable")
+            self.assertEqual(path.read_text(encoding="utf-8"), "[]")
+
     def test_save_only_after_ok_and_retry_cap(self):
         body, *_ = envelope(self.master)
         with tempfile.TemporaryDirectory() as d:

@@ -40,7 +40,7 @@ function chat_system_prompt(array $cat): string {
 
 /** Same denylist as the Cloudflare worker's CHAT_MARKUP_OR_URL. */
 function chat_markup_re(): string {
-    return '/<[^>]*>|https?:\/\/|hxxps?:\/\/|ftp:\/\/|(?<![a-z0-9:])\/\/[a-z0-9]|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl|is\.gd|ow\.ly|buff\.ly|cutt\.ly|rb\.gy|t\.co)\b|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info|dev|app|ai|me|ly|cc|uk|de|gl|gd|page|site|link|cloud|shop|online)\b(?:\/|$)/i';
+    return '/<[^>]*>|https?:\/\/|hxxps?:\/\/|ftp:\/\/|(?<![a-z0-9:])\/\/[a-z0-9]|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl|is\.gd|ow\.ly|buff\.ly|cutt\.ly|rb\.gy|t\.co)\b|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info|dev|app|ai|me|ly|cc|uk|de|gl|gd|page|site|link|cloud|shop|online)\b/i';
 }
 function chat_has_markup(string $s): bool { return preg_match(chat_markup_re(), $s) === 1; }
 

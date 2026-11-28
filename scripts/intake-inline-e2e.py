@@ -12,8 +12,7 @@ shared box and are never printed, never put in env vars or on the command line):
   5. webhook     POST the notice to Intake's webhook (url and key from the webhook file).
   6. inbox       Wait for Intake to save the verified envelope in the inbox directory, then re-check its HMAC with
                  verify_intake.py --file. This proves Intake used the same secret as the site.
-The hand-off from Intake to Lead is then confirmed in Release Desk Log or Lead's chat (the line "PROBE intake-request
-received from intake" for the printed requestId). This script cannot read those chats.
+The notice is then confirmed in Release Desk Log or Lead's chat (the line "PROBE <requestId> received via site notice"). This script cannot read those chats.
 
 Usage:  intake-inline-e2e.py [--dry-run] [--request-id REQ-...] [--webhook-file PATH] [--wait SECONDS]
   --dry-run       steps 1 only, plus a check that the site answers; nothing is submitted or posted.

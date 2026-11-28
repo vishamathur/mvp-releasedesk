@@ -215,6 +215,9 @@ export function validateHandoffMessage(
       `Intake talks only to Lead. Refusing a message to ${message.to}.`,
     );
   }
+  if (message.from === "intake") {
+    errors.push("Intake does not send a handoff.v1 message. Public intake is the signed notice.");
+  }
   if (message.kind === "public-status") {
     if (message.from !== "lead" || message.to !== "intake") {
       errors.push("public-status is sent by Lead to Intake.");

@@ -30,7 +30,7 @@ KIND = {  # color, dash, width
     "gate-decision": ("#B45309", "10,5", 4),
     "tool": ("#334155", "3,4", 2.5),
     "chat": ("#92400E", None, 2.5),
-    "intake-request": ("#0369A1", None, 3),
+    "signed-notice": ("#0369A1", None, 3),
     "public-status": ("#0369A1", "6,4", 2.5),
 }
 W = 2400
@@ -41,7 +41,7 @@ ROW = 44
 
 # (from, to, label, kind) ; ("note", lane, text) ; ("sep", text)
 ER = [
-    ("intake", "lead", "0 · intake-request · public PID-ER card", "intake-request"),
+    ("intake", "lead", "0 · signed notice · public PID-ER card", "signed-notice"),
     ("vishal", "lead", "1 · chat · start PID-ER (customer, product, ask)", "chat"),
     ("note", "lead", "writes pid.state · stage intake"),
     ("lead", "ca", "2 · consult · intake", "consult"),
@@ -95,7 +95,7 @@ ER = [
     ("vishal", "gh", "42 · Vishal merges the PR himself (no bot merges)", "chat"),
 ]
 NC = [
-    ("intake", "lead", "N0 · intake-request · public PID-NC card", "intake-request"),
+    ("intake", "lead", "N0 · signed notice · public PID-NC card", "signed-notice"),
     ("vishal", "lead", "N1 · chat · start PID-NC (legal name, jurisdiction, sponsor)", "chat"),
     ("lead", "ca", "N2 · consult · intake, then customer-onboarding (Lead owns)", "consult"),
     ("lead", "ca", "N3 · stage-handoff · discovery", "stage-handoff"),
@@ -198,7 +198,7 @@ def main():
 
     parts.append(f'<rect width="{W}" height="{H}" fill="{BG}"/>')
     parts.append(t(40, 58, "Release Desk on Grok Bot: every bot-to-bot handover (PID-ER, with PID-NC extras)", 32, 800, INK, "start"))
-    parts.append(t(40, 96, "Intake sends intake-request to Lead. Lead is the only writer of pid.state.{requestId} and sends public-status back. Every stage-return and build-result goes to Lead.", 17, 500, MUTED, "start"))
+    parts.append(t(40, 96, "Intake sends the signed notice to Lead and no handoff.v1 kind. Lead is the only writer of pid.state.{requestId} and sends public-status back. Every stage-return and build-result goes to Lead.", 17, 500, MUTED, "start"))
     parts.append(t(40, 122, "Human gates are asked and answered between Vishal and the bot that owns that work. Lead never asks Vishal for an approval and never sets one.", 17, 700, "#92400E", "start"))
 
     # cc fan-in panel
@@ -261,7 +261,7 @@ def main():
         ("tool", "tool call · CloudAgent / GitHub (not a teammate message)"),
         ("chat", "chat with Vishal · trigger, status, his own merge"),
         ("consult", "● cc · <tag> on the Log lane = line appended to {requestId}.jsonl"),
-        ("intake-request", "intake-request · Intake → Lead (public card, real-only)"),
+        ("signed-notice", "signed notice · site → Lead (not a handoff.v1 kind)"),
         ("public-status", "public-status · Lead → Intake (what the visitor may be told)"),
     ]
     for i, (k, s) in enumerate(items):

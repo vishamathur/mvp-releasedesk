@@ -4,7 +4,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, call, count, blockNetwork, ER, testKey, purposeSign } from "./helpers.mjs";
+import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, testKey, purposeSign } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 let restore;
@@ -101,6 +101,25 @@ test("drain moves a message to dead after 50 attempts", async () => {
   env.DB.raw.prepare("INSERT INTO outbox (id, request_id, kind, envelope_json, attempts, state, created_at, updated_at) VALUES ('m1', 'REQ-20261122-000001', 'intake-card', '{}', 50, 'queued', ?, ?)").run(now - 1000, now - 1000);
   assert.deepEqual(await W.drainOutbox(ctxOf(env, now)), []);
   assert.equal(env.DB.raw.prepare("SELECT state FROM outbox WHERE id = 'm1'").get().state, "dead");
+});
+
+test("N19: a catalogue read claims the purge at most once a minute", async () => {
+  W.resetCatalogueCleanupMeter();
+  const env = testEnv();
+  let batches = 0;
+  const batch = env.DB.batch.bind(env.DB);
+  env.DB.batch = async (stmts) => { batches += 1; return batch(stmts); };
+  const first = await call(worker, env, getReq("/api/catalogue.php"));
+  assert.equal(first.status, 200);
+  const afterFirst = batches;
+  assert.ok(afterFirst >= 1, "the first catalogue read claims the purge");
+  const second = await call(worker, env, getReq("/api/catalogue.php"));
+  assert.equal(second.status, 200);
+  assert.equal(batches, afterFirst, "a second read inside the minute does not touch D1 for the purge");
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal(W.catalogueCleanupDue(now), false);
+  assert.equal(W.catalogueCleanupDue(now + W.CATALOGUE_CLEANUP_GAP_SEC), true);
+  W.resetCatalogueCleanupMeter();
 });
 
 test("N17: a visitor message with a missing or short salt is a fixed 503 and adds no outbox row", async () => {

@@ -82,14 +82,28 @@ class SeenSet:
         self.path = path
 
     def _load(self, now: int) -> dict:
+        """A missing file is an empty set. A file that exists but cannot be read or parsed is rejected."""
+        path = Path(self.path)
+        if not path.exists():
+            return {}
         try:
-            raw = Path(self.path).read_text(encoding="utf-8")
-            data = json.loads(raw) if raw else {}
-        except (OSError, json.JSONDecodeError):
-            data = {}
+            raw = path.read_text(encoding="utf-8")
+            if not raw.strip():
+                raise VerifyError("seen set unreadable")
+            data = json.loads(raw)
+        except VerifyError:
+            raise
+        except (OSError, json.JSONDecodeError, UnicodeError, ValueError) as error:
+            raise VerifyError("seen set unreadable") from error
         if not isinstance(data, dict):
-            data = {}
-        return {k: int(v) for k, v in data.items() if isinstance(k, str) and isinstance(v, int) and v > now}
+            raise VerifyError("seen set unreadable")
+        kept = {}
+        for key, value in data.items():
+            if not isinstance(key, str) or isinstance(value, bool) or not isinstance(value, int):
+                raise VerifyError("seen set unreadable")
+            if value > now:
+                kept[key] = value
+        return kept
 
     def _store(self, data: dict) -> None:
         """Replace the set by writing a temp file and renaming it. A crash leaves the previous set."""

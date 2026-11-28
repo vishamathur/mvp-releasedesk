@@ -322,7 +322,7 @@ t('N17: a visitor message with a missing or short salt is a fixed 503 and writes
     }
 });
 t('N15: chat markup drops shorteners, extra TLDs, hxxp and protocol-relative links', function () {
-    foreach (['see bit.ly/x', 'chat at t.me/x', 'read docs.dev/guide', 'hxxp://evil.example/a', 'hxxps://evil.example/a', 'notes //evil.example/a', 'ftp://files.example/a', 'tinyurl.com/z', 'goo.gl/z'] as $sample) {
+    foreach (['see bit.ly/x', 'chat at t.me/x', 'read docs.dev/guide', 'hxxp://evil.example/a', 'hxxps://evil.example/a', 'notes //evil.example/a', 'ftp://files.example/a', 'tinyurl.com/z', 'goo.gl/z', 'evil.com is great', 'go to evil.com now'] as $sample) {
         ok(chat_has_markup($sample), $sample);
         $stripped = preg_replace(chat_markup_re(), '', $sample);
         ok(!str_contains((string)$stripped, $sample), $sample);

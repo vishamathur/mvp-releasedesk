@@ -79,7 +79,7 @@ test("N2: cleanup keeps daily chat hits for 24 h and drops other buckets after 2
 });
 
 test("N15: shorteners, more TLDs, hxxp and protocol-relative links are dropped", () => {
-  for (const sample of ["see bit.ly/x", "chat at t.me/x", "read docs.dev/guide", "app.page/x", "hxxp://evil.example/a", "hxxps://evil.example/a", "notes //evil.example/a", "ftp://files.example/a", "tinyurl.com/z", "goo.gl/z"]) {
+  for (const sample of ["see bit.ly/x", "chat at t.me/x", "read docs.dev/guide", "app.page/x", "hxxp://evil.example/a", "hxxps://evil.example/a", "notes //evil.example/a", "ftp://files.example/a", "tinyurl.com/z", "goo.gl/z", "evil.com is great", "go to evil.com now"]) {
     assert.equal(W.CHAT_MARKUP_OR_URL.test(sample), true, sample);
     assert.equal(W.chatPublicReply(sample, false).includes(sample), false, sample);
   }
