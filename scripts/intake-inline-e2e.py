@@ -37,7 +37,8 @@ def secret(name):
 def base_ok(u): return u == "https://intake.vishalmathur.org" or re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", u) is not None
 
 def http(method, url, headers=None, body=None, timeout=20):
-    req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+    # Cloudflare's bot rules answer 403 to the default Python-urllib User-Agent, so name this client.
+    req = urllib.request.Request(url, data=body, method=method, headers={"User-Agent": "release-desk-intake-e2e/1.0", **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r: return r.status, r.read()
     except urllib.error.HTTPError as e: return e.code, e.read()
