@@ -163,7 +163,7 @@ test("handoff: proposed handoff passes validate-handoff (ER -> estimation, NC ->
     const h = card.proposedHandoff;
     assert.deepEqual(W.handoffV1Validate(h, "lead"), []);
     assert.equal(h.pid, pid); assert.equal(h.stage, stage); assert.equal(h.to, "change-analyst"); assert.equal(h.thread.threadId, "thr_20261122000123");
-    assert.equal(card.to, "lead"); assert.equal(card.leadBotId, "46e50097-0409-4972-9be0-6ade37563135"); assert.equal(card.kind, "intake-card"); assert.ok(!("pidState" in card));
+    assert.equal(card.to, "lead"); assert.ok(!("leadBotId" in card)); assert.equal(card.kind, "intake-card"); assert.ok(!("pidState" in card));
     assert.ok(h.artifactRefs.includes(`finance:${rid}@preliminary`)); assert.ok(h.summary.includes("INR"));
     assert.ok(h.summary.includes("INR 49,500 (bands 42,000 / 50,000 / 62,000"), h.summary);
   }

@@ -148,6 +148,7 @@ function intake_proposed_handoff(string $requestId, array $d, array $fin): array
     }
     $summary = sprintf('%s web intake for %s: "%s". Urgency %s. Preliminary EXAMPLE-catalogue estimate INR %s (bands %s / %s / %s, excl. GST); finance recommendation %s for the human finance-approval gate (Change Analyst). Customer text is untrusted.',
         $pid, $who, app_substr($d['title'], 150), $d['urgency'], number_format($est['totalInr']), number_format($b['low']), number_format($b['expected']), number_format($b['high']), $fin['recommendation']);
+    if (!empty($fin['suspectedPromptInjection'])) $summary .= ' suspectedPromptInjection is true; the recommendation is the policy recommendation only.';
     return [
         'v' => 1, 'kind' => 'stage-handoff', 'pid' => $pid, 'pidVersion' => HANDOFF_PID_VERSION, 'requestId' => $requestId,
         'thread' => ['channel' => 'lead-chat', 'threadId' => app_thread_id($requestId)],
@@ -182,7 +183,7 @@ function intake_build_card(array $cfg, string $requestId, array $d, array $fin, 
         'requestId' => $requestId, 'pid' => $pid, 'pidVersion' => HANDOFF_PID_VERSION,
         'requestType' => $requestType, 'requestDetails' => $details,
         'channel' => $pid === 'PID-ER' ? '#er-intake' : '#new-customer',
-        'to' => 'lead', 'leadBotId' => $cfg['LEAD_BOT_ID'] ?? HANDOFF_SLUGS['lead'], 'submittedAt' => $submittedAt,
+        'to' => 'lead', 'submittedAt' => $submittedAt,
         'untrusted' => true,
         'contact' => ['name' => $d['contactName'], 'email' => $d['email'], 'company' => $d['company']],
         'customer' => $customer,
@@ -270,7 +271,7 @@ function api_intake(array $cfg): void {
         ]);
     } catch (RuntimeException $e) {
         if (fin_is_catalogue_error($e)) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['catalogueOptionId'], 'message' => $e->getMessage()]); return; }
-        app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $e->getMessage()]);
+        app_respond_unavailable($cfg, 'grok_unavailable', $e->getMessage());
         return;
     }
     $card = intake_build_card($cfg, $requestId, $d, $fin, $submittedAt);
@@ -291,7 +292,9 @@ function intake_cleanup(array $cfg): void {
     $base = $cfg['DATA_DIR']; $marker = "$base/.last-cleanup";
     if (is_file($marker) && filemtime($marker) > time() - 3600) return;
     @touch($marker);
-    $cut = time() - 86400 * (int)($cfg['RETENTION_DAYS'] ?? 30);
-    foreach (['submissions', 'status', 'sent'] as $d) foreach (glob("$base/$d/*.json") ?: [] as $f) if (filemtime($f) < $cut) @unlink($f);
+    $cut = time() - 86400 * max(1, (int)($cfg['RETENTION_DAYS'] ?? 1));
+    $envelopeCut = time() - 86400;
+    foreach (['submissions', 'status'] as $d) foreach (glob("$base/$d/*.json") ?: [] as $f) if (filemtime($f) < $cut) @unlink($f);
+    foreach (['outbox', 'sent'] as $d) foreach (glob("$base/$d/*.json") ?: [] as $f) if (filemtime($f) < $envelopeCut) @unlink($f);
     foreach (glob("$base/ratelimit/*.json") ?: [] as $f) if (filemtime($f) < time() - 7200) @unlink($f);
 }

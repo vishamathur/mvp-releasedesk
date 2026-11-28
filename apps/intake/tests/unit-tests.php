@@ -167,7 +167,7 @@ t('handoff: proposed handoff passes validate-handoff (ER -> estimation, NC -> di
         $h = $card['proposedHandoff'];
         ok(handoff_v1_validate($h, 'lead') === [], json_encode(handoff_v1_validate($h, 'lead')));
         ok($h['pid'] === $pid && $h['stage'] === $stage && $h['to'] === 'change-analyst' && $h['thread']['threadId'] === 'thr_20261122000123', 'shape');
-        ok($card['to'] === 'lead' && $card['leadBotId'] === '46e50097-0409-4972-9be0-6ade37563135' && $card['kind'] === 'intake-card' && !isset($card['pidState']), 'card');
+        ok($card['to'] === 'lead' && !isset($card['leadBotId']) && $card['kind'] === 'intake-card' && !isset($card['pidState']), 'card');
         ok(in_array("finance:$rid@preliminary", $h['artifactRefs'], true) && str_contains($h['summary'], 'INR'), 'finance in handoff');
     }
 });

@@ -16,7 +16,7 @@
     brandAssets: "content and brand assets", domainHosting: "domain and hosting notes", budgetBand: "budget band", inspirationStyle: "inspiration photo style (upload the photo again)",
     catalogueOptionId: "catalogue option", pid: "request type", addOns: "add-ons" };
 
-  // One random id per page load: the server hashes it into Grok's safety_identifier and rejects chat without it.
+  // Kept for the browser only. The server derives the abuse id from the network prefix and does not use this value.
   const sessionId = "s_" + crypto.randomUUID();
 
   // ---- route selection
@@ -72,7 +72,15 @@
       if (!r.ok) { say("assistant", d.message || "Sorry, I couldn't respond. Please use the form."); return; }
       say("assistant", d.reply);
       if (d.route && d.route !== "unknown" && d.route !== route) setRoute(d.route);
-      for (const [k, v] of Object.entries(d.draft || {})) if (form.elements[k] && (!form.elements[k].value || (k === "budgetBand" && form.elements[k].value === "not_sure"))) form.elements[k].value = v;
+      let assistantFilled = false;
+      for (const [k, v] of Object.entries(d.draft || {})) {
+        if (form.elements[k] && (!form.elements[k].value || (k === "budgetBand" && form.elements[k].value === "not_sure"))) {
+          form.elements[k].value = v;
+          assistantFilled = true;
+        }
+      }
+      const filled = $("#assistant-filled");
+      if (filled) filled.hidden = !assistantFilled;
       if (d.suggestedServices?.length) say("assistant", "Possibly relevant services (EXAMPLE list prices): " + d.suggestedServices.map((s) => `${s.name} ${inr(s.unitPriceInr)}/${s.unit}`).join("; "));
     } catch { typing.remove(); say("assistant", "Network problem. Please try again or use the form."); }
   });
@@ -422,7 +430,7 @@
     }));
   };
   const loadStatus = async (ref, token) => {
-    const r = await fetch(`api/status.php?ref=${encodeURIComponent(ref)}&token=${encodeURIComponent(token)}`);
+    const r = await fetch("api/status.php", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ref, token }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { $("#status-view").hidden = true; alert("No request found for that reference and key."); return; }
     current = { ref, token }; renderStatus(d);

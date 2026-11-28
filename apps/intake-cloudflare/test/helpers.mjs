@@ -59,7 +59,8 @@ export function testEnv(overrides = {}) {
     RATE_LIMIT_MAX: "12",
     RATE_LIMIT_WINDOW_SEC: "600",
     CHAT_RATE_LIMIT_MAX: "30",
-    RETENTION_DAYS: "30",
+    RETENTION_DAYS: "1",
+    CHAT_DAILY_MAX: "3000",
     LEAD_DELIVERY: "queue",
     LEAD_HMAC_SECRET: randomBytes(32).toString("hex"),
     ...overrides,
@@ -79,9 +80,17 @@ export function jsonReq(path, body, headers = {}, method = "POST") {
   });
 }
 
+/** k_p = HMAC(secret, "releasedesk-intake/<purpose>/v1"), raw key bytes. */
+export function purposeKey(secret, purpose) {
+  return createHmac("sha256", secret).update(`releasedesk-intake/${purpose}/v1`).digest();
+}
+export function purposeSign(secret, purpose, message) {
+  return createHmac("sha256", purposeKey(secret, purpose)).update(message).digest("hex");
+}
+
 export function signedReq(path, body, secret, ts = Math.floor(Date.now() / 1000)) {
   const raw = JSON.stringify(body);
-  const sig = createHmac("sha256", secret).update(`${ts}.${raw}`).digest("hex");
+  const sig = purposeSign(secret, "lead-to-site", `lead-to-site.v1.${ts}.${raw}`);
   return new Request(ORIGIN + path, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Intake-Timestamp": String(ts), "X-Intake-Signature": sig, "CF-Connecting-IP": "198.51.100.9" },

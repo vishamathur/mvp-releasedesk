@@ -19,13 +19,17 @@ endpoints keep their paths and their request and response shapes, so the front e
 | `GET /api/catalogue.php` | public | EXAMPLE catalogue, `Cache-Control: public, max-age=300` |
 | `POST /api/chat.php` | public, 30 per 10 min per IP | Grok strict-schema call, emails and phones redacted first |
 | `POST /api/intake.php` | public, 5 per 10 min per IP | validate, price the catalogue option, store the card, signed outbox to Lead |
-| `GET/POST /api/status.php` | visitor with ref + token | 60 reads and 10 messages per 10 min per IP |
+| `POST /api/status.php` | visitor with `{ref, token}` in the body | 60 reads and 10 messages per 10 min per IPv6 /64. The token is not accepted in the query string |
 | `POST /api/finance-estimate.php` | Lead, HMAC | `X-Intake-Timestamp` (±300 s) + `X-Intake-Signature` |
 | `POST /api/lead-update.php` | Lead, HMAC | idempotent on `updateId`, backwards moves are 409 |
 | `POST /api/style.php` | public, shares the chat limit | **Cloudflare build only.** Inspiration photo for Website creation: see below |
-| `GET /api/envelope.php` | Lead, `Bearer LEAD_FETCH_KEY`, 120 per 10 min per IP | **Cloudflare build only.** The full envelope named in a webhook notice, kept 24 h |
+| `GET /api/envelope.php` | Lead, `Bearer LEAD_FETCH_KEY` | **Cloudflare build only.** Failed auth is limited to 120 per 10 min per /64. A valid key is not limited. Envelope kept 24 h |
 
 Any other `/api/*` path is 403, as with the PHP `.htaccess`.
+
+The assistant never gets tools, secrets, status data, or a path to Lead other than the form a person submits. Chat uses `GROK_CHAT_API_KEY` only. An empty chat key refuses the call and does not borrow `GROK_API_KEY`. `CHAT_DAILY_MAX` (default 3000) is a daily ceiling across all visitors. Rate limits use the IPv6 /64.
+
+Production deploys should be Git-connected (or `wrangler pages deploy` from a tagged commit) so `deployment_trigger.metadata.commit_hash` is authoritative. The live project was an ad-hoc upload. Connecting it is an operator step and is not done in this change.
 
 ## Inspiration photo (Website creation, capture only)
 
@@ -39,10 +43,10 @@ The visitor sees the swatches and the style text before submitting.
 
 - The image is never stored, logged or put in the envelope. Only the style text (at most 800 characters) goes into the
   website brief (`ask.description` and `requestDetails.website.style`, with `styleSource: "grok-vision:inspiration-photo"`).
-- The style text carries an HMAC (`inspiration-style.v1.`, keyed with `LEAD_HMAC_SECRET`). `api/intake.php` rejects style
+- The style text carries an HMAC (`style.v1.`, under the derived style purpose key, or `STYLE_SIG_SECRET` when that secret is set). `api/intake.php` rejects style
   text that was edited or not issued by the site. This only proves where the text came from. The intake code adds no
   design rules or acceptance criteria; Standards' website template owns those.
-- No key, or a failed Grok call, is a real `503 grok_unavailable` with an honest message. The visitor can still submit without a photo.
+- No key, or a failed Grok call, is a real `503 grok_unavailable` with a fixed public message. The reason is logged. The visitor can still submit without a photo.
 - The PHP build has no `style.php`. The shared front end shows the honest error there.
 
 ## Webhook notice and fetch-back
@@ -59,8 +63,8 @@ with `Authorization: Bearer <LEAD_FETCH_KEY>`. Envelopes can be fetched for 24 h
 | `intake-private/lib/*.php` | `src/worker.mjs`, bundled with the catalogue into `dist/_worker.js` |
 | `data/` JSON files with `flock` | D1 database bound as `DB` (`migrations/0001_init.sql`, same as `schema.sql`) |
 | `data/ratelimit/*.json` | `rate_hits` table, sliding window, one atomic batch per hit, IP stored only as a hash |
-| `bin/drain-outbox.php` on cPanel Cron | Pages has no Cron Triggers. Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts |
-| hourly `intake_cleanup()` | the same, from `api/intake.php`: submissions, finance artifacts, status, sent messages and events older than `RETENTION_DAYS` (30) |
+| `bin/drain-outbox.php` on cPanel Cron | Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts. An hourly cron (`scheduled`) purges expired rows |
+| hourly `intake_cleanup()` | the same, from any API call and from the cron: submissions, finance artifacts, status and events older than `RETENTION_DAYS` (1 day), and every outbox state older than 24 h |
 | `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets. Optional var: `GROK_VISION_MODEL`. Fifth secret: `LEAD_FETCH_KEY` |
 | `LEAD_DELIVERY=email` (`mail()`) | not available. Use `webhook`. Choosing `email` is a delivery error, never a silent success |
 | `REMOTE_ADDR` | `CF-Connecting-IP` |
@@ -103,7 +107,7 @@ All commands run from `apps/intake-cloudflare/`. Use `npx wrangler@latest` or a 
 7. **Secrets** (prompted, never on the command line or in git):
    ```bash
    npx wrangler pages secret put GROK_API_KEY     --project-name vishalmathur-intake
-   npx wrangler pages secret put LEAD_HMAC_SECRET --project-name vishalmathur-intake   # openssl rand -hex 32; same value in Lead's vault as intake-site-hmac
+   npx wrangler pages secret put LEAD_HMAC_SECRET --project-name vishalmathur-intake   # openssl rand -hex 32; same file on the box: /workspace/releasedesk-secrets/intake-site-lead-hmac-secret
    npx wrangler pages secret put LEAD_WEBHOOK_KEY --project-name vishalmathur-intake   # the Lead intake routine's secret key
    npx wrangler pages secret put LEAD_WEBHOOK_URL --project-name vishalmathur-intake   # the Lead intake routine's https URL
    ```

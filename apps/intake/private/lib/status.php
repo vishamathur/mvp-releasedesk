@@ -109,23 +109,29 @@ function status_load_for_visitor(array $cfg, string $ref, string $token): ?array
     return $s;
 }
 
-/** GET api/status.php?ref=&token=  |  POST {ref, token, message} = message to Lead */
+function status_view(array $s): array {
+    $steps = [];
+    $cur = array_search($s['status'], STATUS_FLOW, true);
+    foreach (STATUS_FLOW as $i => $st) $steps[] = ['status' => $st, 'label' => STATUS_LABELS[$st], 'state' => $s['status'] === 'rejected' ? 'n/a' : ($cur === false ? 'todo' : ($i < $cur ? 'done' : ($i === $cur ? 'current' : 'todo')))];
+    return ['ok' => true, 'requestId' => $s['requestId'], 'pid' => $s['pid'], 'status' => $s['status'], 'statusLabel' => STATUS_LABELS[$s['status']],
+        'steps' => $steps, 'nextGate' => $s['nextGate'], 'quote' => $s['quote'], 'messages' => array_slice($s['history'], -30)];
+}
+
+/** POST {ref, token} reads status. POST {ref, token, message} sends a visitor message. The token is never read from the query string. */
 function api_status(array $cfg): void {
     $ip = app_client_ip();
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-        [$ok, $retry] = app_rate_limit($cfg, 'status', $ip, 60, 600);
-        if (!$ok) { app_respond(429, ['ok' => false, 'error' => 'rate_limited'], ['Retry-After' => (string)$retry]); return; }
-        $s = status_load_for_visitor($cfg, (string)($_GET['ref'] ?? ''), (string)($_GET['token'] ?? ''));
-        if (!$s) { app_respond(404, ['ok' => false, 'error' => 'not_found']); return; }
-        $steps = [];
-        $cur = array_search($s['status'], STATUS_FLOW, true);
-        foreach (STATUS_FLOW as $i => $st) $steps[] = ['status' => $st, 'label' => STATUS_LABELS[$st], 'state' => $s['status'] === 'rejected' ? 'n/a' : ($cur === false ? 'todo' : ($i < $cur ? 'done' : ($i === $cur ? 'current' : 'todo')))];
-        app_respond(200, ['ok' => true, 'requestId' => $s['requestId'], 'pid' => $s['pid'], 'status' => $s['status'], 'statusLabel' => STATUS_LABELS[$s['status']],
-            'steps' => $steps, 'nextGate' => $s['nextGate'], 'quote' => $s['quote'], 'messages' => array_slice($s['history'], -30)]);
-        return;
-    }
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') { app_respond(405, ['ok' => false, 'error' => 'method_not_allowed']); return; }
     [$body, $err] = app_read_json($cfg);
     if ($err) { app_respond(...$err); return; }
+    $hasMessage = array_key_exists('message', $body) && $body['message'] !== null;
+    if (!$hasMessage) {
+        [$ok, $retry] = app_rate_limit($cfg, 'status', $ip, 60, 600);
+        if (!$ok) { app_respond(429, ['ok' => false, 'error' => 'rate_limited'], ['Retry-After' => (string)$retry]); return; }
+        $s = status_load_for_visitor($cfg, app_clean($body['ref'] ?? '', 30), app_clean($body['token'] ?? '', 40));
+        if (!$s) { app_respond(404, ['ok' => false, 'error' => 'not_found']); return; }
+        app_respond(200, status_view($s));
+        return;
+    }
     [$ok, $retry] = app_rate_limit($cfg, 'visitor-msg', $ip, 10, 600);
     if (!$ok) { app_respond(429, ['ok' => false, 'error' => 'rate_limited'], ['Retry-After' => (string)$retry]); return; }
     $s = status_load_for_visitor($cfg, app_clean($body['ref'] ?? '', 30), app_clean($body['token'] ?? '', 40));

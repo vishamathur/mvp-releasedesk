@@ -34,7 +34,7 @@ Requires PHP 8.1+, ext-curl, Apache mod_rewrite/mod_headers.
 | `GET api/catalogue.php` | public | EXAMPLE catalogue: services, enhancements, new applications |
 | `POST api/chat.php` | public (30/10 min/IP) | Grok assistant; returns reply + draft fields; emails/phones redacted before the model |
 | `POST api/intake.php` | public (5/10 min/IP) | validate → finance model → card + handoff draft → outbox → Lead; returns `{ok, referenceId, statusToken, message}` |
-| `GET/POST api/status.php` | visitor with ref + key | status, Lead's quote and messages; send a message to Lead |
+| `POST api/status.php` | visitor with `{ref, token}` | status, Lead's quote and messages; send a message to Lead. The token is not taken from the query string |
 | `POST api/finance-estimate.php` | Lead (HMAC) | finance model as a service |
 | `POST api/lead-update.php` | Lead (HMAC) | move public status, post quote / next gate / reply |
 
