@@ -11,6 +11,7 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
+<div id="pause-banner" class="pause-banner" hidden role="status">New requests are paused for a short upgrade. Please check back soon.</div>
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="#main" aria-label="Release Desk home"><span class="brand-mark" aria-hidden="true">RD</span><span>Release Desk</span></a>
@@ -233,7 +234,8 @@
           <fieldset class="step">
             <legend><span class="step-n">4</span> Review and submit</legend>
             <label class="consent"><input type="checkbox" name="consent" required />
-              <span>I agree that these details are stored for 30 days and processed, including by an AI model, so Release Desk can review and respond. I won't include passwords or confidential data.</span></label>
+              <span>I agree that these details are stored for 24 hours and processed, including by an AI model, so Release Desk can review and respond. I won't include passwords or confidential data.</span></label>
+            <p id="assistant-filled" class="hint" hidden>These fields were filled in by the assistant. Check them before submitting.</p>
             <div class="submit-row">
               <button type="submit" id="submit">Submit to Release Desk Lead</button>
               <p class="hint">The submitted price is calculated on the server. Nothing here is an offer or an approval.</p>
@@ -251,7 +253,7 @@
         <div class="section-head">
           <div>
             <h2 id="track-title">Track a request</h2>
-            <p class="hint">Use the reference and status key from your confirmation. The key stays in your browser's address bar and is not sent to server logs.</p>
+            <p class="hint">Use the reference and status key from your confirmation. The key stays in this page's address fragment. The lookup is a POST, so the key is not in the URL.</p>
           </div>
         </div>
         <form id="track-form" class="track-form">
@@ -272,7 +274,7 @@
           <form id="reply-form" class="chat-input">
             <label class="sr-only" for="reply-message">Message to Release Desk Lead</label>
             <input id="reply-message" name="message" maxlength="2000" placeholder="Send a message to Release Desk Lead" required />
-            <button type="submit">Send</button>
+            <button type="submit" id="reply-send">Send</button>
           </form>
           <p id="reply-status" role="status"></p>
         </div>
@@ -284,13 +286,13 @@
 <aside id="assistant" class="drawer" aria-labelledby="assistant-title" hidden>
   <div class="drawer-head">
     <div>
-      <h2 id="assistant-title">Assistant</h2>
+      <h2 id="assistant-title">AI assistant (automated)</h2>
       <p class="hint">Fills in the form for you as you talk.</p>
     </div>
     <button type="button" class="icon-btn" id="assistant-close" aria-label="Close the assistant">×</button>
   </div>
   <div id="chat-log" class="chat-log" aria-live="polite"></div>
-  <p class="hint chat-empty" id="chat-empty">Choose a path or a catalogue item first, then describe what you need.</p>
+  <p class="hint chat-empty" id="chat-empty">Choose a path or a catalogue item first, then describe what you need. This is an automated AI assistant. It cannot approve, price or send anything. It only helps fill the form. A person on the Release Desk team reviews every request you submit. Don't type passwords, account numbers or ID numbers here.</p>
   <form id="chat-form" class="chat-input">
     <label class="sr-only" for="chat-text">Message to the assistant</label>
     <input id="chat-text" maxlength="1500" placeholder="Describe what you need…" autocomplete="off" />

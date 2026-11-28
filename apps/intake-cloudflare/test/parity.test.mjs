@@ -41,7 +41,7 @@ test("same six endpoints as apps/intake/public/api, plus the Cloudflare-only sty
 
 test("wrangler.toml holds no secret values; schema.sql matches the first migration", () => {
   const toml = readFileSync(join(ROOT, "wrangler.toml"), "utf8");
-  for (const name of ["GROK_API_KEY", "LEAD_HMAC_SECRET", "LEAD_WEBHOOK_KEY", "LEAD_WEBHOOK_URL", "GITHUB_REPO_CHECK_TOKEN"]) {
+  for (const name of ["GROK_API_KEY", "GROK_CHAT_API_KEY", "LEAD_HMAC_SECRET", "LEAD_WEBHOOK_KEY", "LEAD_WEBHOOK_URL", "LEAD_FETCH_KEY", "STYLE_SIG_SECRET", "CONTACT_REF_SALT", "GITHUB_REPO_CHECK_TOKEN"]) {
     assert.ok(!new RegExp(`^\\s*${name}\\s*=`, "m").test(toml), `${name} must be a Pages secret, not a var`);
   }
   assert.match(toml, /binding = "DB"/);

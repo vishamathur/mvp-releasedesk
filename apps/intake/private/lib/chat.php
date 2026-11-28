@@ -38,47 +38,74 @@ function chat_system_prompt(array $cat): string {
         . "EXAMPLE catalogue (INR, excl. GST):\n$menu\n" . GROK_UNTRUSTED_RULES;
 }
 
+function chat_redact(string $s): string {
+    $s = preg_replace('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', '[email given - type it in the form]', $s) ?? $s;
+    $s = preg_replace('/\+?\d[\d\s().-]{8,}\d/', '[number hidden]', $s) ?? $s;
+    $s = preg_replace('/\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z\d]\b/', '[gstin hidden]', $s) ?? $s;
+    $s = preg_replace('/\b[A-Z]{5}\d{4}[A-Z]\b/', '[tax id hidden]', $s) ?? $s;
+    $s = preg_replace('/\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/', '[account hidden]', $s) ?? $s;
+    return preg_replace('/\b(?:xai|sk|ghp|gho|AKIA)[-_A-Za-z0-9]{16,}\b/', '[secret hidden]', $s) ?? $s;
+}
+
 function api_chat(array $cfg): void {
     [$body, $err] = app_read_json($cfg);
-    if ($err) { app_respond(...$err); return; }
+    if ($err) {
+        if (($err[0] ?? 0) === 413) app_log($cfg, ['event' => 'chat_rejected', 'why' => 'too_large']);
+        app_respond(...$err);
+        return;
+    }
     [$ok, $retry] = app_rate_limit($cfg, 'chat', app_client_ip(), (int)($cfg['CHAT_RATE_LIMIT_MAX'] ?? 30), 600);
-    if (!$ok) { app_respond(429, ['ok' => false, 'error' => 'rate_limited', 'message' => 'Please slow down and try again in a few minutes.'], ['Retry-After' => (string)$retry]); return; }
+    if (!$ok) {
+        app_log($cfg, ['event' => 'chat_rejected', 'why' => 'rate_limited']);
+        app_respond(429, ['ok' => false, 'error' => 'rate_limited', 'message' => 'Please slow down and try again in a few minutes.'], ['Retry-After' => (string)$retry]);
+        return;
+    }
     $msgs = [];
     foreach (array_slice(is_array($body['messages'] ?? null) ? $body['messages'] : [], -12) as $m) {
-        $role = ($m['role'] ?? '') === 'assistant' ? 'assistant' : 'visitor';
-        // Data minimisation: contact details typed into chat are not sent to the model.
-        $c = preg_replace(['/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', '/\+?\d[\d\s().-]{8,}\d/'], ['[email given - type it in the form]', '[phone hidden]'], app_clean($m['content'] ?? '', 1500)) ?? '';
-        if ($c !== '') $msgs[] = "$role: $c";
+        if (!is_array($m) || ($m['role'] ?? '') !== 'user') continue;
+        $c = chat_redact(app_clean($m['content'] ?? '', 1500));
+        if ($c !== '') $msgs[] = "visitor: $c";
     }
     if (!$msgs) { app_respond(400, ['ok' => false, 'error' => 'validation', 'fields' => ['messages']]); return; }
+    // Charge the global ceiling only after the per-IP limit and message checks.
+    [$gok] = app_rate_limit($cfg, 'chat-global-day', 'all', (int)($cfg['CHAT_DAILY_MAX'] ?? 3000), 86400);
+    if (!$gok) {
+        app_log($cfg, ['event' => 'chat_rejected', 'why' => 'daily_cap']);
+        app_respond(429, ['ok' => false, 'error' => 'assistant_busy', 'message' => 'The assistant is busy. Please use the form directly.'], ['Retry-After' => '3600']);
+        return;
+    }
     $route = in_array($body['route'] ?? '', ['website', 'new_customer', 'er'], true) ? $body['route'] : 'unknown';
     $cat = catalogue_load($cfg);
     try {
-        if (trim((string)($cfg['GROK_API_KEY'] ?? '')) === '') {
-            throw new RuntimeException('GROK_API_KEY is not set. Refusing to invent a chat reply.');
-        }
-        $session = app_clean($body['sessionId'] ?? '', 80);
-        if (!preg_match('/^[A-Za-z0-9_.:-]{8,80}$/', $session)) {
-            throw new RuntimeException('sessionId is required for chat. Refusing to invent a safety identifier.');
-        }
-        $out = grok_json($cfg, chat_system_prompt($cat), "Selected option: $route\n<visitor_input>\n" . implode("\n", $msgs) . "\n</visitor_input>", 'intake_chat', chat_schema(array_keys($cat['byId'])), $session, 900);
+        $chatKey = trim((string)($cfg['GROK_CHAT_API_KEY'] ?? ''));
+        if ($chatKey === '') throw new RuntimeException('GROK_CHAT_API_KEY is not set. Refusing to invent a chat reply.');
+        $out = grok_json(['GROK_API_KEY' => $chatKey] + $cfg, chat_system_prompt($cat), "Selected option: $route\n<visitor_input>\n" . implode("\n", $msgs) . "\n</visitor_input>", 'intake_chat', chat_schema(array_keys($cat['byId'])), app_client_ip(), 900);
     } catch (Throwable $e) {
         $why = $e->getMessage();
-        if (!str_contains($why, 'Refusing to invent')) {
-            $why = 'Grok chat failed (' . $why . '). Refusing to invent a chat reply.';
-        }
+        if (!str_contains($why, 'Refusing to invent')) $why = 'Grok chat failed (' . $why . '). Refusing to invent a chat reply.';
         app_log($cfg, ['event' => 'chat_unavailable', 'reason' => substr($why, 0, 80)]);
-        app_respond(503, ['ok' => false, 'error' => 'grok_unavailable', 'message' => $why]);
+        app_respond_unavailable($cfg, 'grok_unavailable', $why);
         return;
     }
+    $injected = !empty($out['suspectedPromptInjection']);
+    $markup = '/<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info)\b(?:\/|$)/i';
+    $shape = ['email' => '/^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/', 'desiredBy' => '/^\d{4}-\d{2}-\d{2}$/'];
     $draft = [];
-    foreach (CHAT_DRAFT_FIELDS as $f) if (is_string($out['draft'][$f] ?? null) && trim($out['draft'][$f]) !== '') $draft[$f] = app_clean($out['draft'][$f], chat_draft_max($f));
+    if (!$injected) foreach (CHAT_DRAFT_FIELDS as $f) {
+        if (!is_string($out['draft'][$f] ?? null) || trim($out['draft'][$f]) === '') continue;
+        $v = app_clean($out['draft'][$f], chat_draft_max($f));
+        if (preg_match($markup, $v)) continue;
+        if (isset($shape[$f]) && !preg_match($shape[$f], $v)) continue;
+        $draft[$f] = $v;
+    }
     if (isset($draft['customerId']) && !preg_match(CUSTOMER_ID_RE, $draft['customerId'])) unset($draft['customerId']);
     if (isset($draft['changeType']) && !in_array($draft['changeType'], ['enhancement', 'defect', 'regulatory'], true)) unset($draft['changeType']);
     if (isset($draft['budgetBand']) && !array_key_exists($draft['budgetBand'], WEBSITE_BUDGET_BANDS)) unset($draft['budgetBand']);
     if (isset($draft['urgency']) && !array_key_exists($draft['urgency'], FIN_URGENCY)) unset($draft['urgency']);
     $services = [];
-    foreach ($out['suggestedServiceIds'] as $id) if (isset($cat['byId'][$id])) $services[] = ['id' => $id, 'name' => $cat['byId'][$id]['name'], 'unitPriceInr' => $cat['byId'][$id]['unitPriceInr'], 'unit' => $cat['byId'][$id]['unit']];
-    app_respond(200, ['ok' => true, 'reply' => app_clean($out['reply'], 1200), 'route' => $out['route'], 'draft' => (object)$draft,
-        'missingFields' => array_values(array_intersect($out['missingFields'], CHAT_DRAFT_FIELDS)), 'readyToSubmit' => (bool)$out['readyToSubmit'], 'suggestedServices' => $services]);
+    if (!$injected) foreach ($out['suggestedServiceIds'] as $id) if (isset($cat['byId'][$id])) $services[] = ['id' => $id, 'name' => $cat['byId'][$id]['name'], 'unitPriceInr' => $cat['byId'][$id]['unitPriceInr'], 'unit' => $cat['byId'][$id]['unit']];
+    app_log($cfg, ['event' => 'chat', 'injected' => $injected, 'route' => $out['route'], 'ready' => (bool)$out['readyToSubmit'], 'n' => count($msgs)]);
+    $reply = $injected ? "I can only help prepare an intake request, so I haven't filled anything in. Please use the form directly." : preg_replace('/<[^>]*>|https?:\/\/\S+/', '', app_clean($out['reply'], 1200));
+    app_respond(200, ['ok' => true, 'reply' => $reply, 'route' => $injected ? 'unknown' : $out['route'], 'draft' => (object)$draft, 'flagged' => $injected,
+        'missingFields' => $injected ? [] : array_values(array_intersect($out['missingFields'], CHAT_DRAFT_FIELDS)), 'readyToSubmit' => $injected ? false : (bool)$out['readyToSubmit'], 'suggestedServices' => $services]);
 }

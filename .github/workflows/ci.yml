@@ -33,6 +33,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y php-cli php-curl
           bash apps/intake/tests/run-tests.sh
+      - name: Python intake extract and verifier tests
+        run: python3 -m unittest apps/intake-cloudflare/scripts/test_extract_intake.py apps/intake-cloudflare/scripts/test_verify_intake_ref.py
 
   intake-cloudflare:
     # Cloudflare Pages port of apps/intake plus the Intake-inline verifier. No secrets, no network, no Cloudflare account:
@@ -51,3 +53,5 @@ jobs:
         run: git diff --exit-code -- apps/intake-cloudflare/src/catalogue-data.mjs
       - name: Cloudflare intake tests
         run: node --test "apps/intake-cloudflare/test/*.test.mjs"
+      - name: Python intake extract and verifier tests
+        run: python3 -m unittest apps/intake-cloudflare/scripts/test_extract_intake.py apps/intake-cloudflare/scripts/test_verify_intake_ref.py

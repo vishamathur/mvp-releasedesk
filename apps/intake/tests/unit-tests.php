@@ -167,7 +167,7 @@ t('handoff: proposed handoff passes validate-handoff (ER -> estimation, NC -> di
         $h = $card['proposedHandoff'];
         ok(handoff_v1_validate($h, 'lead') === [], json_encode(handoff_v1_validate($h, 'lead')));
         ok($h['pid'] === $pid && $h['stage'] === $stage && $h['to'] === 'change-analyst' && $h['thread']['threadId'] === 'thr_20261122000123', 'shape');
-        ok($card['to'] === 'lead' && $card['leadBotId'] === '46e50097-0409-4972-9be0-6ade37563135' && $card['kind'] === 'intake-card' && !isset($card['pidState']), 'card');
+        ok($card['to'] === 'lead' && !isset($card['leadBotId']) && $card['kind'] === 'intake-card' && !isset($card['pidState']), 'card');
         ok(in_array("finance:$rid@preliminary", $h['artifactRefs'], true) && str_contains($h['summary'], 'INR'), 'finance in handoff');
     }
 });
@@ -260,6 +260,55 @@ t('status: Lead update validation (gate owner, approval wording, quote)', functi
     ok(status_validate_update(['message' => 'Your request is approved.'] + $u)[0] !== [], 'unnamed approval');
     ok(status_validate_update(['message' => 'Finance approved by Vishal on 22 Nov.'] + $u)[0] === [], 'named approval');
     ok(status_validate_update(['from' => 'change-analyst'] + $u)[0] === ['from'], 'from');
+});
+t('cleanup keeps the daily chat limiter for 24 h and drops other buckets after 2 h', function () use ($cfg) {
+    $dir = $cfg['DATA_DIR'] . '/ratelimit';
+    if (!is_dir($dir)) mkdir($dir, 0700, true);
+    $daily = $dir . '/' . hash('sha256', 'chat-global-day:all') . '.json';
+    $other = $dir . '/' . hash('sha256', 'chat:198.51.100.10') . '.json';
+    file_put_contents($daily, '[]');
+    file_put_contents($other, '[]');
+    touch($daily, time() - 3 * 3600);
+    touch($other, time() - 3 * 3600);
+    $marker = $cfg['DATA_DIR'] . '/.last-cleanup';
+    if (is_file($marker)) unlink($marker);
+    intake_cleanup($cfg);
+    ok(is_file($daily), 'daily kept');
+    ok(!is_file($other), 'other dropped');
+    touch($daily, time() - 25 * 3600);
+    if (is_file($marker)) unlink($marker);
+    intake_cleanup($cfg);
+    ok(!is_file($daily), 'daily dropped after 24 h');
+});
+t('missing or short CONTACT_REF_SALT stores no submission and no outbox', function () use ($cfg) {
+    $dir = sys_get_temp_dir() . '/intake-nosalt-' . bin2hex(random_bytes(4));
+    foreach (['/submissions', '/status', '/outbox', '/ratelimit', '/sent'] as $d) mkdir($dir . $d, 0700, true);
+    foreach (['', str_repeat('a', 21), str_repeat('a', 31)] as $salt) {
+        $bare = $cfg;
+        $bare['CONTACT_REF_SALT'] = $salt;
+        $bare['DATA_DIR'] = $dir;
+        $bare['LEAD_DELIVERY'] = 'queue';
+        ob_start();
+        api_intake($bare);
+        $body = ob_get_clean();
+        $j = json_decode($body, true);
+        ok(http_response_code() === 503 && ($j['error'] ?? '') === 'not_configured', json_encode($j));
+        ok(($j['message'] ?? '') === 'This service is temporarily unavailable. Please try again later.', 'fixed message');
+        ok(!str_contains((string)($j['message'] ?? ''), 'CONTACT_REF_SALT'), 'no salt name');
+        ok(count(glob("$dir/submissions/*") ?: []) === 0, 'submissions=0');
+        ok(count(glob("$dir/outbox/*") ?: []) === 0, 'outbox=0');
+        $threw = false;
+        try { delivery_send($bare, 'intake-card', 'REQ-20261128-000001', ['contact' => ['email' => 'jane@example.com', 'name' => 'Jane']]); }
+        catch (RuntimeException $e) { $threw = str_contains($e->getMessage(), 'CONTACT_REF_SALT'); }
+        ok($threw && count(glob("$dir/outbox/*") ?: []) === 0, 'delivery writes no outbox');
+    }
+});
+t('shared signing vector matches PHP purpose keys and the salted contact ref', function () {
+    $vector = json_decode((string)file_get_contents(dirname(__DIR__, 2) . '/intake-cloudflare/test/fixtures/signing-vector.json'), true);
+    foreach ($vector['signatures'] as $row) {
+        ok(intake_sign($vector['master'], $row['purpose'], $row['message']) === $row['hex'], $row['purpose']);
+    }
+    ok(contact_ref($vector['contactSalt'], $vector['email']) === $vector['contactRef'], 'contact ref');
 });
 foreach ($R as $r) echo $r, "\n";
 $f = count(array_filter($R, fn($r) => str_starts_with($r, 'FAIL')));

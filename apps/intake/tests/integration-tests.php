@@ -12,9 +12,11 @@ function req(string $method, string $url, $body = null, array $hdr = [], bool $r
 }
 function signed(string $url, array $body, string $secret, ?int $ts = null): array {
     $raw = json_encode($body); $ts = (string)($ts ?? time());
-    return req('POST', $url, $raw, ['Content-Type: application/json', "X-Intake-Timestamp: $ts", 'X-Intake-Signature: ' . hash_hmac('sha256', "$ts.$raw", $secret)], true);
+    $key = hash_hmac('sha256', 'releasedesk-intake/lead-to-site/v1', $secret, true);
+    $sig = hash_hmac('sha256', "lead-to-site.v1.$ts.$raw", $key);
+    return req('POST', $url, $raw, ['Content-Type: application/json', "X-Intake-Timestamp: $ts", 'X-Intake-Signature: ' . $sig], true);
 }
-$J = ['Content-Type: application/json', "Origin: $O"];
+$J = ['Content-Type: application/json', 'Origin: https://intake.vishalmathur.org'];
 $er = ['route' => 'er', 'pid' => 'PID-ER', 'catalogueOptionId' => 'ER-KYC-LABELS', 'addOns' => [],
     'contactName' => 'Jane Doe', 'email' => 'jane@example.com', 'company' => 'Acme', 'customerId' => 'cust_1042', 'projectRef' => 'PRJ-ONB-7',
     'changeType' => 'enhancement', 'title' => 'Rename two labels', 'description' => 'Rename two labels on the onboarding screen for clarity.', 'urgency' => 'standard',
@@ -34,7 +36,8 @@ t('catalogue endpoint returns EXAMPLE services, enhancements and new application
 });
 t('chat without GROK_API_KEY is a configuration error', function () use ($base, $J) {
     [$c, $j] = req('POST', "$base/api/chat.php", ['route' => 'er', 'messages' => [['role' => 'user', 'content' => 'Rename two labels']]], $J);
-    ok($c === 503 && ($j['error'] ?? '') === 'grok_unavailable' && str_contains($j['message'] ?? '', 'GROK_API_KEY is not set'), json_encode($j));
+    ok($c === 503 && ($j['error'] ?? '') === 'grok_unavailable' && ($j['message'] ?? '') === 'This service is temporarily unavailable. Please try again later.', json_encode($j));
+    ok(!str_contains($j['message'] ?? '', 'GROK'), 'no config text');
     ok(!isset($j['reply']), 'no invented reply');
 });
 t('intake with a valid catalogue option is priced from the bill of materials', function () use ($base, $J, $er, $data) {
@@ -130,15 +133,16 @@ t('lead-update and status use a seeded record, not a Grok result', function () u
         'history' => [['at' => '2026-11-22T12:00:00Z', 'status' => 'received', 'from' => 'site', 'message' => 'Request received and sent to Release Desk Lead.']],
     ]));
     chmod("$data/status/$requestId.json", 0600);
-    [$c, $j] = req('GET', "$base/api/status.php?ref=$requestId&token=$token");
+    [$c, $j] = req('POST', "$base/api/status.php", ['ref' => $requestId, 'token' => $token], ['Content-Type: application/json', 'Origin: https://intake.vishalmathur.org']);
     ok($c === 200 && $j['status'] === 'received', json_encode($j));
-    [$c] = req('GET', "$base/api/status.php?ref=$requestId&token=" . str_repeat('0', 32)); ok($c === 404, 'token');
+    [$c] = req('GET', "$base/api/status.php?ref=$requestId&token=$token"); ok($c === 405, 'no query token');
+    [$c] = req('POST', "$base/api/status.php", ['ref' => $requestId, 'token' => str_repeat('0', 32)], ['Content-Type: application/json', 'Origin: https://intake.vishalmathur.org']); ok($c === 404, 'token');
     $u = ['requestId' => $requestId, 'updateId' => 'lead-u-1', 'from' => 'lead', 'stage' => 'finance-approval', 'message' => 'Estimate ready. Finance review is next.',
         'nextGate' => ['gate' => 'finance-approval', 'owner' => 'change-analyst'], 'quote' => ['totalInr' => 187000, 'budgetBandsInr' => ['low' => 159000, 'expected' => 187000, 'high' => 234000],
         'lines' => [['serviceId' => 'SVC-UI-S', 'name' => 'UI change - small', 'qty' => 2, 'lineTotalInr' => 90000]]]];
     [$c] = req('POST', "$base/api/lead-update.php", $u, ['Content-Type: application/json']); ok($c === 401, "unsigned $c");
     [$c, $j] = signed("$base/api/lead-update.php", $u, $secret); ok($c === 200 && $j['status'] === 'finance-approval', json_encode($j));
-    [$c, $j] = req('GET', "$base/api/status.php?ref=$requestId&token=$token");
+    [$c, $j] = req('POST', "$base/api/status.php", ['ref' => $requestId, 'token' => $token], ['Content-Type: application/json', 'Origin: https://intake.vishalmathur.org']);
     ok($j['status'] === 'finance-approval' && $j['quote']['totalInr'] === 187000 && $j['nextGate']['owner'] === 'change-analyst', json_encode($j));
 });
 t('finance-estimate endpoint uses explicit lines and does not call Grok', function () use ($base, $secret) {
@@ -150,7 +154,7 @@ t('finance-estimate endpoint uses explicit lines and does not call Grok', functi
 t('finance-estimate without lines or a key is a configuration error', function () use ($base, $secret) {
     $b = ['pid' => 'PID-ER', 'text' => 'Rename two labels'];
     [$c, $j] = signed("$base/api/finance-estimate.php", $b, $secret);
-    ok($c === 503 && str_contains($j['message'] ?? '', 'GROK_API_KEY is not set'), json_encode($j));
+    ok($c === 503 && ($j['message'] ?? '') === 'This service is temporarily unavailable. Please try again later.', json_encode($j));
 });
 t('responses do not echo a key', function () use ($base, $J, $er) {
     [, , $all] = req('POST', "$base/api/chat.php", ['route' => 'er', 'messages' => [['role' => 'user', 'content' => 'Hello']]], $J);

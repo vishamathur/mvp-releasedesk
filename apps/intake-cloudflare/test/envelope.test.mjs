@@ -2,9 +2,9 @@
 // webhook carries a small signed notice and Lead fetches the full envelope from GET api/envelope.php.
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createHmac, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { ORIGIN, testEnv, jsonReq, call, blockNetwork, ER, isRepoHostUrl, liveRepoFetch } from "./helpers.mjs";
+import { ORIGIN, testEnv, jsonReq, call, blockNetwork, ER, isRepoHostUrl, liveRepoFetch, purposeSign } from "./helpers.mjs";
 
 const HOOK = "https://lead-webhook.invalid/hook";
 const FETCH_KEY = "f".repeat(64);
@@ -37,12 +37,12 @@ test("notice: under 2 KB even for the largest website card, signed over ts.reque
   assert.ok(Buffer.byteLength(raw) < 400, "in practice the notice is a few hundred bytes");
   assert.deepEqual(Object.keys(body), ["source", "kind", "requestId", "ts", "payloadSha256", "sig"]);
   assert.match(body.ts, /^\d+$/); assert.match(body.payloadSha256, /^[a-f0-9]{64}$/); assert.match(body.sig, /^[a-f0-9]{64}$/);
-  assert.equal(body.sig, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${body.ts}.${body.requestId}.${body.payloadSha256}`).digest("hex"));
+  assert.equal(body.sig, purposeSign(env.LEAD_HMAC_SECRET, "notice", `notice.v1.${body.ts}.${body.requestId}.${body.payloadSha256}`));
   const stored = env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE request_id = ?").get(body.requestId).envelope_json;
   assert.ok(stored.length > 8168, "the stored envelope is the full card, not trimmed");
   assert.equal(body.payloadSha256, createHash("sha256").update(JSON.parse(stored).payloadJson).digest("hex"));
   // A wrong secret does not verify.
-  assert.notEqual(body.sig, createHmac("sha256", "x".repeat(64)).update(`${body.ts}.${body.requestId}.${body.payloadSha256}`).digest("hex"));
+  assert.notEqual(body.sig, purposeSign("x".repeat(64), "notice", `notice.v1.${body.ts}.${body.requestId}.${body.payloadSha256}`));
 });
 
 test("envelope endpoint: 401 without or with a wrong key, 404 unknown id, 200 returns the stored envelope byte for byte", async () => {
@@ -59,7 +59,14 @@ test("envelope endpoint: 401 without or with a wrong key, 404 unknown id, 200 re
   const stored = env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE request_id = ?").get(rid).envelope_json;
   assert.equal(ok.text, stored);
   const envl = JSON.parse(ok.text);
-  assert.equal(envl.signature.hex, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${envl.signature.ts}.${envl.payloadJson}`).digest("hex"));
+  assert.equal(envl.signature.hex, purposeSign(env.LEAD_HMAC_SECRET, "envelope", `envelope.v1.${envl.signature.ts}.${envl.payloadJson}`));
+  assert.equal(envl.signature.over, 'envelope.v1. + ts + "." + payloadJson');
+  assert.ok(!("leadBotId" in envl));
+  const payload = JSON.parse(envl.payloadJson);
+  assert.ok(!("email" in (payload.contact ?? {})), "contact.email stays in D1, not the envelope");
+  assert.match(payload.contact.contactRef, /^[a-f0-9]{64}$/);
+  assert.equal(ok.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.ok(ok.headers.get("Content-Security-Policy").includes("default-src 'self'"));
   assert.equal(createHash("sha256").update(envl.payloadJson).digest("hex"), calls[0].body.payloadSha256, "the notice hash matches the fetched payloadJson");
   assert.equal(JSON.parse(envl.payloadJson).requestDetails.website.mustHaveFeatures, "F".repeat(600), "nothing trimmed");
   assert.equal((await call(worker, env, new Request(`${ORIGIN}/api/envelope.php?requestId=${rid}`, { method: "POST", headers: { Authorization: `Bearer ${FETCH_KEY}` } }))).status, 405);
@@ -97,12 +104,19 @@ test("envelope endpoint: envelopes expire after 24 h (query cutoff) and cleanup 
   assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM outbox WHERE request_id = ?").get(rid).n, 0, "cleanup removed the expired sent envelope");
 });
 
-test("envelope endpoint: no LEAD_FETCH_KEY is 503 not_configured; rate limited per IP", async () => {
+test("envelope endpoint: no LEAD_FETCH_KEY is a fixed 503; only failed auth is rate limited", async () => {
   const env0 = envOf({ LEAD_FETCH_KEY: "" });
-  assert.equal((await call(worker, env0, getEnv("requestId=REQ-20261127-000001"))).status, 503);
+  const missing = await call(worker, env0, getEnv("requestId=REQ-20261127-000001"));
+  assert.equal(missing.status, 503);
+  assert.equal(missing.json.message, W.PUBLIC_UNAVAILABLE_MESSAGE);
+  assert.ok(!missing.text.includes("LEAD_FETCH_KEY"));
   const env = envOf({ ENVELOPE_RATE_LIMIT_MAX: "2" });
   assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001"))).status, 404);
   assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001"))).status, 404);
-  const r = await call(worker, env, getEnv("requestId=REQ-20261127-000001"));
+  assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001"))).status, 404, "a valid key is not locked out");
+  assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001", "wrong-key"))).status, 401);
+  assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001", "wrong-key"))).status, 401);
+  const r = await call(worker, env, getEnv("requestId=REQ-20261127-000001", "wrong-key"));
   assert.equal(r.status, 429); assert.ok(Number(r.headers.get("Retry-After")) > 0);
+  assert.equal((await call(worker, env, getEnv("requestId=REQ-20261127-000001"))).status, 404, "a valid key still passes after the failed-auth limit");
 });

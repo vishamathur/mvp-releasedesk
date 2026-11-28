@@ -18,7 +18,7 @@
     hasRepo: "existing repository or codebase", repoHost: "code host", repo: "repository", repoDefaultBranch: "default branch",
     repoStack: "codebase description (10+ characters)", repoContact: "technical contact" };
 
-  // One random id per page load: the server hashes it into Grok's safety_identifier and rejects chat without it.
+  // Kept for the browser only. The server derives the abuse id from the network prefix and does not use this value.
   const sessionId = "s_" + crypto.randomUUID();
 
   // ---- route selection
@@ -75,7 +75,15 @@
       if (!r.ok) { say("assistant", d.message || "Sorry, I couldn't respond. Please use the form."); return; }
       say("assistant", d.reply);
       if (d.route && d.route !== "unknown" && d.route !== route) setRoute(d.route);
-      for (const [k, v] of Object.entries(d.draft || {})) if (form.elements[k] && (!form.elements[k].value || (k === "budgetBand" && form.elements[k].value === "not_sure"))) form.elements[k].value = v;
+      let assistantFilled = false;
+      for (const [k, v] of Object.entries(d.draft || {})) {
+        if (form.elements[k] && (!form.elements[k].value || (k === "budgetBand" && form.elements[k].value === "not_sure"))) {
+          form.elements[k].value = v;
+          assistantFilled = true;
+        }
+      }
+      const filled = $("#assistant-filled");
+      if (filled) filled.hidden = !assistantFilled;
       if (d.suggestedServices?.length) say("assistant", "Possibly relevant services (EXAMPLE list prices): " + d.suggestedServices.map((s) => `${s.name} ${inr(s.unitPriceInr)}/${s.unit}`).join("; "));
     } catch { typing.remove(); say("assistant", "Network problem. Please try again or use the form."); }
   });
@@ -162,6 +170,7 @@
   const checkRepo = async (recheck) => {
     const st = $("#repo-status"); const f = form.elements;
     repoState.verified = false;
+    if (document.body.classList.contains("submissions-paused")) { st.className = "hint error"; st.textContent = PAUSE_MSG; return; }
     if (!f.repo.value.trim()) { st.className = "hint error"; st.textContent = "Enter the repository first."; f.repo.focus(); return; }
     st.className = "hint"; st.textContent = "Checking the repository…";
     const btns = [$("#repo-check"), $("#repo-recheck")]; btns.forEach((b) => (b.disabled = true));
@@ -172,6 +181,7 @@
         if (d.defaultBranch && !repoState.branchEdited) f.repoDefaultBranch.value = d.defaultBranch;
         st.className = "hint ok"; st.textContent = d.message;
       } else if (r.ok && d.ok) showRepoPending(d.message);
+      else if (d.error === "submissions_paused") { applyPause(true); st.className = "hint error"; st.textContent = d.message || PAUSE_MSG; }
       else { st.className = "hint error"; st.textContent = r.status === 429 ? "Too many checks. Please try again in a few minutes." : (d.message || "We couldn't check the repository. Please try again."); }
     } catch { st.className = "hint error"; st.textContent = "Network error. Please try again."; }
     finally { btns.forEach((b) => (b.disabled = false)); }
@@ -184,10 +194,20 @@
   $("#repo-check").addEventListener("click", () => checkRepo(false));
   $("#repo-recheck").addEventListener("click", () => checkRepo(true));
 
+const PAUSE_MSG = "New requests are paused for a short upgrade. Please check back soon.";
+  const applyPause = (paused) => {
+    if (!paused) return;
+    document.body.classList.add("submissions-paused");
+    const banner = $("#pause-banner"); if (banner) banner.hidden = false;
+    const submit = $("#submit"); if (submit) { submit.disabled = true; submit.textContent = "Submissions paused"; }
+    const reply = $("#reply-send"); if (reply) reply.disabled = true;
+  };
+
   // ---- submit
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const st = $("#form-status"); st.textContent = ""; st.className = "";
+    if (document.body.classList.contains("submissions-paused")) { st.className = "error"; st.textContent = PAUSE_MSG; return; }
     if (!route) { st.textContent = "Choose an option first."; return; }
     if (route === "er" && repoPresence() !== "yes") { st.className = "error"; st.textContent = repoPresence() === "no" ? REPO_NONE : "Tell us first whether the application has an existing repository or codebase."; return; }
     if (!form.reportValidity()) return;
@@ -216,6 +236,7 @@
         loadStatusFromHash();
         return;
       }
+      if (d.error === "submissions_paused") { applyPause(true); st.className = "error"; st.textContent = d.message || PAUSE_MSG; return; }
       st.className = "error";
       if (d.error === "repo_required" || d.error === "repo_not_verified" || d.error === "repo_check_unavailable") {
         st.textContent = d.message;
@@ -225,7 +246,7 @@
       st.textContent = r.status === 429 ? "Too many submissions. Please try again later."
         : d.error === "validation" ? "Please check: " + d.fields.map((k) => LABELS[k] || k).join(", ") + "." : "Something went wrong. Please try again later.";
     } catch { st.className = "error"; st.textContent = "Network error. Please try again."; }
-    finally { btn.disabled = false; btn.textContent = "Submit to Release Desk Lead"; }
+    finally { if (!document.body.classList.contains("submissions-paused")) { btn.disabled = false; btn.textContent = "Submit to Release Desk Lead"; } }
   });
 
   // ---- catalogue
@@ -451,6 +472,7 @@
     try {
       const d = await (await fetch("api/catalogue.php")).json();
       catalogue = d;
+      applyPause(d.submissionsPaused === true);
       $("#cat-label").textContent = `${d.label}. ${d.taxNote}`;
       renderCatalogue(d);
       $("#er-app").replaceChildren(...d.enhancements.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
@@ -485,7 +507,7 @@
     }));
   };
   const loadStatus = async (ref, token) => {
-    const r = await fetch(`api/status.php?ref=${encodeURIComponent(ref)}&token=${encodeURIComponent(token)}`);
+    const r = await fetch("api/status.php", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ref, token }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { $("#status-view").hidden = true; alert("No request found for that reference and key."); return; }
     current = { ref, token }; renderStatus(d);
@@ -497,8 +519,10 @@
   $("#track-form").addEventListener("submit", (e) => { e.preventDefault(); const f = e.target.elements; location.hash = `status=${f.ref.value}&token=${f.token.value}`; loadStatus(f.ref.value, f.token.value); });
   $("#reply-form").addEventListener("submit", async (e) => {
     e.preventDefault(); if (!current) return;
+    if (document.body.classList.contains("submissions-paused")) { $("#reply-status").textContent = PAUSE_MSG; return; }
     const input = e.target.elements.message;
     const [r, d] = await post("api/status.php", { ref: current.ref, token: current.token, message: input.value });
+    if (d.error === "submissions_paused") { applyPause(true); $("#reply-status").textContent = d.message || PAUSE_MSG; return; }
     $("#reply-status").textContent = r.ok ? d.message : (r.status === 429 ? "Too many messages, try later." : "Could not send.");
     if (r.ok) input.value = "";
   });

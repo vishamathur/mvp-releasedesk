@@ -8,7 +8,7 @@ shared box and are never printed, never put in env vars or on the command line):
                  its usual notice to Lead. Lead logs a probe and does not open a request (see skill public-intake-relay).
   3. envelope    GET api/envelope.php with the bearer fetch key; compute payloadSha256 of payloadJson.
   4. notice      Build the notice exactly as the site does: {source, kind, requestId, ts, payloadSha256, sig} with
-                 sig = HMAC-SHA256(site secret, ts.requestId.payloadSha256).
+                 sig = HMAC(k_notice, "notice.v1." + ts + "." + requestId + "." + payloadSha256).
   5. webhook     POST the notice to Intake's webhook (url and key from the webhook file).
   6. inbox       Wait for Intake to save the verified envelope in the inbox directory, then re-check its HMAC with
                  verify_intake.py --file. This proves Intake used the same secret as the site.
@@ -93,7 +93,8 @@ def main():
         psha = hashlib.sha256(pj.encode()).hexdigest()
         # 4 notice
         ts = str(int(time.time()))
-        sig = hmac.new(hmac_key.encode(), f"{ts}.{rid}.{psha}".encode(), hashlib.sha256).hexdigest()
+        k_notice = hmac.new(hmac_key.encode(), b"releasedesk-intake/notice/v1", hashlib.sha256).digest()
+        sig = hmac.new(k_notice, f"notice.v1.{ts}.{rid}.{psha}".encode(), hashlib.sha256).hexdigest()
         notice = {"source": env["source"], "kind": env["kind"], "requestId": rid, "ts": ts, "payloadSha256": psha, "sig": sig}
         step("notice", len(json.dumps(notice)) < 2048, bytes=len(json.dumps(notice)))
         # 5 webhook

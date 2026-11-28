@@ -67,3 +67,10 @@ test("front end: palette text pairs meet WCAG 2.2 AA (4.5:1)", () => {
   assert.ok(ratio("#dbe6f3", v.brand) >= 4.5 && ratio("#dbe6f3", v["brand-2"]) >= 4.5, "hero lede");
   assert.ok(ratio("#a9cdf2", v["brand"]) >= 4.5, "hero eyebrow");
 });
+
+test("front end: submissions-paused banner and disable path are present", () => {
+  assert.ok(html.includes("New requests are paused for a short upgrade. Please check back soon."));
+  assert.ok(html.includes('id="pause-banner"') && html.includes("hidden") && html.includes('id="reply-send"'));
+  assert.ok(js.includes("applyPause") && js.includes("submissionsPaused") && js.includes("submissions-paused"));
+  assert.ok(css.includes(".pause-banner") && css.includes("body.submissions-paused"));
+});

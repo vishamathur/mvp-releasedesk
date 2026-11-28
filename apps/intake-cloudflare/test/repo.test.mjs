@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes, createHmac } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import worker, * as W from "../src/worker.mjs";
-import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER } from "./helpers.mjs";
+import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, purposeSign } from "./helpers.mjs";
 
 let restore;
 beforeEach(() => { restore = blockNetwork(); });
@@ -143,7 +143,7 @@ test("submit: verified repository is accepted, and repo, verification and timest
   const env0 = JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE request_id = ?").get(r.json.referenceId).envelope_json);
   const payload = JSON.parse(env0.payloadJson);
   assert.deepEqual(payload.repository, card.repository);
-  assert.equal(env0.signature.hex, createHmac("sha256", env.LEAD_HMAC_SECRET).update(`${env0.signature.ts}.${env0.payloadJson}`).digest("hex"), "the payload, repository included, is signed");
+  assert.equal(env0.signature.hex, purposeSign(env.LEAD_HMAC_SECRET, "envelope", `envelope.v1.${env0.signature.ts}.${env0.payloadJson}`), "the payload, repository included, is signed");
   assert.equal((await W.handoffV1Validate(card.proposedHandoff, "lead")).length, 0, JSON.stringify(W.handoffV1Validate(card.proposedHandoff, "lead")));
 });
 

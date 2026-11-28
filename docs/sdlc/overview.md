@@ -1,8 +1,10 @@
 # Release Desk SDLC
 
-Northwind Bank runs two processes, PID-ER and PID-NC, both at version 1.1.0. Seven Grok Bot teammates run them: Intake, Release Desk Lead, Change Analyst, Standards, Security, Builder, and Release Desk Log. Intake is the public front door and sends `intake-request` to Lead. Lead is the only writer of `pid.state` and sends `public-status` back. Desk does not move the work. Desk reads the Log.
+Northwind Bank runs two processes, PID-ER and PID-NC, both at version 1.1.0. Seven Grok Bot teammates run them: Intake, Release Desk Lead, Change Analyst, Standards, Security, Builder, and Release Desk Log. The public site posts a signed notice to Lead's `public-intake` routine. Lead verifies it and fetches the envelope. That path is not a `handoff.v1` message, and `intake-request` is not a kind. Lead is the only writer of `pid.state` and sends `public-status` back. Desk does not move the work. Desk reads the Log.
 
-Visitors start at `intake.vishalmathur.org` (`apps/intake`). Intake checks the card and hands it to Lead. It does not approve a gate. The request thread is Lead's chat.
+Visitors start at `intake.vishalmathur.org` (`apps/intake-cloudflare`). The site stores the card and notifies Lead. It does not approve a gate. The request thread is Lead's chat.
+
+Process change SEC-INTAKE-20261128 is recorded here. `pidVersion` stays `1.1.0` until Vishal approves a bump: the public-intake routine is notice plus fetch-back, verified by Lead, with free text quarantined. Bumping the constant would reject in-flight 1.1.0 handoffs, and that bump is a Lead action.
 
 Canonical specs:
 
