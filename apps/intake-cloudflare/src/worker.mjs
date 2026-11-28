@@ -117,7 +117,7 @@ export async function hmacHex(secret, data) {
   return bytesToHex(await hmacBytes(secret, data));
 }
 /** Purpose labels for k_p = HMAC(LEAD_HMAC_SECRET, "releasedesk-intake/<purpose>/v1"). */
-export const HMAC_PURPOSES = ["notice", "envelope", "lead-to-site", "style"];
+export const HMAC_PURPOSES = ["notice", "envelope", "lead-to-site", "style", "intake-request"];
 /** Case-insensitive markup, links and known shorteners. Bare domains are a separate lowercase-TLD check. */
 export const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|hxxps?:\/\/|ftp:\/\/|(?<![a-z0-9:])\/\/[a-z0-9]|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl|is\.gd|ow\.ly|buff\.ly|cutt\.ly|rb\.gy|t\.co)\b/i;
 /** A lowercase TLD after a word boundary. "Done.Me" and "label.In" are not domains. */

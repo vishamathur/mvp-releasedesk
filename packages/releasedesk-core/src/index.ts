@@ -219,6 +219,8 @@ export {
   isSubAgentId,
   isHumanActor,
   validateHandoffMessage,
+  allowIntakeRequest,
+  INTAKE_SENDER_ID,
   readLogDir,
   buildTrace,
   parseJsonl,

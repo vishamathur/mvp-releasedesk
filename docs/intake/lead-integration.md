@@ -99,19 +99,19 @@ Both endpoints need `X-Intake-Timestamp` (exactly 10 digits, ±300 s) and `X-Int
 
 ## Intake inline path and cutover
 
-Target design: the site posts the same small signed notice to **Intake's** webhook routine; Intake verifies it, fetches the envelope, and checks the card. That path is the signed notice, not a handoff.v1 kind. Lead still posts all visitor-facing status on the site. Nothing in the site's code changes: only the Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` change value.
+Target design: the site posts the same small signed notice to **Intake's** webhook routine; Intake verifies it, fetches the envelope, and checks the card. Intake then sends Lead exactly one `handoff.v1` message, kind `intake-request`. That message triggers Lead. Lead still posts all visitor-facing status on the site. Nothing in the site's code changes: only the Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` change value.
 
 ```
 Site ──notice {source,kind,requestId,ts,payloadSha256,sig}──> Intake webhook routine
 Intake ──GET api/envelope.php (Bearer fetch key)──> site         (verifier: grok-bots/tools/verify_intake.py)
 Intake: notice HMAC + 600 s window, envelope HMAC, SHA-256 of payloadJson, card checks, envelope saved to intake-inbox/ (0600)
-Intake ──saved envelope, cc Release Desk Log──> Lead
-Lead: verify_intake.py --file <saved envelope> ──> pid.state ──> finance-estimate ──> public-status-update ──> site
+Intake ──intake-request (intake-request.v1 HMAC, nonce, timestamp), cc Release Desk Log──> Lead
+Lead: verify_intake.py --intake-request ──> pid.state ──> finance-estimate ──> public-status-update ──> site
 ```
 
 **One secret, read from files.** Intake and Lead read `intake-site-lead-hmac-secret` and `intake-site-fetch-key` from `/workspace/releasedesk-secrets/` on the shared box. They are never copied into an env var such as `INTAKE_HMAC_SECRET`, a message or a log. That removes the earlier mismatch (Intake's env value was not the value the site signs with). The verifier is `grok-bots/tools/verify_intake.py`; install it by copying it to `/workspace/releasedesk-state/bin/verify_intake.py` (same arguments and output fields as the version Lead runs today, plus `--file` mode).
 
-**Transition (this change).** Lead accepts the site's direct signed notice. A second notice for the same `requestId` is a duplicate. Merging does not change where the site sends anything. `intake-request` is not a handoff.v1 kind.
+**Direct Intake to Lead.** Lead is triggered by `intake-request` from Intake `ce1f6670-8b51-4478-8f61-42911ea3be41`. A second message for the same `requestId` is a duplicate. Merging does not change where the site sends the notice: it still goes to Intake.
 
 **Cutover (later, one step at a time, any failure means stay on Lead's webhook):**
 1. Intake creates its webhook routine (`grok-bots/bots/intake/routines/on-public-intake.md`) and its URL and key are saved to `/workspace/releasedesk-secrets/intake-bot-public-intake-webhook.json` as `{"url","key","auth":"bearer"}`.

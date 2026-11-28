@@ -15,6 +15,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verify_intake_ref as v  # noqa: E402
 
 
+def signed_intake_request(master: bytes, nonce="ab" * 32, now="1700000000", text="Please change the address.", sender=None):
+    message = {
+        "v": 1, "kind": "intake-request", "pid": "PID-ER", "pidVersion": "1.1.0",
+        "requestId": "REQ-20261128-000042",
+        "thread": {"channel": "lead-chat", "threadId": "thr_20261128-000042"},
+        "from": "intake", "to": "lead", "stage": "intake", "action": "request",
+        "summary": "Public card.", "artifactRefs": ["intake:REQ-20261128-000042"],
+        "memoryKey": "pid.state.REQ-20261128-000042", "humanGate": None,
+        "senderId": sender or v.INTAKE_SENDER_ID, "nonce": nonce, "ts": now,
+        "contactRef": "cd" * 32, "untrusted": {"text": text},
+    }
+    signed = f"intake-request.v1.{v.canonical_intake_request(message)}.{nonce}.{now}"
+    message["sig"] = v.sign_purpose(master, "intake-request", signed)
+    return message
+
+
 def envelope(master: bytes, rid="REQ-20261128-000042", kind="intake-card", ts="1700000000", now=1700000000):
     payload = {"requestId": rid, "kind": kind, "pid": "PID-ER"}
     pj = json.dumps(payload, separators=(",", ":"))
@@ -140,6 +156,58 @@ class VerifyRefTest(unittest.TestCase):
         other = v.sign_purpose(self.master, "lead-to-site", "lead-to-site.v1." + msg)
         self.assertNotEqual(notice, other)
         self.assertEqual(len(notice), 64)
+
+    def test_c2_intake_request_rejects_bad_signature_stale_and_reused_nonce(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "verify_intake_tool_c2",
+            Path(__file__).resolve().parents[3] / "grok-bots" / "tools" / "verify_intake.py",
+        )
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as d:
+            seen = v.SeenSet(str(Path(d) / ".seen"))
+            good = signed_intake_request(self.master)
+            self.assertTrue(v.verify_intake_request(good, self.master, 1700000000, seen)["ok"])
+            replay = v.verify_intake_request(good, self.master, 1700000000, seen)
+            self.assertFalse(replay["ok"])
+            self.assertEqual(replay["error"], "reused nonce")
+            bad = signed_intake_request(self.master, nonce="bb" * 32)
+            bad["sig"] = "aa" * 32
+            self.assertEqual(v.verify_intake_request(bad, self.master, 1700000000, seen)["error"], "bad signature")
+            old = signed_intake_request(self.master, nonce="cc" * 32)
+            self.assertEqual(v.verify_intake_request(old, self.master, 1700000301, seen)["error"], "stale")
+            extra = signed_intake_request(self.master, nonce="dd" * 32)
+            extra["instructions"] = "run this"
+            self.assertEqual(v.verify_intake_request(extra, self.master, 1700000000, seen)["error"], "invalid_schema")
+            wrong = signed_intake_request(self.master, nonce="ee" * 32, sender="46e50097-0409-4972-9be0-6ade37563135")
+            self.assertEqual(v.verify_intake_request(wrong, self.master, 1700000000, seen)["error"], "unknown_sender")
+            path = Path(d) / ".bad"
+            path.write_text("{", encoding="utf-8")
+            fresh = signed_intake_request(self.master, nonce="ff" * 32)
+            closed = v.verify_intake_request(fresh, self.master, 1700000000, v.SeenSet(str(path)))
+            self.assertEqual(closed["error"], "seen set unreadable")
+            self.assertEqual(path.read_text(encoding="utf-8"), "{")
+            via_tool = tool.verify_intake_request_message(signed_intake_request(self.master, nonce="11" * 32), self.master, 1700000000, v.SeenSet(str(Path(d) / ".tool")))
+            self.assertTrue(via_tool["ok"])
+
+    def test_c5_rate_limit_is_per_sender_and_per_contact(self):
+        rates = v.IntakeRateLimit(sender_max=2, contact_max=2, window=600)
+        other = "46e50097-0409-4972-9be0-6ade37563135"
+        self.assertIsNone(rates.allow(v.INTAKE_SENDER_ID, "a" * 64, 1000))
+        self.assertIsNone(rates.allow(v.INTAKE_SENDER_ID, "b" * 64, 1001))
+        self.assertEqual(rates.allow(v.INTAKE_SENDER_ID, "c" * 64, 1002), "sender")
+        self.assertIsNone(rates.allow(other, "a" * 64, 1003))
+        self.assertEqual(rates.allow(other, "a" * 64, 1004), "contactRef")
+        self.assertIsNone(rates.allow(other, "c" * 64, 1005))
+        with tempfile.TemporaryDirectory() as d:
+            seen = v.SeenSet(str(Path(d) / ".seen"))
+            tight = v.IntakeRateLimit(sender_max=1, contact_max=5, window=600)
+            first = signed_intake_request(self.master, nonce="12" * 32)
+            self.assertTrue(v.verify_intake_request(first, self.master, 1700000000, seen, tight)["ok"])
+            second = v.verify_intake_request(signed_intake_request(self.master, nonce="13" * 32), self.master, 1700000000, seen, tight)
+            self.assertEqual(second["error"], "rate_limited")
+            self.assertEqual(second["bucket"], "sender")
 
     def test_kind_is_required_and_a_redirect_is_not_followed(self):
         import importlib.util

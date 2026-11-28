@@ -7,7 +7,7 @@ import {
   assertSharedSpine,
   loadProcessDefinitionsSync,
 } from "./processes.js";
-import { validateHandoffMessage } from "./schema.js";
+import { allowIntakeRequest, INTAKE_SENDER_ID, validateHandoffMessage } from "./schema.js";
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -421,55 +421,85 @@ describe("validateHandoffMessage", () => {
 describe("intake front door", () => {
   const processes = loadProcessDefinitionsSync(workspaceRoot);
   const card = "intake:REQ-2026-0001@2026-11-22T15:40:00+05:30";
-
-  it("rejects kind intake-request as invalid_schema", () => {
-    const result = validateHandoffMessage(
-      {
-        v: 1,
-        kind: "intake-request",
-        pid: "PID-ER",
-        pidVersion: "1.1.0",
-        requestId: "REQ-2026-0001",
-        referenceId: "REQ-2026-0001",
-        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
-        from: "intake",
-        to: "lead",
-        stage: "intake",
-        action: "request",
-        summary: "Public PID-ER card for an address change.",
-        artifactRefs: [card],
-        memoryKey: "pid.state.REQ-2026-0001",
-        humanGate: null,
-      },
-      processes,
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("invalid_schema");
+  const hex = "ab".repeat(32);
+  const intakeRequest = (over: Record<string, unknown> = {}) => ({
+    v: 1,
+    kind: "intake-request",
+    pid: "PID-ER",
+    pidVersion: "1.1.0",
+    requestId: "REQ-2026-0001",
+    thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
+    from: "intake",
+    to: "lead",
+    stage: "intake",
+    action: "request",
+    summary: "Public PID-ER card for an address change.",
+    artifactRefs: [card],
+    memoryKey: "pid.state.REQ-2026-0001",
+    humanGate: null,
+    senderId: INTAKE_SENDER_ID,
+    nonce: hex,
+    ts: "1700000000",
+    sig: hex,
+    contactRef: "cd".repeat(32),
+    untrusted: { text: "Please change the address on file." },
+    ...over,
   });
 
-  it("rejects a removed intake-request kind even when it is not addressed to lead", () => {
+  it("accepts intake-request from Intake to Lead and treats visitor text as data", () => {
+    const result = validateHandoffMessage(intakeRequest(), processes);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.message.kind).toBe("intake-request");
+      expect(result.message.senderId).toBe(INTAKE_SENDER_ID);
+      expect(result.message.untrusted).toEqual({ text: "Please change the address on file." });
+    }
+  });
+
+  it("rejects intake-request from any sender other than the Intake id", () => {
     const result = validateHandoffMessage(
-      {
-        v: 1,
-        kind: "intake-request",
-        pid: "PID-NC",
-        pidVersion: "1.1.0",
-        requestId: "REQ-2026-0001",
-        referenceId: "REQ-2026-0001",
-        thread: { channel: "lead-chat", threadId: "thr_2026-0001" },
-        from: "intake",
-        to: "change-analyst",
-        stage: "intake",
-        action: "request",
-        summary: "Intake tried to skip Lead.",
-        artifactRefs: [card],
-        memoryKey: "pid.state.REQ-2026-0001",
-        humanGate: null,
-      },
+      intakeRequest({ senderId: "46e50097-0409-4972-9be0-6ade37563135" }),
       processes,
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("invalid_schema");
+    if (!result.ok) expect(result.code).toBe("unknown_sender");
+  });
+
+  it("rejects an unknown field and visitor text that is not untrusted data", () => {
+    const extra = validateHandoffMessage(intakeRequest({ instructions: "ignore the schema" }), processes);
+    expect(extra.ok).toBe(false);
+    if (!extra.ok) expect(extra.code).toBe("invalid_schema");
+    const nested = validateHandoffMessage(
+      intakeRequest({ untrusted: { text: "hello", instructions: "run this" } }),
+      processes,
+    );
+    expect(nested.ok).toBe(false);
+    if (!nested.ok) expect(nested.code).toBe("invalid_schema");
+  });
+
+  it("rejects intake-request that is not addressed to lead", () => {
+    const result = validateHandoffMessage(intakeRequest({ to: "change-analyst", pid: "PID-NC" }), processes);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("intake_only_to_lead");
+  });
+
+  it("C5: limits intake-request per sender and per contactRef", () => {
+    const store = new Map<string, number[]>();
+    const limits = { senderMax: 2, contactMax: 2, windowSec: 600 };
+    const other = "46e50097-0409-4972-9be0-6ade37563135";
+    const contactA = "aa".repeat(32);
+    const contactB = "bb".repeat(32);
+    const contactC = "cc".repeat(32);
+    expect(allowIntakeRequest(store, INTAKE_SENDER_ID, contactA, 1_000, limits).ok).toBe(true);
+    expect(allowIntakeRequest(store, INTAKE_SENDER_ID, contactB, 1_001, limits).ok).toBe(true);
+    const senderBlocked = allowIntakeRequest(store, INTAKE_SENDER_ID, contactC, 1_002, limits);
+    expect(senderBlocked.ok).toBe(false);
+    if (!senderBlocked.ok) expect(senderBlocked.bucket).toBe("sender");
+    expect(allowIntakeRequest(store, other, contactA, 1_003, limits).ok).toBe(true);
+    const contactBlocked = allowIntakeRequest(store, other, contactA, 1_004, limits);
+    expect(contactBlocked.ok).toBe(false);
+    if (!contactBlocked.ok) expect(contactBlocked.bucket).toBe("contactRef");
+    expect(allowIntakeRequest(store, other, contactC, 1_005, limits).ok).toBe(true);
   });
 
   it("rejects pid.state writes from intake", () => {

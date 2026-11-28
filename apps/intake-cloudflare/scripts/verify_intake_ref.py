@@ -27,7 +27,15 @@ REQUEST_ID_RE = re.compile(r"REQ-\d{8}-\d{6}\Z")
 DIGITS_10 = re.compile(r"\d{10}\Z")
 HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = {"intake-card", "visitor-message"}
-PURPOSES = ("notice", "envelope", "lead-to-site", "style")
+PURPOSES = ("notice", "envelope", "lead-to-site", "style", "intake-request")
+INTAKE_SENDER_ID = "ce1f6670-8b51-4478-8f61-42911ea3be41"
+INTAKE_REQUEST_WINDOW_SEC = 300
+INTAKE_REQUEST_KEYS = (
+    "v", "kind", "pid", "pidVersion", "requestId", "thread", "from", "to", "stage", "action",
+    "summary", "artifactRefs", "memoryKey", "humanGate", "senderId", "nonce", "ts", "sig",
+    "contactRef", "untrusted",
+)
+INTAKE_REQUEST_BODY_KEYS = tuple(key for key in INTAKE_REQUEST_KEYS if key not in ("sig", "nonce", "ts"))
 RETRY_CAP_SEC = 60
 
 
@@ -189,6 +197,134 @@ def verify_envelope(body: bytes, rid: str, ts: str, psha: str, sig: str, kind, m
         out["kind"] = payload.get("kind")
     else:
         out["error"] = "payload binding"
+    return out
+
+
+class IntakeRateLimit:
+    """Per-sender and per-contactRef windows. In memory, or a locked file when path is set."""
+
+    def __init__(self, path: str | None = None, sender_max: int = 10, contact_max: int = 5, window: int = 600):
+        self.path = path
+        self.sender_max = sender_max
+        self.contact_max = contact_max
+        self.window = window
+        self._mem: dict[str, list[int]] = {}
+
+    def _fresh(self, data: dict, key: str, now: int) -> list[int]:
+        hits = [ts for ts in data.get(key, []) if isinstance(ts, int) and now - ts < self.window]
+        data[key] = hits
+        return hits
+
+    def allow(self, sender: str, contact: str, now: int) -> str | None:
+        if self.path is None:
+            return self._decide(self._mem, sender, contact, now)
+        parent = os.path.dirname(self.path) or "."
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        lock_fd = os.open(self.path + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            data: dict = {}
+            path = Path(self.path)
+            if path.exists():
+                raw = path.read_text(encoding="utf-8")
+                parsed = json.loads(raw) if raw.strip() else {}
+                if not isinstance(parsed, dict):
+                    raise VerifyError("rate limit unreadable")
+                data = parsed
+            decision = self._decide(data, sender, contact, now)
+            fd, tmp = tempfile.mkstemp(prefix=".rate.", dir=parent)
+            try:
+                os.write(fd, json.dumps(data, sort_keys=True).encode("utf-8"))
+                os.fchmod(fd, 0o600)
+            except Exception:
+                os.close(fd)
+                os.unlink(tmp)
+                raise
+            os.close(fd)
+            os.replace(tmp, self.path)
+            return decision
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
+
+    def _decide(self, data: dict, sender: str, contact: str, now: int) -> str | None:
+        sender_hits = self._fresh(data, "sender:" + sender, now)
+        if len(sender_hits) >= self.sender_max:
+            return "sender"
+        contact_hits = self._fresh(data, "contact:" + contact, now)
+        if len(contact_hits) >= self.contact_max:
+            return "contactRef"
+        sender_hits.append(now)
+        contact_hits.append(now)
+        return None
+
+
+def canonical_intake_request(message: dict) -> str:
+    body = {key: message[key] for key in INTAKE_REQUEST_BODY_KEYS}
+    return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def verify_intake_request(message, master: bytes, now: int, seen: SeenSet, rates: IntakeRateLimit | None = None) -> dict:
+    """Reject a bad intake-request.v1 signature, a timestamp outside 5 minutes, or a reused nonce.
+
+    The seen-set check is atomic. A corrupt seen-set fails closed and does not accept the message.
+    untrusted.text is carried as data. It is not a field the verifier treats as instructions.
+    """
+    out = {"ok": False, "error": None}
+    if not isinstance(message, dict) or set(message) != set(INTAKE_REQUEST_KEYS):
+        out["error"] = "invalid_schema"
+        return out
+    if message.get("kind") != "intake-request" or message.get("from") != "intake" or message.get("to") != "lead":
+        out["error"] = "invalid_schema"
+        return out
+    if message.get("action") != "request" or message.get("stage") != "intake" or message.get("humanGate") is not None:
+        out["error"] = "invalid_schema"
+        return out
+    if message.get("senderId") != INTAKE_SENDER_ID:
+        out["error"] = "unknown_sender"
+        return out
+    summary = message.get("summary")
+    text = message.get("untrusted")
+    refs = message.get("artifactRefs")
+    contact = message.get("contactRef")
+    if not isinstance(summary, str) or summary == "" or len(summary) > 500:
+        out["error"] = "invalid_schema"
+        return out
+    if not isinstance(text, dict) or set(text) != {"text"} or not isinstance(text.get("text"), str) or len(text["text"]) > 4000:
+        out["error"] = "invalid_schema"
+        return out
+    if not isinstance(refs, list) or len(refs) > 8 or any(not isinstance(item, str) or item == "" or len(item) > 200 for item in refs):
+        out["error"] = "invalid_schema"
+        return out
+    nonce, ts, sig = message.get("nonce"), message.get("ts"), str(message.get("sig", "")).lower()
+    if not isinstance(nonce, str) or not HEX_64.fullmatch(nonce) or not isinstance(ts, str) or not DIGITS_10.fullmatch(ts):
+        out["error"] = "invalid_schema"
+        return out
+    if not isinstance(contact, str) or not HEX_64.fullmatch(contact) or not HEX_64.fullmatch(sig):
+        out["error"] = "invalid_schema"
+        return out
+    signed = f"intake-request.v1.{canonical_intake_request(message)}.{nonce}.{ts}"
+    want = sign_purpose(master, "intake-request", signed)
+    if not hmac.compare_digest(want, sig):
+        out["error"] = "bad signature"
+        return out
+    if abs(int(now) - int(ts)) > INTAKE_REQUEST_WINDOW_SEC:
+        out["error"] = "stale"
+        return out
+    try:
+        if seen.reject_or_record(nonce, int(now), ttl=600):
+            out["error"] = "reused nonce"
+            return out
+    except VerifyError:
+        out["error"] = "seen set unreadable"
+        return out
+    if rates is not None:
+        bucket = rates.allow(message["senderId"], contact, int(now))
+        if bucket:
+            out["error"] = "rate_limited"
+            out["bucket"] = bucket
+            return out
+    out["ok"] = True
     return out
 
 

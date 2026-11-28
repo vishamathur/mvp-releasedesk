@@ -24,6 +24,11 @@
       "purpose": "style",
       "message": "style.v1.Palette sample",
       "hex": "23658dbcf490b71800db2498aa97fe951789a1934c9fecf81df488cddb4592de"
+    },
+    {
+      "purpose": "intake-request",
+      "message": "intake-request.v1.{\"v\":1}.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.1700000000",
+      "hex": "a14b0dfbde880b7f98b1a14fec611f54452ef5e33d295ce856fc6abf454b23aa"
     }
   ]
 }
