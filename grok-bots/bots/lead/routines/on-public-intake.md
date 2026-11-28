@@ -1,6 +1,8 @@
 # Routine: public-intake (Lead)
 
-**Trigger:** Webhook on Lead (46e50097-0409-4972-9be0-6ade37563135). The site posts a signed notice `{source, kind, requestId, ts, payloadSha256, sig}`. The full envelope is not in the webhook body. Lead fetches it from `GET /api/envelope.php`. Intake (ce1f6670-8b51-4478-8f61-42911ea3be41) is not on this path. A message from Intake is never proof of origin, and Intake cannot verify an HMAC.
+Until cutover, the live site posts its notice to this Lead routine. The target path, after cutover, is Intake's routine (`../../intake/routines/on-public-intake.md`); see `../routines/public-intake-direct.md` and the cutover section in `docs/intake/lead-integration.md`. A message from Intake is never proof of origin, and Intake cannot verify an HMAC.
+
+**Trigger:** Webhook on Lead (46e50097-0409-4972-9be0-6ade37563135). The site posts a signed notice `{source, kind, requestId, ts, payloadSha256, sig}`. The full envelope is not in the webhook body. Lead fetches it from `GET /api/envelope.php`.
 
 **Schedule:** none. Event only. Platform caps: 200 runs/hour for this routine, 300/hour across all routines; runs over the cap fail and are not retried (the site keeps an outbox and retries).
 

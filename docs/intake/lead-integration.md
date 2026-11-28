@@ -1,7 +1,8 @@
 # Public intake agent <-> Release Desk Lead
 
-Release Desk Lead (46e50097-0409-4972-9be0-6ade37563135) is the only interface between the public site and the SDLC.
+Release Desk Lead (46e50097-0409-4972-9be0-6ade37563135) is the only interface between the public site and the SDLC and the only bot that writes `pid.state`.
 The site never writes `pid.state`, never messages other teammates and never approves anything.
+Intake (ce1f6670-8b51-4478-8f61-42911ea3be41) is the front door in front of Lead once the cutover below is done; until then the site posts its notice to Lead directly. See [Intake inline path](#intake-inline-path-and-cutover).
 
 Two builds serve the same endpoints with the same shapes: `apps/intake` (PHP for GoDaddy cPanel, files under `data/`) and
 `apps/intake-cloudflare` (Cloudflare Pages free plan, D1 instead of `data/`). Paths such as `data/outbox/` below are the PHP
@@ -95,3 +96,30 @@ Both endpoints need `X-Intake-Timestamp` (exactly 10 digits, ±300 s) and `X-Int
 4. **Lead persona + skills**: replace Lead's persona with `lead.persona.public-interface.md` (3,342 chars) and add skills `public-intake-relay`, `finance-estimate`, `public-status-update`; keep `validate-handoff`. Change Analyst may also read `finance-estimate`.
 5. **Cron** (cPanel → Cron Jobs, every 5 min): `php ~/intake-private/bin/drain-outbox.php`. Cloudflare runs an hourly scheduled purge (`17 * * * *` in `wrangler.toml`) and also purges from API traffic. Connecting the Pages project to Git, so `deployment_trigger.metadata.commit_hash` is set, is an operator step and is not done here. A WAF rate-limit rule and an xAI spend alert are also operator steps, not done here.
 6. **Verify** before go-live: Lead can run `curl`/`openssl` on its computer and read its vault; the routine's auth header; outbound HTTPS to api.x.ai from the host.
+
+## Intake inline path and cutover
+
+Target design: the site posts the same small signed notice to **Intake's** webhook routine; Intake verifies it, fetches the envelope, checks the card and hands Lead a handoff.v1 `intake-request`, cc Release Desk Log. Lead still posts all visitor-facing status on the site. Nothing in the site's code changes: only the Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` change value.
+
+```
+Site ──notice {source,kind,requestId,ts,payloadSha256,sig}──> Intake webhook routine
+Intake ──GET api/envelope.php (Bearer fetch key)──> site         (verifier: grok-bots/tools/verify_intake.py)
+Intake: notice HMAC + 600 s window, envelope HMAC, SHA-256 of payloadJson, card checks, envelope saved to intake-inbox/ (0600)
+Intake ──handoff.v1 intake-request, priority true──> Lead      ──cc──> Release Desk Log (priority false)
+Lead: verify_intake.py --file <saved envelope> ──> pid.state ──> finance-estimate ──> public-status-update ──> site
+```
+
+**One secret, read from files.** Intake and Lead read `intake-site-lead-hmac-secret` and `intake-site-fetch-key` from `/workspace/releasedesk-secrets/` on the shared box. They are never copied into an env var such as `INTAKE_HMAC_SECRET`, a message or a log. That removes the earlier mismatch (Intake's env value was not the value the site signs with). The verifier is `grok-bots/tools/verify_intake.py`; install it by copying it to `/workspace/releasedesk-state/bin/verify_intake.py` (same arguments and output fields as the version Lead runs today, plus `--file` mode).
+
+**Transition (this change).** Lead accepts BOTH the site's direct notice and an `intake-request` from Intake. The first to arrive opens the request, the second is logged as a duplicate (dedupe key: `requestId`). Merging does not change where the site sends anything.
+
+**Cutover (later, one step at a time, any failure means stay on Lead's webhook):**
+1. Intake creates its webhook routine (`grok-bots/bots/intake/routines/on-public-intake.md`) and its URL and key are saved to `/workspace/releasedesk-secrets/intake-bot-public-intake-webhook.json` as `{"url","key","auth":"bearer"}`.
+2. This change is merged and the verifier is installed on the box.
+3. Run `python3 scripts/intake-inline-e2e.py`. It submits one real PROBE card through the live site (the site still sends its notice to Lead; Lead only logs a PROBE-E2E card), then posts the same signed notice to Intake's webhook and checks that Intake saved an envelope that verifies with the site secret. Then confirm in Release Desk Log that Lead logged "PROBE intake-request received from intake <requestId>". `--dry-run` only checks the files and the site.
+4. Set Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` to Intake's webhook (`LEAD_WEBHOOK_AUTH` stays `bearer`), redeploy, and send one real card.
+5. Apply `grok-bots/bots/lead/CUTOVER.md` (Intake only for public requests, remove Lead's own routine).
+
+Rollback: set the two Pages secrets back to Lead's webhook and redeploy; Lead's transition mode still accepts it.
+
+A PROBE card is a card whose title starts `PROBE-E2E`. Anyone can type that title; the only effect is that Lead logs that visitor's own card instead of opening it.
