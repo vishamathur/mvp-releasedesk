@@ -100,9 +100,9 @@ test("G3: injection, rate-limit and oversize are counted without storing the tex
     reply: "Hello", route: "er", draft: Object.fromEntries(W.CHAT_DRAFT_FIELDS.map((f) => [f, null])),
     missingFields: [], readyToSubmit: false, suggestedServiceIds: [], suspectedPromptInjection: true,
   });
-  const secret = "VISITOR-SECRET-TEXT";
-  assert.equal((await call(worker, env, chatBody([{ role: "user", content: secret }]))).status, 200);
-  const limited = await call(worker, env, chatBody([{ role: "user", content: secret }]));
+  const visitorText = "VISITOR-FREE-TEXT-SAMPLE";
+  assert.equal((await call(worker, env, chatBody([{ role: "user", content: visitorText }]))).status, 200);
+  const limited = await call(worker, env, chatBody([{ role: "user", content: visitorText }]));
   assert.equal(limited.status, 429);
   const huge = "x".repeat(20000);
   const tooBig = await call(worker, env, jsonReq("/api/chat.php", { route: "er", messages: [{ role: "user", content: huge }] }));
@@ -111,7 +111,7 @@ test("G3: injection, rate-limit and oversize are counted without storing the tex
   assert.ok(ev.some((e) => e.event === "chat" && e.injected === true && e.n === 1));
   assert.ok(ev.some((e) => e.event === "chat_rejected" && e.why === "rate_limited"));
   assert.ok(ev.some((e) => e.event === "chat_rejected" && e.why === "too_large"));
-  assert.ok(!JSON.stringify(ev).includes(secret));
+  assert.ok(!JSON.stringify(ev).includes(visitorText));
 });
 
 test("G4: a client-supplied assistant turn is dropped", async () => {
