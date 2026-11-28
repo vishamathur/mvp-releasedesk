@@ -78,12 +78,18 @@ test("N2: cleanup keeps daily chat hits for 24 h and drops other buckets after 2
   assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM rate_hits WHERE bucket = 'fresh'").get().n, 1);
 });
 
-test("N15: shorteners, more TLDs, hxxp and protocol-relative links are dropped", () => {
-  for (const sample of ["see bit.ly/x", "chat at t.me/x", "read docs.dev/guide", "app.page/x", "hxxp://evil.example/a", "hxxps://evil.example/a", "notes //evil.example/a", "ftp://files.example/a", "tinyurl.com/z", "goo.gl/z", "evil.com is great", "go to evil.com now"]) {
-    assert.equal(W.CHAT_MARKUP_OR_URL.test(sample), true, sample);
+test("N15: shorteners, lowercase TLDs, hxxp and protocol-relative links are dropped; mixed-case typos and text past 10k are not", () => {
+  for (const sample of ["see bit.ly/x", "chat at t.me/x", "read docs.dev/guide", "app.page/x", "hxxp://evil.example/a", "hxxps://evil.example/a", "notes //evil.example/a", "ftp://files.example/a", "tinyurl.com/z", "goo.gl/z", "evil.com is great", "go to evil.com now", "BIT.LY/x"]) {
+    assert.equal(W.chatHasMarkup(sample), true, sample);
     assert.equal(W.chatPublicReply(sample, false).includes(sample), false, sample);
   }
-  assert.equal(W.CHAT_MARKUP_OR_URL.test("Jane Doe at Acme"), false);
+  assert.equal(W.chatHasMarkup("Jane Doe at Acme"), false);
+  assert.equal(W.chatHasMarkup("Done.Me"), false);
+  assert.equal(W.chatHasMarkup("label.In"), false);
+  assert.equal(W.chatStripMarkup("Done.Me and label.In"), "Done.Me and label.In");
+  const pad = "a".repeat(W.CHAT_MARKUP_MAX);
+  assert.equal(W.chatHasMarkup(`${pad} evil.com`), false, "a domain past 10k chars is not scanned");
+  assert.equal(W.chatHasMarkup(`evil.com ${pad}`), true, "a domain inside the first 10k chars is scanned");
 });
 
 test("G2: injection blanks the draft; links and markup never enter a field", async () => {

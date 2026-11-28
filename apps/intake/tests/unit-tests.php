@@ -321,13 +321,19 @@ t('N17: a visitor message with a missing or short salt is a fixed 503 and writes
         $port++;
     }
 });
-t('N15: chat markup drops shorteners, extra TLDs, hxxp and protocol-relative links', function () {
-    foreach (['see bit.ly/x', 'chat at t.me/x', 'read docs.dev/guide', 'hxxp://evil.example/a', 'hxxps://evil.example/a', 'notes //evil.example/a', 'ftp://files.example/a', 'tinyurl.com/z', 'goo.gl/z', 'evil.com is great', 'go to evil.com now'] as $sample) {
+t('N15: chat markup drops shorteners and lowercase TLDs, and ignores mixed-case typos and text past 10k', function () {
+    foreach (['see bit.ly/x', 'chat at t.me/x', 'read docs.dev/guide', 'hxxp://evil.example/a', 'hxxps://evil.example/a', 'notes //evil.example/a', 'ftp://files.example/a', 'tinyurl.com/z', 'goo.gl/z', 'evil.com is great', 'go to evil.com now', 'BIT.LY/x'] as $sample) {
         ok(chat_has_markup($sample), $sample);
-        $stripped = preg_replace(chat_markup_re(), '', $sample);
+        $stripped = chat_strip_markup($sample);
         ok(!str_contains((string)$stripped, $sample), $sample);
     }
     ok(!chat_has_markup('Jane Doe at Acme'), 'plain text');
+    ok(!chat_has_markup('Done.Me'), 'Done.Me');
+    ok(!chat_has_markup('label.In'), 'label.In');
+    ok(chat_strip_markup('Done.Me and label.In') === 'Done.Me and label.In', 'typos stay');
+    $pad = str_repeat('a', 10000);
+    ok(!chat_has_markup($pad . ' evil.com'), 'domain past 10k');
+    ok(chat_has_markup('evil.com ' . $pad), 'domain inside 10k');
 });
 t('missing or short CONTACT_REF_SALT stores no submission and no outbox', function () use ($cfg) {
     $dir = sys_get_temp_dir() . '/intake-nosalt-' . bin2hex(random_bytes(4));
