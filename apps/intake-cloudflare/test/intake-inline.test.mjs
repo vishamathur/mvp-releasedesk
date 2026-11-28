@@ -56,13 +56,25 @@ async function py(args, extra) {
   catch (e) { return { code: e.code, json: JSON.parse(String(e.stdout).trim().split("\n").pop() || "{}"), out: String(e.stdout) }; }
 }
 
+
+// Loopback client with a fixed host and the listening port only, so no caller-supplied URL is ever fetched.
+function local(path, { method = "GET", headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port: site.address().port, path, method, headers }, (res) => {
+      const chunks = []; res.on("data", (c) => chunks.push(c));
+      res.on("end", () => { const text = Buffer.concat(chunks).toString(); resolve({ status: res.statusCode, text, json: () => JSON.parse(text) }); });
+    });
+    req.on("error", reject); if (body) req.write(body); req.end();
+  });
+}
+
 async function submitCard(over = {}) {
-  const r = await fetch(siteUrl + "/api/intake.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...ER, ...over }) });
-  assert.equal(r.status, 200); return (await r.json()).referenceId;
+  const r = await local("/api/intake.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...ER, ...over }) });
+  assert.equal(r.status, 200); return r.json().referenceId;
 }
 async function noticeFor(rid, { ts = String(Math.floor(Date.now() / 1000)), key = env.LEAD_HMAC_SECRET, sha } = {}) {
-  const r = await fetch(`${siteUrl}/api/envelope.php?requestId=${rid}&kind=intake-card`, { headers: { Authorization: "Bearer " + FETCH_KEY } });
-  const e = await r.json();
+  const r = await local(`/api/envelope.php?requestId=${rid}&kind=intake-card`, { headers: { Authorization: "Bearer " + FETCH_KEY } });
+  const e = r.json();
   const payloadSha256 = sha ?? createHash("sha256").update(e.payloadJson).digest("hex");
   return { env: e, args: [rid, ts, payloadSha256, createHmac("sha256", key).update(`${ts}.${rid}.${payloadSha256}`).digest("hex"), "intake-card"] };
 }
