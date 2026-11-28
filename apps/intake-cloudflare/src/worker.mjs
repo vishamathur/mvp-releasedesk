@@ -527,7 +527,8 @@ export function cataloguePublic() {
 
 async function apiCatalogue(c) {
   if (c.request.method !== "GET") return respond(405, { ok: false, error: "method_not_allowed" });
-  return respond(200, { ok: true, ...cataloguePublic() }, { "Cache-Control": "public, max-age=300" });
+  const paused = submissionsPaused(c.cfg);
+  return respond(200, { ok: true, submissionsPaused: paused, ...cataloguePublic() }, { "Cache-Control": paused ? "no-store" : "public, max-age=300" });
 }
 
 // ---------------------------------------------------------------- finance (finance.php)
@@ -1012,7 +1013,21 @@ export function handoffV1Validate(msg, senderSlug) {
 }
 
 /** POST api/intake.php */
+
+/** Visitor submissions are paused when INTAKE_SUBMISSIONS_PAUSED is 1, true, yes or on (any case, surrounding space ignored). */
+export function submissionsPaused(cfg) {
+  const v = String(cfg?.INTAKE_SUBMISSIONS_PAUSED ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+export const SUBMISSIONS_PAUSED_MESSAGE = "New requests are paused for a short upgrade. Please check back soon.";
+
+export function submissionsPausedResponse() {
+  return respond(503, { ok: false, error: "submissions_paused", message: SUBMISSIONS_PAUSED_MESSAGE });
+}
+
 async function apiIntake(c) {
+  if (submissionsPaused(c.cfg)) return submissionsPausedResponse();
   const [body, err] = await appReadJson(c);
   if (err) return respond(...err);
   const [ok, retry] = await appRateLimit(c, "intake", phpInt(c.cfg.RATE_LIMIT_MAX ?? 5), phpInt(c.cfg.RATE_LIMIT_WINDOW_SEC ?? 600));
@@ -1225,6 +1240,7 @@ async function apiStatus(c) {
     if (!s) return respond(404, { ok: false, error: "not_found" });
     return respond(200, statusView(s));
   }
+  if (submissionsPaused(c.cfg)) return submissionsPausedResponse();
   const [ok, retry] = await appRateLimit(c, "visitor-msg", 10, 600);
   if (!ok) return respond(429, { ok: false, error: "rate_limited" }, { "Retry-After": String(retry) });
   const s = await statusLoadForVisitor(db, appClean(body.ref ?? "", 30), appClean(body.token ?? "", 40));
@@ -1710,6 +1726,7 @@ export function appConfig(env) {
     CONTACT_REF_SALT: v("CONTACT_REF_SALT", ""),
     STYLE_SIG_SECRET: v("STYLE_SIG_SECRET", ""),
     GROK_CHAT_API_KEY: v("GROK_CHAT_API_KEY", ""),
+    INTAKE_SUBMISSIONS_PAUSED: v("INTAKE_SUBMISSIONS_PAUSED", ""),
   };
 }
 
@@ -1725,7 +1742,8 @@ export async function appRun(handler, request, env, ctx) {
     res = respond(500, { ok: false, error: "server_error", message: "Something went wrong. Please try again later." });
   }
   if (handler !== apiCatalogue && ctx && typeof ctx.waitUntil === "function") {
-    ctx.waitUntil(drainOutbox({ ...c, now: nowSec() }).catch(() => {}));
+    // Pause stops delivery of new and queued cards. Retention, including the 24 h daily chat bucket, still runs.
+    if (!submissionsPaused(c.cfg)) ctx.waitUntil(drainOutbox({ ...c, now: nowSec() }).catch(() => {}));
     ctx.waitUntil(intakeCleanup({ ...c, now: nowSec() }).catch(() => {}));
   }
   return res;

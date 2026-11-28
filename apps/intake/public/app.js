@@ -137,10 +137,21 @@
     });
   }
 
+
+  const PAUSE_MSG = "New requests are paused for a short upgrade. Please check back soon.";
+  const applyPause = (paused) => {
+    if (!paused) return;
+    document.body.classList.add("submissions-paused");
+    const banner = $("#pause-banner"); if (banner) banner.hidden = false;
+    const submit = $("#submit"); if (submit) { submit.disabled = true; submit.textContent = "Submissions paused"; }
+    const reply = $("#reply-send"); if (reply) reply.disabled = true;
+  };
+
   // ---- submit
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const st = $("#form-status"); st.textContent = ""; st.className = "";
+    if (document.body.classList.contains("submissions-paused")) { st.className = "error"; st.textContent = PAUSE_MSG; return; }
     if (!route) { st.textContent = "Choose an option first."; return; }
     if (!form.reportValidity()) return;
     const f = form.elements;
@@ -166,11 +177,12 @@
         loadStatusFromHash();
         return;
       }
+      if (d.error === "submissions_paused") { applyPause(true); st.className = "error"; st.textContent = d.message || PAUSE_MSG; return; }
       st.className = "error";
       st.textContent = r.status === 429 ? "Too many submissions. Please try again later."
         : d.error === "validation" ? "Please check: " + d.fields.map((k) => LABELS[k] || k).join(", ") + "." : "Something went wrong. Please try again later.";
     } catch { st.className = "error"; st.textContent = "Network error. Please try again."; }
-    finally { btn.disabled = false; btn.textContent = "Submit to Release Desk Lead"; }
+    finally { if (!document.body.classList.contains("submissions-paused")) { btn.disabled = false; btn.textContent = "Submit to Release Desk Lead"; } }
   });
 
   // ---- catalogue
@@ -396,6 +408,7 @@
     try {
       const d = await (await fetch("api/catalogue.php")).json();
       catalogue = d;
+      applyPause(d.submissionsPaused === true);
       $("#cat-label").textContent = `${d.label}. ${d.taxNote}`;
       renderCatalogue(d);
       $("#er-app").replaceChildren(...d.enhancements.map((a) => { const o = el("option", a.name); o.value = a.id; return o; }));
@@ -442,8 +455,10 @@
   $("#track-form").addEventListener("submit", (e) => { e.preventDefault(); const f = e.target.elements; location.hash = `status=${f.ref.value}&token=${f.token.value}`; loadStatus(f.ref.value, f.token.value); });
   $("#reply-form").addEventListener("submit", async (e) => {
     e.preventDefault(); if (!current) return;
+    if (document.body.classList.contains("submissions-paused")) { $("#reply-status").textContent = PAUSE_MSG; return; }
     const input = e.target.elements.message;
     const [r, d] = await post("api/status.php", { ref: current.ref, token: current.token, message: input.value });
+    if (d.error === "submissions_paused") { applyPause(true); $("#reply-status").textContent = d.message || PAUSE_MSG; return; }
     $("#reply-status").textContent = r.ok ? d.message : (r.status === 429 ? "Too many messages, try later." : "Could not send.");
     if (r.ok) input.value = "";
   });

@@ -11,6 +11,7 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
+<div id="pause-banner" class="pause-banner" hidden role="status">New requests are paused for a short upgrade. Please check back soon.</div>
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="#main" aria-label="Release Desk home"><span class="brand-mark" aria-hidden="true">RD</span><span>Release Desk</span></a>
@@ -240,7 +241,7 @@
           <form id="reply-form" class="chat-input">
             <label class="sr-only" for="reply-message">Message to Release Desk Lead</label>
             <input id="reply-message" name="message" maxlength="2000" placeholder="Send a message to Release Desk Lead" required />
-            <button type="submit">Send</button>
+            <button type="submit" id="reply-send">Send</button>
           </form>
           <p id="reply-status" role="status"></p>
         </div>

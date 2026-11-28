@@ -16,10 +16,10 @@ endpoints keep their paths and their request and response shapes, so the front e
 
 | Path | Who | Notes |
 |---|---|---|
-| `GET /api/catalogue.php` | public | EXAMPLE catalogue, `Cache-Control: public, max-age=300` |
-| `POST /api/chat.php` | public, 30 per 10 min per IP | Grok strict-schema call, emails and phones redacted first |
-| `POST /api/intake.php` | public, 5 per 10 min per IP | validate, price the catalogue option, store the card, signed outbox to Lead |
-| `POST /api/status.php` | visitor with `{ref, token}` in the body | 60 reads and 10 messages per 10 min per IPv6 /64. The token is not accepted in the query string |
+| `GET /api/catalogue.php` | public | EXAMPLE catalogue, `Cache-Control: public, max-age=300` (or `no-store` while submissions are paused) |
+| `POST /api/chat.php` | public, 30 per 10 min per IP | Grok strict-schema call, emails and phones redacted first. Stays up while submissions are paused, including the daily cap and markup filter |
+| `POST /api/intake.php` | public, 5 per 10 min per IP | validate, price the catalogue option, store the card, signed outbox to Lead. When `INTAKE_SUBMISSIONS_PAUSED` is `1` (or `true`/`yes`/`on`), this returns `503 submissions_paused` and stores or sends nothing |
+| `POST /api/status.php` | visitor with `{ref, token}` in the body | 60 reads and 10 messages per 10 min per IPv6 /64. The token is not accepted in the query string. A visitor-message POST returns `503 submissions_paused` while paused; a read stays up |
 | `POST /api/finance-estimate.php` | Lead, HMAC | `X-Intake-Timestamp` (±300 s) + `X-Intake-Signature` |
 | `POST /api/lead-update.php` | Lead, HMAC | idempotent on `updateId`, backwards moves are 409 |
 | `POST /api/style.php` | public, shares the chat limit | **Cloudflare build only.** Inspiration photo for Website creation: see below |
