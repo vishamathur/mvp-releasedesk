@@ -8,6 +8,11 @@ declare(strict_types=1);
  *   email   : mail() to Lead's bot inbox; a Lead routine filters on the sender.
  * Envelope carries an HMAC so Lead can verify origin with LEAD_HMAC_SECRET.
  */
+/** True when CONTACT_REF_SALT is at least 32 bytes. A missing or short salt must not store a card. */
+function contact_ref_salt_ok(array $cfg): bool {
+    return strlen((string)($cfg['CONTACT_REF_SALT'] ?? '')) >= 32;
+}
+
 /** HMAC-SHA256(CONTACT_REF_SALT, "contact-ref.v1." + lower-cased email). An empty salt is refused. */
 function contact_ref(string $salt, string $email): string {
     if (strlen($salt) < 32) {
@@ -43,6 +48,9 @@ function delivery_envelope(array $cfg, string $kind, string $requestId, array $p
 }
 
 function delivery_send(array $cfg, string $kind, string $requestId, array $payload): string {
+    if (!contact_ref_salt_ok($cfg)) {
+        throw new RuntimeException('CONTACT_REF_SALT is not set. Refusing to publish an unsalted contact hash.');
+    }
     $env = delivery_envelope($cfg, $kind, $requestId, delivery_public_payload($cfg, $payload));
     $file = $cfg['DATA_DIR'] . '/outbox/' . gmdate('YmdHis') . "-$requestId-$kind-" . bin2hex(random_bytes(2)) . '.json';
     app_write_json($file, ['attempts' => 0, 'envelope' => $env]);

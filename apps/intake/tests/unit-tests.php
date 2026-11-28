@@ -280,6 +280,29 @@ t('cleanup keeps the daily chat limiter for 24 h and drops other buckets after 2
     intake_cleanup($cfg);
     ok(!is_file($daily), 'daily dropped after 24 h');
 });
+t('missing or short CONTACT_REF_SALT stores no submission and no outbox', function () use ($cfg) {
+    $dir = sys_get_temp_dir() . '/intake-nosalt-' . bin2hex(random_bytes(4));
+    foreach (['/submissions', '/status', '/outbox', '/ratelimit', '/sent'] as $d) mkdir($dir . $d, 0700, true);
+    foreach (['', str_repeat('a', 21), str_repeat('a', 31)] as $salt) {
+        $bare = $cfg;
+        $bare['CONTACT_REF_SALT'] = $salt;
+        $bare['DATA_DIR'] = $dir;
+        $bare['LEAD_DELIVERY'] = 'queue';
+        ob_start();
+        api_intake($bare);
+        $body = ob_get_clean();
+        $j = json_decode($body, true);
+        ok(http_response_code() === 503 && ($j['error'] ?? '') === 'not_configured', json_encode($j));
+        ok(($j['message'] ?? '') === 'This service is temporarily unavailable. Please try again later.', 'fixed message');
+        ok(!str_contains((string)($j['message'] ?? ''), 'CONTACT_REF_SALT'), 'no salt name');
+        ok(count(glob("$dir/submissions/*") ?: []) === 0, 'submissions=0');
+        ok(count(glob("$dir/outbox/*") ?: []) === 0, 'outbox=0');
+        $threw = false;
+        try { delivery_send($bare, 'intake-card', 'REQ-20261128-000001', ['contact' => ['email' => 'jane@example.com', 'name' => 'Jane']]); }
+        catch (RuntimeException $e) { $threw = str_contains($e->getMessage(), 'CONTACT_REF_SALT'); }
+        ok($threw && count(glob("$dir/outbox/*") ?: []) === 0, 'delivery writes no outbox');
+    }
+});
 t('shared signing vector matches PHP purpose keys and the salted contact ref', function () {
     $vector = json_decode((string)file_get_contents(dirname(__DIR__, 2) . '/intake-cloudflare/test/fixtures/signing-vector.json'), true);
     foreach ($vector['signatures'] as $row) {

@@ -251,6 +251,10 @@ function handoff_v1_validate($msg, string $senderSlug): array {
 
 /** POST api/intake.php */
 function api_intake(array $cfg): void {
+    if (!contact_ref_salt_ok($cfg)) {
+        app_respond_unavailable($cfg, 'not_configured', 'CONTACT_REF_SALT is not set. Refusing to store a card.');
+        return;
+    }
     [$body, $err] = app_read_json($cfg);
     if ($err) { app_respond(...$err); return; }
     $ip = app_client_ip();

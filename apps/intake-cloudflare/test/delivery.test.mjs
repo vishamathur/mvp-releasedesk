@@ -103,6 +103,22 @@ test("drain moves a message to dead after 50 attempts", async () => {
   assert.equal(env.DB.raw.prepare("SELECT state FROM outbox WHERE id = 'm1'").get().state, "dead");
 });
 
+test("N10: a missing or short CONTACT_REF_SALT stores no submission and no outbox", async () => {
+  for (const salt of ["", "x".repeat(21), "x".repeat(31)]) {
+    const env = testEnv({ CONTACT_REF_SALT: salt, LEAD_DELIVERY: "webhook", LEAD_WEBHOOK_URL: HOOK, LEAD_WEBHOOK_KEY: "routine-key-not-real" });
+    const r = await call(worker, env, jsonReq("/api/intake.php", ER));
+    assert.equal(r.status, 503, salt.length ? `len ${salt.length}` : "empty");
+    assert.equal(r.json.error, "not_configured");
+    assert.equal(r.json.message, W.PUBLIC_UNAVAILABLE_MESSAGE);
+    assert.equal(r.text.includes("CONTACT_REF_SALT"), false);
+    assert.equal(count(env, "submissions"), 0);
+    assert.equal(count(env, "outbox"), 0);
+    assert.equal(count(env, "status"), 0);
+    await assert.rejects(() => W.deliverySend({ env, cfg: W.appConfig(env), now: Math.floor(Date.now() / 1000) }, "intake-card", "REQ-20261128-000001", { contact: { email: "jane@example.com", name: "Jane" } }));
+    assert.equal(count(env, "outbox"), 0);
+  }
+});
+
 test("retention: 24 h window removes every outbox state and logs dead rows", async () => {
   const env = testEnv({ RETENTION_DAYS: "1" });
   const now = Math.floor(Date.now() / 1000);

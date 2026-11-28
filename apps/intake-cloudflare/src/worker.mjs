@@ -1028,6 +1028,7 @@ export function submissionsPausedResponse() {
 
 async function apiIntake(c) {
   if (submissionsPaused(c.cfg)) return submissionsPausedResponse();
+  if (!contactRefSaltOk(c.cfg.CONTACT_REF_SALT)) return respondUnavailable(c, "not_configured", "CONTACT_REF_SALT is not set. Refusing to store a card.");
   const [body, err] = await appReadJson(c);
   if (err) return respond(...err);
   const [ok, retry] = await appRateLimit(c, "intake", phpInt(c.cfg.RATE_LIMIT_MAX ?? 5), phpInt(c.cfg.RATE_LIMIT_WINDOW_SEC ?? 600));
@@ -1285,9 +1286,14 @@ export function jsonAsciiSafe(value) {
  * Full signed envelope, stored in the D1 outbox and served to Lead by GET api/envelope.php. Lead verifies the
  * signature over payloadJson (ts + "." + payloadJson), then parses it. signature comes before payloadJson.
  */
+/** True when CONTACT_REF_SALT is at least 32 bytes. A missing or short salt must not store a card. */
+export function contactRefSaltOk(salt) {
+  return ENC.encode(String(salt ?? "")).length >= 32;
+}
+
 /** HMAC-SHA256(CONTACT_REF_SALT, "contact-ref.v1." + lower-cased email). An empty salt is refused. */
 export async function contactRefFor(salt, email) {
-  if (ENC.encode(String(salt ?? "")).length < 32) {
+  if (!contactRefSaltOk(salt)) {
     throw new RuntimeError("CONTACT_REF_SALT is not set. Refusing to publish an unsalted contact hash.");
   }
   return hmacHex(String(salt), "contact-ref.v1." + String(email).toLowerCase());
@@ -1340,6 +1346,7 @@ export async function deliveryNotice(cfg, envelope, now = nowSec()) {
 
 /** Writes the full envelope to the D1 outbox first (queue + audit + fetch-back), then sends the notice. */
 export async function deliverySend(c, kind, requestId, payload) {
+  if (!contactRefSaltOk(c.cfg.CONTACT_REF_SALT)) throw new RuntimeError("CONTACT_REF_SALT is not set. Refusing to publish an unsalted contact hash.");
   const env = await deliveryEnvelope(c.cfg, kind, requestId, await payloadForLead(c.cfg, payload), c.now);
   const id = `${gmdate.ymdhis(c.now)}-${requestId}-${kind}-${randomHex(2)}`;
   await c.env.DB.prepare("INSERT INTO outbox (id, request_id, kind, envelope_json, attempts, state, last_error, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 0, 'queued', NULL, ?5, ?5)")
