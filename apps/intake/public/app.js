@@ -211,7 +211,7 @@ const PAUSE_MSG = "New requests are paused for a short upgrade. Please check bac
     if (!route) { st.textContent = "Choose an option first."; return; }
     if (route === "er" && repoPresence() !== "yes") { st.className = "error"; st.textContent = repoPresence() === "no" ? REPO_NONE : "Tell us first whether the application has an existing repository or codebase."; return; }
     if (!form.reportValidity()) return;
-    if (route === "er" && !repoState.verified) { st.className = "error"; st.textContent = "Check your repository first. A request can only be submitted once access is verified."; $("#repo-check").focus(); return; }
+    if (route === "er" && !repoState.verified) { st.className = "error"; st.textContent = "Check your repository first. A request can only be submitted once the repository is publicly readable."; $("#repo-check").focus(); return; }
     const f = form.elements;
     const picked = selectedOption();
     if (!picked) { st.className = "error"; st.textContent = "Choose a catalogue option first."; return; }

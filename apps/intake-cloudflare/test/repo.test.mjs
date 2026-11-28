@@ -1,5 +1,5 @@
 // Enhancement requests need an existing repository or codebase. The UI asks, and the server enforces it.
-// Real tests only: the checks below call api.github.com, gitlab.com and bitbucket.org live. Nothing is stubbed.
+// Public GitHub checks call api.github.com live. Token, private-repo, redirect and other-host cases are stubbed.
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import worker, * as W from "../src/worker.mjs";
 import { testEnv, jsonReq, getReq, call, count, blockNetwork, ER, purposeSign } from "./helpers.mjs";
 
 let restore;
-beforeEach(() => { restore = blockNetwork(); });
+beforeEach(() => { W.resetRepoCache(); restore = blockNetwork(); });
 afterEach(() => restore());
 
 const missingName = () => `no-such-repo-${randomBytes(6).toString("hex")}`;
@@ -53,27 +53,43 @@ test("live GitHub: a 404 is access-pending, and so is a repository that is priva
   assert.equal(v.state, "access-pending"); assert.equal(v.httpStatus, 404); assert.equal(v.reason, "not_found_or_private");
   assert.ok(!W.REPO_ACCEPTED_STATES.includes(v.state));
   const msg = W.repoMessage(v, {});
-  assert.ok(msg.includes('"vishamathur"') && msg.includes("Read access") && msg.includes("I've granted access") && msg.includes("can't be submitted until access is verified"));
-  assert.ok(msg.includes("private repositories can't be confirmed automatically yet"), "no token: honest about the limit");
-  assert.ok(!W.repoMessage(v, { GITHUB_REPO_CHECK_TOKEN: "x".repeat(40) }).includes("can't be confirmed automatically yet"));
+  assert.ok(msg.includes('"vishamathur"') && msg.includes("Read access") && msg.includes("I've granted access") && msg.includes("publicly readable"));
+  assert.ok(msg.includes("never uses a server token"));
+  assert.ok(W.repoMessage(v, { GITHUB_REPO_CHECK_TOKEN: "sample-token-not-a-credential" }).includes("never uses a server token"));
 });
 
-test("live GitHub: a token that GitHub rejects never turns a 404 into verified, and is never echoed", async () => {
-  const token = randomBytes(24).toString("hex");
-  const v = await W.repoVerify({ GITHUB_REPO_CHECK_TOKEN: token }, W.repoParse("github", `octocat/${missingName()}`));
-  assert.equal(v.method, "github-api-token"); assert.equal(v.httpStatus, 401);
-  assert.equal(v.state, "check-unavailable");
-  assert.ok(!JSON.stringify(v).includes(token) && !W.repoMessage(v, {}).includes(token));
+test("N21: a configured token is never sent and never turns a 404 into verified", async () => {
+  const configured = "sample-token-not-a-credential";
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    const headers = init?.headers ?? {};
+    seen.push(headers.Authorization || headers.authorization || "");
+    assert.equal(init.redirect, "manual");
+    assert.equal(new URL(url).origin, "https://api.github.com");
+    return new Response(JSON.stringify({ message: "Not Found" }), { status: 404, headers: { "content-type": "application/json" } });
+  };
+  const v = await W.repoVerify({ GITHUB_REPO_CHECK_TOKEN: configured }, W.repoParse("github", `octocat/${missingName()}`));
+  assert.equal(v.method, "github-api-public"); assert.equal(v.httpStatus, 404); assert.equal(v.state, "access-pending");
+  assert.deepEqual(seen, [""]);
+  assert.ok(!JSON.stringify(v).includes(configured) && !W.repoMessage(v, {}).includes(configured));
 });
 
-test("live other hosts: reachable public repository is unverified-host; a sign-in redirect or 404 is access-pending", async () => {
-  let v = await W.repoVerify({}, W.repoParse("gitlab", "https://gitlab.com/gitlab-org/gitlab"));
-  assert.equal(v.state, "unverified-host"); assert.equal(v.method, "https-reachability"); assert.equal(v.httpStatus, 200);
-  v = await W.repoVerify({}, W.repoParse("gitlab", `https://gitlab.com/no-such-group-${randomBytes(5).toString("hex")}/${missingName()}`));
-  assert.equal(v.state, "access-pending", "GitLab redirects unknown or private projects to sign-in");
-  v = await W.repoVerify({}, W.repoParse("bitbucket", `https://bitbucket.org/no-such-ws-${randomBytes(5).toString("hex")}/${missingName()}`));
-  assert.equal(v.state, "access-pending"); assert.equal(v.httpStatus, 404);
-  assert.ok(W.repoMessage(v, {}).includes("read-only access") && W.repoMessage(v, {}).includes("I've granted access"));
+test("N20: only api.github.com is probed, and a redirect to another host is not followed", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push(String(url));
+    assert.equal(init.redirect, "manual");
+    assert.ok(init.signal);
+    return new Response("", { status: 302, headers: { Location: "https://evil.example/probe" } });
+  };
+  const v = await W.repoVerify({ GITHUB_REPO_CHECK_TOKEN: "sample-token-not-a-credential" }, W.repoParse("github", PUBLIC_GH));
+  assert.equal(v.state, "access-pending"); assert.equal(v.reason, "redirect_not_allowed");
+  assert.deepEqual(calls, ["https://api.github.com/repos/octocat/Hello-World"]);
+  const gitlab = await W.repoVerify({}, W.repoParse("gitlab", "https://gitlab.com/gitlab-org/gitlab"));
+  assert.equal(gitlab.state, "access-pending"); assert.equal(gitlab.method, "host-not-allowlisted"); assert.equal(gitlab.reason, "host_not_allowlisted");
+  const bitbucket = await W.repoVerify({}, W.repoParse("bitbucket", "https://bitbucket.org/atlassian/python-bitbucket"));
+  assert.equal(bitbucket.state, "access-pending"); assert.equal(bitbucket.reason, "host_not_allowlisted");
+  assert.equal(calls.length, 1, "gitlab and bitbucket are not fetched");
 });
 
 const check = (env, body, headers) => call(worker, env, jsonReq("/api/repo-check.php", body, headers));
@@ -82,7 +98,8 @@ test("POST /api/repo-check.php: verified, pending, bad input, origin and rate li
   const env = testEnv({ REPO_RATE_LIMIT_MAX: "5" });
   let r = await check(env, { repoHost: "github", repo: PUBLIC_GH });
   assert.equal(r.status, 200, r.text); assert.equal(r.json.ok, true); assert.equal(r.json.state, "verified"); assert.equal(r.json.canSubmit, true);
-  assert.equal(r.json.repo, PUBLIC_GH); assert.match(r.json.message, /^Verified: octocat\/Hello-World/);
+  assert.equal(r.json.repo, PUBLIC_GH); assert.equal(r.json.found, true); assert.match(r.json.message, /publicly readable/);
+  assert.equal(r.json.visibility, undefined); assert.equal(r.json.defaultBranch, undefined);
   r = await check(env, { repoHost: "github", repo: `octocat/${missingName()}`, recheck: true });
   assert.equal(r.status, 200); assert.equal(r.json.state, "access-pending"); assert.equal(r.json.canSubmit, false);
   assert.match(r.json.message, /vishamathur/);
@@ -139,7 +156,7 @@ test("submit: verified repository is accepted, and repo, verification and timest
   assert.ok(card.repository.stack.length >= 10);
   assert.equal(card.repository.verification.state, "verified"); assert.equal(card.repository.verification.method, "github-api-public");
   assert.equal(card.repository.verification.httpStatus, 200); assert.match(card.repository.verification.checkedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
-  assert.match(card.proposedHandoff.summary, /Repository octocat\/Hello-World \(verified\)\./);
+  assert.match(card.proposedHandoff.summary, /Repository octocat\/Hello-World \(publicly readable, not an ownership check\)\./);
   const env0 = JSON.parse(env.DB.raw.prepare("SELECT envelope_json FROM outbox WHERE request_id = ?").get(r.json.referenceId).envelope_json);
   const payload = JSON.parse(env0.payloadJson);
   assert.deepEqual(payload.repository, card.repository);
@@ -147,13 +164,72 @@ test("submit: verified repository is accepted, and repo, verification and timest
   assert.equal((await W.handoffV1Validate(card.proposedHandoff, "lead")).length, 0, JSON.stringify(W.handoffV1Validate(card.proposedHandoff, "lead")));
 });
 
-test("submit: other host that answers over HTTPS is accepted and recorded as unverified-host", async () => {
+test("N20: another host is not accepted and nothing is stored", async () => {
   const env = testEnv();
   const r = await submit(env, { ...ER, repoHost: "gitlab", repo: "https://gitlab.com/gitlab-org/gitlab", repoDefaultBranch: "master" });
-  assert.equal(r.status, 200, r.text);
-  const card = JSON.parse(env.DB.raw.prepare("SELECT card_json FROM submissions WHERE request_id = ?").get(r.json.referenceId).card_json);
-  assert.equal(card.repository.verification.state, "unverified-host"); assert.equal(card.repository.verification.method, "https-reachability");
-  assert.equal(card.repository.host, "gitlab");
+  assert.equal(r.status, 422, r.text);
+  assert.equal(r.json.error, "repo_not_verified"); assert.equal(r.json.state, "access-pending"); assert.equal(r.json.reason, "host_not_allowlisted");
+  assert.equal(count(env, "submissions"), 0); assert.equal(count(env, "outbox"), 0);
+});
+
+test("N21: private and missing look the same, the cache is not shared, and the limit is per IP", async () => {
+  const configured = "sample-token-not-a-credential";
+  const hiddenName = "octocat/Hidden-Name";
+  const hiddenBranch = "hidden-branch";
+  const auths = [];
+  globalThis.fetch = async (url, init) => {
+    const headers = init?.headers ?? {};
+    auths.push(headers.Authorization || headers.authorization || "");
+    const path = String(url);
+    if (path.endsWith("/Token-Body")) {
+      return new Response(JSON.stringify({ full_name: hiddenName, private: true, default_branch: hiddenBranch, html_url: `https://github.com/${hiddenName}` }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (path.endsWith("/Private-Repo") || path.endsWith("/missing-repo")) {
+      return new Response(JSON.stringify({ message: "Not Found" }), { status: 404, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ full_name: "octocat/Hello-World", private: false, default_branch: "master", html_url: "https://github.com/octocat/Hello-World" }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const ipA = { "CF-Connecting-IP": "203.0.113.21" };
+  const ipB = { "CF-Connecting-IP": "203.0.113.22" };
+  const env = testEnv({ GITHUB_REPO_CHECK_TOKEN: configured, REPO_RATE_LIMIT_MAX: "5" });
+  const priv = await check(env, { repoHost: "github", repo: "octocat/Private-Repo" }, ipA);
+  const miss = await check(env, { repoHost: "github", repo: "octocat/missing-repo" }, ipA);
+  assert.equal(priv.status, 200, priv.text); assert.equal(miss.status, 200, miss.text);
+  assert.equal(priv.json.state, "access-pending"); assert.equal(miss.json.state, "access-pending");
+  assert.equal(priv.json.found, false); assert.equal(miss.json.found, false);
+  assert.equal(priv.json.canSubmit, false); assert.equal(miss.json.canSubmit, false);
+  assert.equal(priv.json.visibility, undefined); assert.equal(miss.json.visibility, undefined);
+  assert.equal(priv.json.defaultBranch, undefined); assert.equal(miss.json.defaultBranch, undefined);
+  for (const body of [priv.text, miss.text]) {
+    assert.equal(body.includes(configured), false);
+    assert.equal(body.includes(hiddenName), false);
+    assert.equal(body.includes(hiddenBranch), false);
+  }
+  const leaked = await check(env, { repoHost: "github", repo: "octocat/Token-Body" }, ipB);
+  assert.equal(leaked.json.state, "access-pending"); assert.equal(leaked.json.found, false);
+  assert.equal(leaked.json.repo, "octocat/Token-Body");
+  assert.equal(leaked.text.includes(hiddenName), false);
+  assert.equal(leaked.text.includes(hiddenBranch), false);
+  assert.equal(leaked.text.includes(configured), false);
+  assert.ok(auths.length >= 3 && auths.every((a) => a === ""));
+
+  W.resetRepoCache();
+  let n = 0;
+  globalThis.fetch = async () => {
+    n += 1;
+    return new Response(JSON.stringify({ full_name: "octocat/Hello-World", private: false, default_branch: "master", html_url: "https://github.com/octocat/Hello-World" }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const cacheEnv = testEnv({ GITHUB_REPO_CHECK_TOKEN: configured, REPO_RATE_LIMIT_MAX: "10" });
+  assert.equal((await check(cacheEnv, { repoHost: "github", repo: PUBLIC_GH }, ipA)).json.state, "verified");
+  assert.equal((await check(cacheEnv, { repoHost: "github", repo: PUBLIC_GH }, ipB)).json.state, "verified");
+  assert.equal(n, 2, "a second caller does not replay the first caller's cached result");
+  assert.equal((await check(cacheEnv, { repoHost: "github", repo: PUBLIC_GH }, ipA)).status, 200);
+  assert.equal(n, 2, "the same caller reuses only their own cache entry");
+
+  const limited = testEnv({ REPO_RATE_LIMIT_MAX: "1" });
+  assert.equal((await check(limited, { repoHost: "github", repo: PUBLIC_GH }, ipA)).status, 200);
+  assert.equal((await check(limited, { repoHost: "github", repo: PUBLIC_GH }, ipA)).status, 429);
+  assert.equal((await check(limited, { repoHost: "github", repo: PUBLIC_GH }, ipB)).status, 200, "a second IP is not blocked by the first");
 });
 
 test("submit: every catalogue enhancement option needs the repository; new builds and websites are unaffected", async () => {

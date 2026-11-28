@@ -52,7 +52,7 @@ Lead then fetches the full envelope:
 - The response is the stored envelope. It carries `SECURITY_HEADERS` (including `nosniff`). Verify `signature.hex` over `"envelope.v1." + ts + "." + payloadJson`, check that SHA-256 of `payloadJson` equals the notice's `payloadSha256`, then parse it.
 - `contact.email` is not in the envelope. The envelope has `contact.contactRef` = HMAC-SHA256(`CONTACT_REF_SALT`, `"contact-ref.v1." + lower-cased email`). The salt is a Pages secret. An empty salt is refused. The address stays only in D1 `submissions`.
 - Passing `payloadSha256` picks the exact message when a request has several.
-- Every outbox row (queued, sent, or dead) is deleted 24 hours after `created_at`. Dead rows are logged (`outbox_dead_purged`) before they are deleted. Submissions, status, finance artifacts and events use `RETENTION_DAYS` (1, so 24 hours). Cleanup runs from any API call through `waitUntil`. Pages has no Cron Triggers, so the `[triggers]` block is not used. `scheduled()` is only for a Worker runtime.
+- Every outbox row (queued, sent, or dead) is deleted 24 hours after `created_at`, on the next API call. Dead rows are logged (`outbox_dead_purged`) before they are deleted. Submissions, status, finance artifacts and events use `RETENTION_DAYS` (1, so 24 hours). An idle site with no API traffic keeps rows until the next call, including a catalogue read. Cleanup runs from every API call through `waitUntil`, catalogue included. Pages has no Cron Triggers, so the `[triggers]` block is not used. `scheduled()` is only for a Worker runtime. While submissions are paused, queued cards are not delivered; a card older than 24 hours can be purged on that next call before it is sent.
 
 ## Purpose keys
 
@@ -67,9 +67,9 @@ After verification, run `apps/intake-cloudflare/scripts/extract_intake.py` on th
 The box copy `/workspace/releasedesk-state/bin/verify_intake.py` is not edited by this change. When it is updated it must match `apps/intake-cloudflare/scripts/verify_intake_ref.py`:
 
 - Reject `requestId` unless it is `REQ-` plus 8 digits, a hyphen, and 6 digits.
-- Reject unless `ts`, `payloadSha256` and `sig` are exactly 10 digits, 64 lower-case hex, and 64 lower-case hex. Do not accept floats, scientific notation, or millisecond timestamps. `kind` is omitted, `intake-card`, or `visitor-message`.
+- Reject unless `ts`, `payloadSha256` and `sig` are exactly 10 digits, 64 lower-case hex, and 64 lower-case hex. Do not accept floats, scientific notation, or millisecond timestamps. `kind` is required and is `intake-card` or `visitor-message`.
 - Parse the envelope before writing it. Reject unless `signature.ts` is 10 digits. Compute `ok` from the purpose-key signatures and `SHA-256(payloadJson) == payloadSha256`.
-- Then require `payload.requestId == requestId` and, when `kind` was passed, `payload.kind == kind`. Report `kind` from the payload.
+- Then require `payload.requestId == requestId` and `payload.kind == kind`. Report `kind` from the payload.
 - Write the body only after `ok` is true, with `O_CREAT|O_EXCL` and mode 0600.
 - Keep `/workspace/releasedesk-state/intake-inbox/.seen` as a map of `sig` to expiry. Reject a signature still inside its window.
 - Pass notice values as argv only, after the same regex check. Do not build a shell command from them.
@@ -99,24 +99,24 @@ Both endpoints need `X-Intake-Timestamp` (exactly 10 digits, ±300 s) and `X-Int
 
 ## Intake inline path and cutover
 
-Target design: the site posts the same small signed notice to **Intake's** webhook routine; Intake verifies it, fetches the envelope, checks the card and hands Lead a handoff.v1 `intake-request`, cc Release Desk Log. Lead still posts all visitor-facing status on the site. Nothing in the site's code changes: only the Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` change value.
+Target design: the site posts the same small signed notice to **Intake's** webhook routine; Intake verifies it, fetches the envelope, and checks the card. Intake then sends Lead exactly one `handoff.v1` message, kind `intake-request`. That message triggers Lead. Lead still posts all visitor-facing status on the site. Nothing in the site's code changes: only the Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` change value.
 
 ```
 Site ──notice {source,kind,requestId,ts,payloadSha256,sig}──> Intake webhook routine
 Intake ──GET api/envelope.php (Bearer fetch key)──> site         (verifier: grok-bots/tools/verify_intake.py)
 Intake: notice HMAC + 600 s window, envelope HMAC, SHA-256 of payloadJson, card checks, envelope saved to intake-inbox/ (0600)
-Intake ──handoff.v1 intake-request, priority true──> Lead      ──cc──> Release Desk Log (priority false)
-Lead: verify_intake.py --file <saved envelope> ──> pid.state ──> finance-estimate ──> public-status-update ──> site
+Intake ──intake-request (intake-request.v1 HMAC, nonce, timestamp), cc Release Desk Log──> Lead
+Lead: verify_intake.py --intake-request ──> pid.state ──> finance-estimate ──> public-status-update ──> site
 ```
 
 **One secret, read from files.** Intake and Lead read `intake-site-lead-hmac-secret` and `intake-site-fetch-key` from `/workspace/releasedesk-secrets/` on the shared box. They are never copied into an env var such as `INTAKE_HMAC_SECRET`, a message or a log. That removes the earlier mismatch (Intake's env value was not the value the site signs with). The verifier is `grok-bots/tools/verify_intake.py`; install it by copying it to `/workspace/releasedesk-state/bin/verify_intake.py` (same arguments and output fields as the version Lead runs today, plus `--file` mode).
 
-**Transition (this change).** Lead accepts BOTH the site's direct notice and an `intake-request` from Intake. The first to arrive opens the request, the second is logged as a duplicate (dedupe key: `requestId`). Merging does not change where the site sends anything.
+**Direct Intake to Lead.** Lead is triggered by `intake-request` from Intake `ce1f6670-8b51-4478-8f61-42911ea3be41`. A second message for the same `requestId` is a duplicate. Merging does not change where the site sends the notice: it still goes to Intake.
 
 **Cutover (later, one step at a time, any failure means stay on Lead's webhook):**
 1. Intake creates its webhook routine (`grok-bots/bots/intake/routines/on-public-intake.md`) and its URL and key are saved to `/workspace/releasedesk-secrets/intake-bot-public-intake-webhook.json` as `{"url","key","auth":"bearer"}`.
 2. This change is merged and the verifier is installed on the box.
-3. Run `python3 scripts/intake-inline-e2e.py`. It submits one real PROBE card through the live site (the site still sends its notice to Lead; Lead only logs a PROBE-E2E card), then posts the same signed notice to Intake's webhook and checks that Intake saved an envelope that verifies with the site secret. Then confirm in Release Desk Log that Lead logged "PROBE intake-request received from intake <requestId>". `--dry-run` only checks the files and the site.
+3. Run `python3 scripts/intake-inline-e2e.py`. It submits one real PROBE card through the live site (the site still sends its notice to Lead; Lead only logs a PROBE-E2E card), then posts the same signed notice to Intake's webhook and checks that Intake saved an envelope that verifies with the site secret. Then confirm in Release Desk Log that Lead logged the PROBE notice for that `requestId`. `--dry-run` only checks the files and the site.
 4. Set Pages secrets `LEAD_WEBHOOK_URL` and `LEAD_WEBHOOK_KEY` to Intake's webhook (`LEAD_WEBHOOK_AUTH` stays `bearer`), redeploy, and send one real card.
 5. Apply `grok-bots/bots/lead/CUTOVER.md` (Intake only for public requests, remove Lead's own routine).
 

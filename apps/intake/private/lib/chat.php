@@ -38,6 +38,24 @@ function chat_system_prompt(array $cat): string {
         . "EXAMPLE catalogue (INR, excl. GST):\n$menu\n" . GROK_UNTRUSTED_RULES;
 }
 
+/** Same denylist as the Cloudflare worker: case-insensitive markup and shorteners, plus a lowercase TLD. */
+const CHAT_MARKUP_MAX = 10000;
+function chat_markup_re(): string {
+    return '/<[^>]*>|https?:\/\/|hxxps?:\/\/|ftp:\/\/|(?<![a-z0-9:])\/\/[a-z0-9]|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl|is\.gd|ow\.ly|buff\.ly|cutt\.ly|rb\.gy|t\.co)\b/i';
+}
+function chat_lower_tld_re(): string {
+    return '/\b[A-Za-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info|dev|app|ai|me|ly|cc|uk|de|gl|gd|page|site|link|cloud|shop|online)\b/';
+}
+function chat_markup_input(string $s): string { return substr($s, 0, CHAT_MARKUP_MAX); }
+function chat_has_markup(string $s): bool {
+    $s = chat_markup_input($s);
+    return preg_match(chat_markup_re(), $s) === 1 || preg_match(chat_lower_tld_re(), $s) === 1;
+}
+function chat_strip_markup(string $s): string {
+    $s = preg_replace(chat_markup_re(), '', chat_markup_input($s)) ?? '';
+    return preg_replace(chat_lower_tld_re(), '', $s) ?? $s;
+}
+
 function chat_redact(string $s): string {
     $s = preg_replace('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', '[email given - type it in the form]', $s) ?? $s;
     $s = preg_replace('/\+?\d[\d\s().-]{8,}\d/', '[number hidden]', $s) ?? $s;
@@ -88,13 +106,12 @@ function api_chat(array $cfg): void {
         return;
     }
     $injected = !empty($out['suspectedPromptInjection']);
-    $markup = '/<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info)\b(?:\/|$)/i';
     $shape = ['email' => '/^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/', 'desiredBy' => '/^\d{4}-\d{2}-\d{2}$/'];
     $draft = [];
     if (!$injected) foreach (CHAT_DRAFT_FIELDS as $f) {
         if (!is_string($out['draft'][$f] ?? null) || trim($out['draft'][$f]) === '') continue;
         $v = app_clean($out['draft'][$f], chat_draft_max($f));
-        if (preg_match($markup, $v)) continue;
+        if (chat_has_markup($v)) continue;
         if (isset($shape[$f]) && !preg_match($shape[$f], $v)) continue;
         $draft[$f] = $v;
     }
@@ -105,7 +122,7 @@ function api_chat(array $cfg): void {
     $services = [];
     if (!$injected) foreach ($out['suggestedServiceIds'] as $id) if (isset($cat['byId'][$id])) $services[] = ['id' => $id, 'name' => $cat['byId'][$id]['name'], 'unitPriceInr' => $cat['byId'][$id]['unitPriceInr'], 'unit' => $cat['byId'][$id]['unit']];
     app_log($cfg, ['event' => 'chat', 'injected' => $injected, 'route' => $out['route'], 'ready' => (bool)$out['readyToSubmit'], 'n' => count($msgs)]);
-    $reply = $injected ? "I can only help prepare an intake request, so I haven't filled anything in. Please use the form directly." : preg_replace('/<[^>]*>|https?:\/\/\S+/', '', app_clean($out['reply'], 1200));
+    $reply = $injected ? "I can only help prepare an intake request, so I haven't filled anything in. Please use the form directly." : chat_strip_markup(app_clean($out['reply'], 1200));
     app_respond(200, ['ok' => true, 'reply' => $reply, 'route' => $injected ? 'unknown' : $out['route'], 'draft' => (object)$draft, 'flagged' => $injected,
         'missingFields' => $injected ? [] : array_values(array_intersect($out['missingFields'], CHAT_DRAFT_FIELDS)), 'readyToSubmit' => $injected ? false : (bool)$out['readyToSubmit'], 'suggestedServices' => $services]);
 }

@@ -117,9 +117,31 @@ export async function hmacHex(secret, data) {
   return bytesToHex(await hmacBytes(secret, data));
 }
 /** Purpose labels for k_p = HMAC(LEAD_HMAC_SECRET, "releasedesk-intake/<purpose>/v1"). */
-export const HMAC_PURPOSES = ["notice", "envelope", "lead-to-site", "style"];
-/** Draft fields and replies must not carry links, markup, markdown links, or bare domains. */
-export const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b[a-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info)\b(?:\/|$)/i;
+export const HMAC_PURPOSES = ["notice", "envelope", "lead-to-site", "style", "intake-request"];
+/** Case-insensitive markup, links and known shorteners. Bare domains are a separate lowercase-TLD check. */
+export const CHAT_MARKUP_OR_URL = /<[^>]*>|https?:\/\/|hxxps?:\/\/|ftp:\/\/|(?<![a-z0-9:])\/\/[a-z0-9]|\bwww\.|javascript:|data:text|[`]|\{\{|\$\(|\]\(|\b(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl|is\.gd|ow\.ly|buff\.ly|cutt\.ly|rb\.gy|t\.co)\b/i;
+/** A lowercase TLD after a word boundary. "Done.Me" and "label.In" are not domains. */
+export const CHAT_LOWER_TLD = /\b[A-Za-z0-9-]+\.(?:com|net|org|io|in|co|xyz|ru|top|info|dev|app|ai|me|ly|cc|uk|de|gl|gd|page|site|link|cloud|shop|online)\b/;
+export const CHAT_MARKUP_MAX = 10000;
+export function chatMarkupInput(text) {
+  return String(text ?? "").slice(0, CHAT_MARKUP_MAX);
+}
+export function chatHasMarkup(text) {
+  const s = chatMarkupInput(text);
+  return CHAT_MARKUP_OR_URL.test(s) || CHAT_LOWER_TLD.test(s);
+}
+export function chatStripMarkup(text) {
+  return chatMarkupInput(text).replace(new RegExp(CHAT_MARKUP_OR_URL.source, "gi"), "").replace(new RegExp(CHAT_LOWER_TLD.source, "g"), "");
+}
+/** A catalogue read may claim the purge at most this often. The hourly D1 claim stays inside intakeCleanup. */
+export const CATALOGUE_CLEANUP_GAP_SEC = 60;
+let catalogueCleanupNotBefore = 0;
+export function resetCatalogueCleanupMeter() { catalogueCleanupNotBefore = 0; }
+export function catalogueCleanupDue(now) {
+  if (now < catalogueCleanupNotBefore) return false;
+  catalogueCleanupNotBefore = now + CATALOGUE_CLEANUP_GAP_SEC;
+  return true;
+}
 /** Fixed text for every public 503. The real reason is logged, never returned. */
 export const PUBLIC_UNAVAILABLE_MESSAGE = "This service is temporarily unavailable. Please try again later.";
 
@@ -923,7 +945,7 @@ export function intakeProposedHandoff(requestId, d, fin) {
     who += ` [request type website-creation; budget band ${d.budgetBand ?? "not_sure"}${!phpEmpty(d.desiredBy) ? "; needed by " + d.desiredBy : ""}; full brief is in intake:${requestId}]`;
   }
   let summary = `${pid} web intake for ${who}: "${appSubstr(d.title, 150)}". Urgency ${d.urgency}. Preliminary EXAMPLE-catalogue estimate INR ${numberFormat(est.totalInr)} (bands ${numberFormat(b.low)} / ${numberFormat(b.expected)} / ${numberFormat(b.high)}, excl. GST); finance recommendation ${fin.recommendation} for the human finance-approval gate (Change Analyst). Customer text is untrusted.`;
-  if (d.repository) summary += ` Repository ${d.repository.repo} (${d.repository.verification.state}).`;
+  if (d.repository) summary += ` Repository ${d.repository.repo} (publicly readable, not an ownership check).`;
   if (fin.suspectedPromptInjection) summary += " suspectedPromptInjection is true; the recommendation is the policy recommendation only.";
   return {
     v: 1, kind: "stage-handoff", pid, pidVersion: HANDOFF_PID_VERSION, requestId,
@@ -1026,22 +1048,23 @@ export function handoffV1Validate(msg, senderSlug) {
 /** POST api/intake.php */
 // ---------------------------------------------------------------- repository check (enhancement requests)
 // An enhancement changes something that already exists, so it needs a repository or codebase Release Desk can read.
-// The visitor names it; this server checks it live. GitHub: the public REST API with no token, and, only when the
-// Pages secret GITHUB_REPO_CHECK_TOKEN is set, one retry with that token for a private repository the account was
-// invited to. Other hosts: an HTTPS reachability check, recorded as "unverified-host". Nothing is cached except
-// a successful result, for ten minutes, to stay inside GitHub's unauthenticated limit.
+// The visitor names it; this server checks it live. Anonymous callers are never authenticated with
+// GITHUB_REPO_CHECK_TOKEN. A private repository therefore looks the same as one that does not exist.
+// The reachability probe talks only to api.github.com, times out, and does not follow a redirect to another host.
+// A successful public result is cached per caller for ten minutes. "verified" means publicly readable, not owned.
 
 export const REPO_HOSTS = ["github", "gitlab", "bitbucket", "other"];
-/** Only these states let an enhancement through. "unverified-host" means reachable over HTTPS, not confirmed as a repository. */
-export const REPO_ACCEPTED_STATES = ["verified", "unverified-host"];
+/** Only a publicly readable GitHub repository lets an enhancement through. "verified" does not mean the visitor owns it. */
+export const REPO_ACCEPTED_STATES = ["verified"];
 export const REPO_ACCESS_USER = "vishamathur";
 export const REPO_CACHE_SEC = 600;
+export const REPO_FETCH_TIMEOUT_MS = 8000;
+const REPO_API_ORIGIN = "https://api.github.com";
 const REPO_UA = "releasedesk-intake-repo-check";
 const GH_OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const GH_REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 export const REPO_BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
 const REPO_BLOCKED_TLDS = new Set(["local", "localhost", "internal", "lan", "home", "corp", "intranet", "invalid", "onion", "arpa"]);
-const REPO_LOGIN_PATH_RE = /(?:^|\/)(?:users\/sign_in|sign_in|signin|login|auth)(?:\/|$)/i;
 
 export const REPO_NONE_MESSAGE = "An enhancement changes something that already exists, so it can't be acted on without an existing repository or codebase. "
   + "If you are starting from scratch, choose New application or Website creation instead. Nothing was submitted.";
@@ -1094,74 +1117,62 @@ export function repoGithubApiUrl(owner, name) {
   return url;
 }
 
-async function repoGithubGet(p, token) {
-  const [owner, name] = p.repo.split("/");
-  const url = repoGithubApiUrl(owner, name);
-  if (!url) return { status: 0, json: null };
-  const headers = { Accept: "application/vnd.github+json", "User-Agent": REPO_UA, "X-GitHub-Api-Version": "2022-11-28" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
-  let json = null;
-  if (res.status === 200) json = await res.json().catch(() => null); else await res.body?.cancel().catch(() => {});
-  return { status: res.status, json };
+function repoNotFound(p, now, method, status = 404) {
+  return repoResult(p, now, { state: "access-pending", method, httpStatus: status, visibility: "unknown", defaultBranch: "", reason: "not_found_or_private" });
 }
 
-async function repoVerifyGithub(cfg, p, now) {
-  const token = phpTrim(String(cfg.GITHUB_REPO_CHECK_TOKEN ?? ""));
-  let method = "github-api-public";
+async function repoGithubGet(p) {
+  const [owner, name] = p.repo.split("/");
+  const url = repoGithubApiUrl(owner, name);
+  if (!url) return { status: 0, json: null, redirected: false };
+  const headers = { Accept: "application/vnd.github+json", "User-Agent": REPO_UA, "X-GitHub-Api-Version": "2022-11-28" };
+  const res = await fetch(url, { headers, redirect: "manual", signal: AbortSignal.timeout(REPO_FETCH_TIMEOUT_MS) });
+  if (res.status >= 300 && res.status < 400) {
+    await res.body?.cancel().catch(() => {});
+    let next = null;
+    try { next = new URL(res.headers.get("Location") ?? "", url); } catch { next = null; }
+    return { status: res.status, json: null, redirected: !next || next.origin !== REPO_API_ORIGIN };
+  }
+  let json = null;
+  if (res.status === 200) json = await res.json().catch(() => null); else await res.body?.cancel().catch(() => {});
+  return { status: res.status, json, redirected: false };
+}
+
+async function repoVerifyGithub(p, now) {
+  const method = "github-api-public";
   try {
-    let r = await repoGithubGet(p, "");
-    if (r.status === 404 && token !== "") { r = await repoGithubGet(p, token); method = "github-api-token"; }
-    if (r.status === 200 && isPlainObject(r.json) && typeof r.json.full_name === "string") {
+    const r = await repoGithubGet(p);
+    if (r.redirected) return repoResult(p, now, { state: "access-pending", method, httpStatus: r.status, visibility: "unknown", defaultBranch: "", reason: "redirect_not_allowed" });
+    if (r.status === 200 && isPlainObject(r.json) && r.json.private !== true && typeof r.json.full_name === "string") {
       const j = r.json;
       return repoResult(p, now, {
-        state: "verified", method, httpStatus: 200, repo: j.full_name.slice(0, 140),
-        url: typeof j.html_url === "string" && j.html_url.startsWith("https://github.com/") ? j.html_url.slice(0, 200) : p.url,
-        visibility: j.private === true ? "private" : "public",
+        state: "verified", method, httpStatus: 200, repo: p.repo,
+        url: p.url,
+        visibility: "public",
         defaultBranch: typeof j.default_branch === "string" ? j.default_branch.slice(0, 100) : "",
         archived: j.archived === true,
       });
     }
-    if (r.status === 404) return repoResult(p, now, { state: "access-pending", method, httpStatus: 404, reason: "not_found_or_private" });
-    return repoResult(p, now, { state: "check-unavailable", method, httpStatus: r.status, reason: r.status === 403 || r.status === 429 ? "rate_limited" : "unexpected_status" });
+    if (r.status === 404 || (r.status === 200 && r.json?.private === true)) return repoNotFound(p, now, method, r.status === 200 ? 404 : 404);
+    return repoResult(p, now, { state: "check-unavailable", method, httpStatus: r.status, visibility: "unknown", defaultBranch: "", reason: r.status === 403 || r.status === 429 ? "rate_limited" : "unexpected_status" });
   } catch (e) {
-    return repoResult(p, now, { state: "check-unavailable", method, reason: e?.name === "TimeoutError" ? "timeout" : "network_error" });
-  }
-}
-
-async function repoVerifyHttps(p, now) {
-  const method = "https-reachability";
-  let url = p.url;
-  try {
-    for (let hops = 0; ; hops++) {
-      const u = new URL(url);
-      if (!repoHostOk(u)) return repoResult(p, now, { method, reason: "redirect_not_allowed" });
-      const res = await fetch(u, { method: "GET", headers: { "User-Agent": REPO_UA, Accept: "text/html,*/*;q=0.5" }, redirect: "manual", signal: AbortSignal.timeout(8000) });
-      await res.body?.cancel().catch(() => {});
-      if (res.status >= 300 && res.status < 400) {
-        const loc = res.headers.get("Location");
-        if (!loc || hops >= 3) return repoResult(p, now, { method, httpStatus: res.status, reason: "redirect_loop" });
-        url = new URL(loc, u).href;
-        continue;
-      }
-      if (res.status === 200 && !REPO_LOGIN_PATH_RE.test(new URL(url).pathname)) return repoResult(p, now, { state: "unverified-host", method, httpStatus: 200 });
-      if (res.status === 200 || [401, 403, 404, 410, 451].includes(res.status)) return repoResult(p, now, { method, httpStatus: res.status, reason: "not_reachable_without_sign_in" });
-      return repoResult(p, now, { state: "check-unavailable", method, httpStatus: res.status, reason: "unexpected_status" });
-    }
-  } catch (e) {
-    return repoResult(p, now, { state: "check-unavailable", method, reason: e?.name === "TimeoutError" ? "timeout" : "network_error" });
+    return repoResult(p, now, { state: "check-unavailable", method, visibility: "unknown", defaultBranch: "", reason: e?.name === "TimeoutError" ? "timeout" : "network_error" });
   }
 }
 
 const repoCache = new Map();
-/** Live check of a parsed repository. Returns the verification record: state is verified, unverified-host, access-pending or check-unavailable. */
-export async function repoVerify(cfg, p, now = nowSec()) {
-  const hit = repoCache.get(p.url);
-  if (hit && now - hit.at < REPO_CACHE_SEC) return hit.result;
-  const result = p.host === "github" ? await repoVerifyGithub(cfg, p, now) : await repoVerifyHttps(p, now);
+export function resetRepoCache() { repoCache.clear(); }
+function repoCacheKey(caller, url) { return `${String(caller ?? "")}\n${url}`; }
+/** Live check. "verified" means the repository is publicly readable, not that the visitor owns it. The cache is per caller. */
+export async function repoVerify(cfg, p, now = nowSec(), caller = "") {
+  if (p.host !== "github") return repoResult(p, now, { state: "access-pending", method: "host-not-allowlisted", visibility: "unknown", defaultBranch: "", reason: "host_not_allowlisted" });
+  const key = repoCacheKey(caller, p.url);
+  const hit = repoCache.get(key);
+  if (hit && now - hit.at < REPO_CACHE_SEC) return { ...hit.result };
+  const result = await repoVerifyGithub(p, now);
   if (REPO_ACCEPTED_STATES.includes(result.state)) {
     if (repoCache.size >= 200) repoCache.clear();
-    repoCache.set(p.url, { at: now, result });
+    repoCache.set(key, { at: now, result });
   }
   return result;
 }
@@ -1169,7 +1180,7 @@ export async function repoVerify(cfg, p, now = nowSec()) {
 /** What the visitor reads for a verification record. Never mentions keys or internals. */
 export function repoMessage(v, cfg = {}) {
   if (v.state === "verified") {
-    return `Verified: ${v.repo}${v.defaultBranch ? ` (default branch ${v.defaultBranch})` : ""}${v.visibility === "private" ? ". Read access to this private repository is confirmed" : ""}.`;
+    return `${v.repo} is publicly readable. That does not mean you own it or that you granted anyone access.`;
   }
   if (v.state === "unverified-host") {
     return `${v.url} answered over HTTPS. This host can't be checked further, so the repository is recorded as unverified-host.`;
@@ -1178,10 +1189,8 @@ export function repoMessage(v, cfg = {}) {
     return "We couldn't check the repository just now because the code host didn't answer or is limiting requests. Please try again in a few minutes. Nothing was submitted.";
   }
   if (v.host === "github") {
-    const hasToken = phpTrim(String(cfg.GITHUB_REPO_CHECK_TOKEN ?? "")) !== "";
-    return `We couldn't verify ${v.repo}. It wasn't found, or it is private. If it is private, invite the GitHub user "${REPO_ACCESS_USER}" as a collaborator with Read access (Settings, Collaborators, Add people), then choose "I've granted access". `
-      + (hasToken ? "" : "Access to private repositories can't be confirmed automatically yet, so a private repository stays \"access pending\" for now. ")
-      + "The request can't be submitted until access is verified.";
+    return `We couldn't find ${v.repo}. It wasn't found, or it is private, and those two look the same here. If it is private, invite the GitHub user "${REPO_ACCESS_USER}" as a collaborator with Read access (Settings, Collaborators, Add people), then choose "I've granted access". `
+      + "This check never uses a server token, so a private repository stays \"access pending\". The request can't be submitted until the repository is publicly readable.";
   }
   return `We couldn't reach ${v.url} without signing in. If it is private, give the account "${REPO_ACCESS_USER}" read-only access on your host (for example GitLab: Members, role Reporter; Bitbucket: Repository settings, User and group access, Read), then choose "I've granted access". `
     + "Private access on this host can't be confirmed automatically, so it stays \"access pending\" until the repository is reachable over HTTPS without signing in. The request can't be submitted until then.";
@@ -1206,11 +1215,11 @@ async function apiRepoCheck(c) {
   if (!REPO_HOSTS.includes(hostChoice)) return respond(400, { ok: false, error: "validation", fields: ["repoHost"] });
   const p = repoParse(hostChoice, appClean(body.repo ?? "", 301));
   if (!p) return respond(400, { ok: false, error: "validation", fields: ["repo"], message: hostChoice === "github" ? "Enter the repository as owner/repo or a github.com address." : "Enter the full https address of the repository." });
-  const v = await repoVerify(c.cfg, p, c.now);
+  const v = await repoVerify(c.cfg, p, c.now, c.ipKey);
   await appLog(c, { event: "repo_check", host: v.host, state: v.state, method: v.method, http: v.httpStatus, recheck: body.recheck === true });
   if (v.state === "check-unavailable") return respond(503, { ok: false, error: "repo_check_unavailable", state: v.state, message: repoMessage(v, c.cfg) });
-  return respond(200, { ok: true, state: v.state, canSubmit: REPO_ACCEPTED_STATES.includes(v.state), host: v.host, repo: v.repo, url: v.url,
-    visibility: v.visibility, defaultBranch: v.defaultBranch, checkedAt: v.checkedAt, message: repoMessage(v, c.cfg) });
+  return respond(200, { ok: true, state: v.state, found: v.state === "verified", canSubmit: REPO_ACCEPTED_STATES.includes(v.state), host: v.host, repo: p.repo, url: p.url,
+    checkedAt: v.checkedAt, message: repoMessage(v, c.cfg) });
 }
 
 /** Visitor submissions are paused when INTAKE_SUBMISSIONS_PAUSED is 1, true, yes or on (any case, surrounding space ignored). */
@@ -1241,7 +1250,7 @@ async function apiIntake(c) {
   if ((d.inspirationStyle ?? "") !== "" && !errors.includes("inspirationStyle") && !(await styleSigValid(c.cfg, d.inspirationStyle, d.inspirationStyleSig))) errors.push("inspirationStyle");
   if (errors.length) return respond(400, { ok: false, error: "validation", fields: errors });
   if (d.route === "er") {
-    const v = await repoVerify(c.cfg, d.repoParsed, c.now);
+    const v = await repoVerify(c.cfg, d.repoParsed, c.now, c.ipKey);
     if (v.state === "check-unavailable") return respond(503, { ok: false, error: "repo_check_unavailable", reason: v.reason, state: v.state, message: repoMessage(v, c.cfg) });
     if (!REPO_ACCEPTED_STATES.includes(v.state)) {
       return respond(422, { ok: false, error: "repo_not_verified", reason: v.reason ?? v.state, state: v.state, fields: ["repo"], message: repoMessage(v, c.cfg) });
@@ -1453,6 +1462,7 @@ async function apiStatus(c) {
     return respond(200, statusView(s));
   }
   if (submissionsPaused(c.cfg)) return submissionsPausedResponse();
+  if (!contactRefSaltOk(c.cfg.CONTACT_REF_SALT)) return respondUnavailable(c, "not_configured", "CONTACT_REF_SALT is not set. Refusing to send a visitor message.");
   const [ok, retry] = await appRateLimit(c, "visitor-msg", 10, 600);
   if (!ok) return respond(429, { ok: false, error: "rate_limited" }, { "Retry-After": String(retry) });
   const s = await statusLoadForVisitor(db, appClean(body.ref ?? "", 30), appClean(body.token ?? "", 40));
@@ -1842,7 +1852,7 @@ export const CHAT_DAILY_RATE_KEY = "chat-global-day:all";
 
 export function chatPublicReply(text, injected) {
   if (injected) return CHAT_INJECTION_REPLY;
-  return appClean(text, 1200).replace(new RegExp(CHAT_MARKUP_OR_URL.source, "gi"), "");
+  return chatStripMarkup(appClean(text, 1200));
 }
 
 async function apiChat(c) {
@@ -1890,7 +1900,7 @@ async function apiChat(c) {
   if (!injected) for (const f of CHAT_DRAFT_FIELDS) {
     if (typeof od[f] !== "string" || phpTrim(od[f]) === "") continue;
     const v = appClean(od[f], chatDraftMax(f));
-    if (CHAT_MARKUP_OR_URL.test(v)) continue;
+    if (chatHasMarkup(v)) continue;
     if (hasOwn(CHAT_SHAPE, f) && !CHAT_SHAPE[f].test(v)) continue;
     draft[f] = v;
   }
@@ -1946,7 +1956,7 @@ export function appConfig(env) {
     STYLE_SIG_SECRET: v("STYLE_SIG_SECRET", ""),
     GROK_CHAT_API_KEY: v("GROK_CHAT_API_KEY", ""),
     INTAKE_SUBMISSIONS_PAUSED: v("INTAKE_SUBMISSIONS_PAUSED", ""),
-    GITHUB_REPO_CHECK_TOKEN: v("GITHUB_REPO_CHECK_TOKEN", ""), // optional Pages secret: read access to private repos the account was invited to
+    GITHUB_REPO_CHECK_TOKEN: v("GITHUB_REPO_CHECK_TOKEN", ""), // ignored: anonymous repo checks never send a token
     REPO_RATE_LIMIT_MAX: v("REPO_RATE_LIMIT_MAX", 20),
   };
 }
@@ -1962,10 +1972,11 @@ export async function appRun(handler, request, env, ctx) {
     try { await appLog(c, { event: "unhandled", handler: handler.name, reason: String(e?.message ?? e).slice(0, 160) }); } catch { /* the 500 below is the real error */ }
     res = respond(500, { ok: false, error: "server_error", message: "Something went wrong. Please try again later." });
   }
-  if (handler !== apiCatalogue && ctx && typeof ctx.waitUntil === "function") {
+  if (ctx && typeof ctx.waitUntil === "function") {
+    // Catalogue is the low-traffic page load. It still runs the purge, at most once a minute. It does not deliver the outbox.
     // Pause stops delivery of new and queued cards. Retention, including the 24 h daily chat bucket, still runs.
-    if (!submissionsPaused(c.cfg)) ctx.waitUntil(drainOutbox({ ...c, now: nowSec() }).catch(() => {}));
-    ctx.waitUntil(intakeCleanup({ ...c, now: nowSec() }).catch(() => {}));
+    if (handler !== apiCatalogue && !submissionsPaused(c.cfg)) ctx.waitUntil(drainOutbox({ ...c, now: nowSec() }).catch(() => {}));
+    if (handler !== apiCatalogue || catalogueCleanupDue(c.now)) ctx.waitUntil(intakeCleanup({ ...c, now: nowSec() }).catch(() => {}));
   }
   return res;
 }

@@ -14,9 +14,18 @@ export const HANDOFF_KINDS = [
   "consult",
   "stage-return",
   "build-result",
-  "intake-request",
   "public-status",
+  "intake-request",
 ] as const;
+/** The only sender Lead accepts for kind intake-request. */
+export const INTAKE_SENDER_ID = "ce1f6670-8b51-4478-8f61-42911ea3be41";
+export const INTAKE_REQUEST_SENDER_MAX = 10;
+export const INTAKE_REQUEST_CONTACT_MAX = 5;
+export const INTAKE_REQUEST_WINDOW_SEC = 600;
+export const INTAKE_REQUEST_MAX_SUMMARY = 500;
+export const INTAKE_REQUEST_MAX_TEXT = 4000;
+export const INTAKE_REQUEST_MAX_REFS = 8;
+export const INTAKE_REQUEST_MAX_REF = 200;
 export const HANDOFF_ACTIONS = ["start", "consult", "return", "remediate", "block", "request", "status"] as const;
 export const THREAD_CHANNELS = ["lead-chat"] as const;
 
@@ -24,9 +33,6 @@ export const THREAD_CHANNELS = ["lead-chat"] as const;
 export const VERBATIM_NOTE = /^\d{4}-\d{2}-\d{2}T[^|]+\| verbatim: .+/;
 
 const STATE_WRITE_KEYS = ["pidState", "writesPidState", "statePatch"] as const;
-
-/** Public card reference copied onto an intake-request. */
-export const INTAKE_ARTIFACT = /^intake:[^@\s]+@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export const HumanGateSchema = z
   .object({
@@ -59,12 +65,16 @@ export const HandoffMessageSchema = z
     memoryKey: z.string().min(1),
     humanGate: HumanGateSchema.nullable(),
     referenceId: z.string().min(1).optional(),
-    /** Catalogue option chosen by the visitor. Only on intake-request. */
-    catalogueOptionId: z.string().min(1).optional(),
     proposedBranch: z.string().min(1).optional(),
     prUrl: z.string().min(1).optional(),
     testsPassed: z.boolean().optional(),
     testsSummary: z.string().min(1).optional(),
+    senderId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/).optional(),
+    nonce: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    ts: z.string().regex(/^\d{10}$/).optional(),
+    sig: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    contactRef: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    untrusted: z.object({ text: z.string().max(INTAKE_REQUEST_MAX_TEXT) }).strict().optional(),
   })
   .strict();
 
@@ -221,22 +231,34 @@ export function validateHandoffMessage(
       `Intake talks only to Lead. Refusing a message to ${message.to}.`,
     );
   }
-  if (message.kind === "intake-request" && (message.from !== "intake" || message.to !== "lead")) {
-    setCode("intake_only_to_lead");
-    errors.push("intake-request is sent by Intake to Lead only.");
-  }
   if (message.from === "intake" && message.kind !== "intake-request") {
-    errors.push("Intake sends intake-request only.");
+    errors.push("Intake may send only kind intake-request.");
   }
   if (message.kind === "intake-request") {
-    if (message.action !== "request") errors.push("intake-request action must be request");
-    if (!message.referenceId) errors.push("intake-request carries referenceId");
-    if (
-      message.artifactRefs.length === 0 ||
-      message.artifactRefs.some((ref) => !INTAKE_ARTIFACT.test(ref))
-    ) {
-      errors.push("intake-request artifactRefs are intake:<ref>@<ISO-8601>");
+    if (message.from !== "intake" || message.to !== "lead" || message.action !== "request" || message.stage !== "intake") {
+      errors.push("intake-request is sent by Intake to Lead, action request, stage intake.");
     }
+    if (message.senderId !== INTAKE_SENDER_ID) {
+      setCode("unknown_sender");
+      errors.push(`intake-request senderId must be ${INTAKE_SENDER_ID}.`);
+    }
+    if (message.humanGate !== null) errors.push("intake-request humanGate is null.");
+    if (message.summary.length > INTAKE_REQUEST_MAX_SUMMARY) errors.push("intake-request summary is at most 500 characters.");
+    if (message.artifactRefs.length > INTAKE_REQUEST_MAX_REFS || message.artifactRefs.some((ref) => ref.length > INTAKE_REQUEST_MAX_REF)) {
+      errors.push("intake-request artifactRefs are at most 8 items of 200 characters.");
+    }
+    for (const field of ["senderId", "nonce", "ts", "sig", "contactRef", "untrusted"] as const) {
+      if (message[field] === undefined) errors.push(`intake-request requires ${field}.`);
+    }
+  } else if (
+    message.senderId !== undefined ||
+    message.nonce !== undefined ||
+    message.ts !== undefined ||
+    message.sig !== undefined ||
+    message.contactRef !== undefined ||
+    message.untrusted !== undefined
+  ) {
+    errors.push("senderId, nonce, ts, sig, contactRef, and untrusted belong on intake-request only.");
   }
   if (message.kind === "public-status") {
     if (message.from !== "lead" || message.to !== "intake") {
@@ -244,11 +266,8 @@ export function validateHandoffMessage(
     }
     if (message.action !== "status") errors.push("public-status action must be status");
     if (!message.referenceId) errors.push("public-status carries referenceId");
-  } else if (message.referenceId !== undefined && message.kind !== "intake-request") {
-    errors.push("referenceId belongs on intake-request and public-status");
-  }
-  if (message.catalogueOptionId !== undefined && message.kind !== "intake-request") {
-    errors.push("catalogueOptionId belongs on intake-request");
+  } else if (message.referenceId !== undefined) {
+    errors.push("referenceId belongs on public-status");
   }
 
   if (message.kind === "stage-handoff" && message.from !== "lead") {
@@ -292,6 +311,34 @@ export function validateHandoffMessage(
     return { ok: false, code, errors };
   }
   return { ok: true, message };
+}
+
+export type IntakeRateStore = Map<string, number[]>;
+
+/** Sliding window. A full sender bucket does not block another sender. A full contactRef bucket does not block another contactRef. */
+export function allowIntakeRequest(
+  store: IntakeRateStore,
+  senderId: string,
+  contactRef: string,
+  now: number,
+  limits: { senderMax: number; contactMax: number; windowSec: number } = {
+    senderMax: INTAKE_REQUEST_SENDER_MAX,
+    contactMax: INTAKE_REQUEST_CONTACT_MAX,
+    windowSec: INTAKE_REQUEST_WINDOW_SEC,
+  },
+): { ok: true } | { ok: false; bucket: "sender" | "contactRef" } {
+  const fresh = (key: string) => {
+    const hits = (store.get(key) ?? []).filter((ts) => now - ts < limits.windowSec);
+    store.set(key, hits);
+    return hits;
+  };
+  const senderHits = fresh(`sender:${senderId}`);
+  if (senderHits.length >= limits.senderMax) return { ok: false, bucket: "sender" };
+  const contactHits = fresh(`contact:${contactRef}`);
+  if (contactHits.length >= limits.contactMax) return { ok: false, bucket: "contactRef" };
+  senderHits.push(now);
+  contactHits.push(now);
+  return { ok: true };
 }
 
 export function teammateLabel(id: TeammateId): string {

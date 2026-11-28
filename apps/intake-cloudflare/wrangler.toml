@@ -14,7 +14,7 @@
 #   STYLE_SIG_SECRET   optional, >= 32 bytes. When set, style signatures use it instead of the derived style key.
 #                      Not set by this change.
 #   CONTACT_REF_SALT   >= 32 bytes. Salts contactRef. Not set by this change. Do not commit a value.
-#   GITHUB_REPO_CHECK_TOKEN  OPTIONAL. Read-only GitHub token of the account invited to a customer's private repo; without it private repos stay "access pending"
+#   GITHUB_REPO_CHECK_TOKEN  Not used. The public repository check never sends a token. Do not set one for anonymous callers.
 # Optional (set only when pausing, not a default var): INTAKE_SUBMISSIONS_PAUSED=1 rejects new cards and visitor messages with 503.
 name = "vishalmathur-intake"
 pages_build_output_dir = "dist"
@@ -35,8 +35,8 @@ LEAD_DELIVERY = "webhook"
 LEAD_WEBHOOK_AUTH = "bearer"
 
 # Pages has no Cron Triggers, so this file does not declare [triggers]. crons would not run.
-# Retention is enforced on API traffic: appRun calls intakeCleanup through waitUntil.
-# scheduled() remains for a Worker runtime. Pages does not call it.
+# Retention is 24 h plus the next API call, including catalogue. An idle site keeps rows until then.
+# appRun calls intakeCleanup through waitUntil. scheduled() remains for a Worker runtime. Pages does not call it.
 
 [[d1_databases]]
 binding = "DB"

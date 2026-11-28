@@ -132,6 +132,10 @@ function api_status(array $cfg): void {
         app_respond(200, status_view($s));
         return;
     }
+    if (!contact_ref_salt_ok($cfg)) {
+        app_respond_unavailable($cfg, 'not_configured', 'CONTACT_REF_SALT is not set. Refusing to send a visitor message.');
+        return;
+    }
     [$ok, $retry] = app_rate_limit($cfg, 'visitor-msg', $ip, 10, 600);
     if (!$ok) { app_respond(429, ['ok' => false, 'error' => 'rate_limited'], ['Retry-After' => (string)$retry]); return; }
     $s = status_load_for_visitor($cfg, app_clean($body['ref'] ?? '', 30), app_clean($body['token'] ?? '', 40));

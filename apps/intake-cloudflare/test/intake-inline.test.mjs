@@ -104,7 +104,10 @@ test("verify_intake: stale ts, wrong sha, bad ids, bad base url, wrong fetch key
   assert.equal(stale.json.noticeSig, true); assert.equal(stale.json.fresh, false); assert.equal(stale.json.ok, false);
   const badSha = await py([VERIFY, ...(await noticeFor(rid, { sha: "0".repeat(64) })).args]);
   assert.equal(badSha.json.ok, false); assert.equal(badSha.json.fetched, 404, "the site has no message with that hash");
-  assert.equal((await py([VERIFY, "REQ-1", "1", "x", "y"])).json.ok, false);
+  const missingKind = await py([VERIFY, "REQ-1", "1", "x", "y"]);
+  assert.equal(missingKind.json.ok, false);
+  assert.equal(missingKind.json.error, "kind required");
+  assert.equal(missingKind.code, 2);
   const { args } = await noticeFor(rid);
   assert.equal((await py([VERIFY, ...args], { INTAKE_BASE_URL: "https://evil.example" })).json.error, "bad base url");
   const wrongDir = join(dir, "secrets-wrong-fetch"); (await import("node:fs")).mkdirSync(wrongDir, { recursive: true });

@@ -1,6 +1,6 @@
 # Release Desk SDLC
 
-Northwind Bank runs two processes, PID-ER and PID-NC, both at version 1.1.0. Seven Grok Bot teammates run them: Intake, Release Desk Lead, Change Analyst, Standards, Security, Builder, and Release Desk Log. The public site posts a signed notice to Lead's `public-intake` routine. Lead verifies it and fetches the envelope. That path is not a `handoff.v1` message, and `intake-request` is not a kind. Lead is the only writer of `pid.state` and sends `public-status` back. Desk does not move the work. Desk reads the Log.
+Northwind Bank runs two processes, PID-ER and PID-NC, both at version 1.1.0. Seven Grok Bot teammates run them: Intake, Release Desk Lead, Change Analyst, Standards, Security, Builder, and Release Desk Log. The public site posts a signed notice to Intake. Intake sends Lead `handoff.v1` kind `intake-request`, and that message is what triggers Lead. Intake may send no other kind. Lead is the only writer of `pid.state` and sends `public-status` back. The turn that reads visitor text runs with no shell, no merge and no deploy. Desk does not move the work. Desk reads the Log.
 
 Visitors start at `intake.vishalmathur.org` (`apps/intake-cloudflare`). The site stores the card and notifies Lead. It does not approve a gate. The request thread is Lead's chat.
 
@@ -21,7 +21,7 @@ Enhancement for a customer and product the bank already runs. Fixed two-week spr
 ```mermaid
 flowchart TD
   visitor["Visitor"] --> intakeBot["Intake"]
-  intakeBot -->|"intake-request"| intake["Intake stage · Lead"]
+  intakeBot -->|"signed notice"| intake["Intake stage · Lead"]
   intake --> estimate["Estimation · Change Analyst"]
   estimate --> finance["Finance approval · Change Analyst asks Finance partner"]
   finance --> security["Security and compliance · Security asks the officer or red-team lead"]
@@ -38,7 +38,7 @@ New customer, or a product the bank does not yet run for them. Kickoff first. Ex
 ```mermaid
 flowchart TD
   visitor["Visitor"] --> intakeBot["Intake"]
-  intakeBot -->|"intake-request"| intake["Intake stage · Lead"]
+  intakeBot -->|"signed notice"| intake["Intake stage · Lead"]
   intake --> onboard["Customer onboarding · Lead"]
   onboard --> discovery["Discovery · Change Analyst"]
   discovery --> scope["Scope · Change Analyst"]

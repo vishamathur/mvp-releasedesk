@@ -198,7 +198,7 @@ def main():
 
     parts.append(f'<rect width="{W}" height="{H}" fill="{BG}"/>')
     parts.append(t(40, 58, "Release Desk on Grok Bot: every bot-to-bot handover (PID-ER, with PID-NC extras)", 32, 800, INK, "start"))
-    parts.append(t(40, 96, "Intake sends intake-request to Lead. Lead is the only writer of pid.state.{requestId} and sends public-status back. Every stage-return and build-result goes to Lead.", 17, 500, MUTED, "start"))
+    parts.append(t(40, 96, "Intake sends Lead only intake-request, and that message triggers Lead. Lead is the only writer of pid.state.{requestId} and sends public-status back. Every stage-return and build-result goes to Lead.", 17, 500, MUTED, "start"))
     parts.append(t(40, 122, "Human gates are asked and answered between Vishal and the bot that owns that work. Lead never asks Vishal for an approval and never sets one.", 17, 700, "#92400E", "start"))
 
     # cc fan-in panel
@@ -261,7 +261,7 @@ def main():
         ("tool", "tool call · CloudAgent / GitHub (not a teammate message)"),
         ("chat", "chat with Vishal · trigger, status, his own merge"),
         ("consult", "● cc · <tag> on the Log lane = line appended to {requestId}.jsonl"),
-        ("intake-request", "intake-request · Intake → Lead (public card, real-only)"),
+        ("intake-request", "intake-request · Intake → Lead (the only kind Intake sends)"),
         ("public-status", "public-status · Lead → Intake (what the visitor may be told)"),
     ]
     for i, (k, s) in enumerate(items):

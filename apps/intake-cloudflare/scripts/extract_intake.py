@@ -61,6 +61,8 @@ REPO_HOSTS = {"github", "gitlab", "bitbucket", "other"}
 REPO_STATES = {"verified", "unverified-host"}
 REPO_VISIBILITY = {"public", "private", "unknown"}
 CHECKED_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
+REPO_BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
 
 
 def _digest(text: str) -> dict:
@@ -105,6 +107,8 @@ def _repository(repo: object) -> tuple[dict | None, str | None]:
     branch = repo.get("defaultBranch")
     if host not in REPO_HOSTS or not isinstance(name, str) or name == "" or not isinstance(branch, str) or branch == "":
         return None, "bad repository"
+    name_ok = REPO_SLUG_RE.fullmatch(name) is not None
+    branch_ok = REPO_BRANCH_RE.fullmatch(branch) is not None
     ver = repo.get("verification")
     if not isinstance(ver, dict):
         return None, "bad repository"
@@ -122,19 +126,23 @@ def _repository(repo: object) -> tuple[dict | None, str | None]:
         return None, "bad repository"
     if host_branch is not None and not isinstance(host_branch, str):
         return None, "bad repository"
-    return {
+    host_branch_ok = isinstance(host_branch, str) and REPO_BRANCH_RE.fullmatch(host_branch) is not None
+    record = {
         "host": host,
-        "repo": name,
-        "defaultBranch": branch,
         "verification": {
             "state": state,
             "method": method,
             "httpStatus": status,
             "visibility": visibility,
-            "defaultBranchFromHost": host_branch if isinstance(host_branch, str) else "",
+            "defaultBranchFromHost": host_branch if host_branch_ok else "",
             "checkedAt": checked,
         },
-    }, None
+    }
+    if name_ok:
+        record["repo"] = name
+    if branch_ok:
+        record["defaultBranch"] = branch
+    return record, None
 
 
 def quarantine_for(path: str | None) -> tuple[dict, str | None]:

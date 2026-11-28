@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Verify a public-intake notice by fetch-back. Same checks as apps/intake-cloudflare/scripts/verify_intake_ref.py.
 
-  verify_intake.py <requestId> <ts> <payloadSha256> <sig> [kind]
-      Regex-checks the notice, verifies the purpose-key HMAC, fetches the envelope, checks the
-      envelope HMAC, payload hash, and requestId/kind binding, then saves the body (mode 0600).
-      A repeated sig inside the seen-set window is rejected. HTTP 429 sleeps for Retry-After
-      (at most 60 s) and retries once.
+  verify_intake.py <requestId> <ts> <payloadSha256> <sig> <kind>
+      kind is required (intake-card or visitor-message). Regex-checks the notice, verifies the
+      purpose-key HMAC, fetches the envelope, checks the envelope HMAC, payload hash, and
+      requestId/kind binding, then saves the body (mode 0600). A repeated sig inside the
+      seen-set window is rejected. HTTP 429 sleeps for Retry-After (at most 60 s) and retries once.
+      Redirects are not followed, so the bearer fetch key is not sent to another host.
   verify_intake.py --file <path>
       Re-checks a saved inbox envelope: 10-digit signature.ts and envelope.v1 purpose-key HMAC.
+  verify_intake.py --intake-request <path>
+      Checks one intake-request JSON file. The signature is HMAC under the purpose key
+      intake-request, over intake-request.v1 + canonical body + nonce + timestamp.
+      A bad signature, a timestamp more than 5 minutes off, or a reused nonce is rejected.
+      The nonce seen-set fails closed. The same file is rate-limited per sender and per contactRef.
 
 Prints one JSON line and exits 0 for any checked result (read the ok field); exit 2 is a usage error.
 The HMAC value and the fetch key are read from files. They are never printed and never passed on the command line.
@@ -50,6 +56,16 @@ def base_ok(url: str) -> bool:
     return url == "https://intake.vishalmathur.org" or re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", url) is not None
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect. urllib would otherwise copy Authorization onto the next hop."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def fetch_envelope(url: str, fetch_key: bytes):
     """Returns (body or None, status, retry_after header or None). Retries once on 429."""
     def once():
@@ -58,7 +74,8 @@ def fetch_envelope(url: str, fetch_key: bytes):
             "User-Agent": "release-desk-intake",
         })
         try:
-            return urllib.request.urlopen(request, timeout=20).read(), 200, None
+            with _OPENER.open(request, timeout=20) as response:
+                return response.read(), 200, None
         except urllib.error.HTTPError as error:
             retry = error.headers.get("Retry-After") if error.headers else None
             return None, error.code, retry
@@ -89,7 +106,7 @@ def envelope_fields(body: bytes, key: bytes, rid: str, psha: str, kind):
     except json.JSONDecodeError:
         out["error"] = "bad payloadJson"
         return out
-    out["bound"] = isinstance(payload, dict) and payload.get("requestId") == rid and (kind is None or payload.get("kind") == kind)
+    out["bound"] = isinstance(payload, dict) and payload.get("requestId") == rid and payload.get("kind") == kind
     if not out["bound"]:
         out["error"] = "payload binding"
     return out
@@ -113,9 +130,7 @@ def verify_notice(rid, ts, psha, sig, kind):
         out["fresh"] = abs(time.time() - int(ts)) <= WINDOW_SEC
         if not (out["noticeSig"] and out["fresh"]):
             return out
-        query = {"requestId": rid, "payloadSha256": psha}
-        if kind:
-            query["kind"] = kind
+        query = {"requestId": rid, "payloadSha256": psha, "kind": kind}
         url = BASE + "/api/envelope.php?" + urllib.parse.urlencode(query)
         body, code = fetch_envelope(url, read_key(FETCH_FILE))
         out["fetched"] = code
@@ -168,11 +183,49 @@ def verify_file(path):
     return out
 
 
+def verify_intake_request_message(message, master: bytes, now: int, seen, rates=None):
+    """Same intake-request.v1 checks as the reference verifier. `master` is raw key bytes, never printed."""
+    return ref.verify_intake_request(message, master, now, seen, rates)
+
+
+def intake_request_state_paths(inbox: str | None = None, base: str | None = None) -> tuple[str, str]:
+    """Seen-set and rate-limit files under the canonical inbox. A path that leaves the base is rejected."""
+    directory = INBOX if inbox is None else inbox
+    return (
+        ref.inbox_child(directory, ".intake-request-seen", base=base),
+        ref.inbox_child(directory, ".intake-request-rate", base=base),
+    )
+
+
+def verify_intake_request_file(path: str) -> dict:
+    with open(path, encoding="utf-8") as handle:
+        message = json.load(handle)
+    try:
+        seen_path, rate_path = intake_request_state_paths()
+    except ref.VerifyError as error:
+        return {"ok": False, "error": error.code}
+    os.makedirs(os.path.dirname(seen_path), mode=0o700, exist_ok=True)
+    seen = ref.SeenSet(seen_path)
+    rates = ref.IntakeRateLimit(rate_path)
+    return verify_intake_request_message(message, read_key(HMAC_FILE), int(time.time()), seen, rates)
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "--file":
         result = verify_file(argv[2])
-    elif len(argv) in (5, 6):
-        result = verify_notice(*argv[1:5], argv[5] if len(argv) == 6 else None)
+    elif len(argv) == 3 and argv[1] == "--intake-request":
+        try:
+            result = verify_intake_request_file(argv[2])
+        except Exception as error:
+            result = {"ok": False, "error": type(error).__name__ + ": " + str(error)[:200]}
+    elif len(argv) == 6:
+        if argv[5] not in ("intake-card", "visitor-message"):
+            print(json.dumps({"ok": False, "error": "bad kind", "kind": argv[5]}))
+            return 0
+        result = verify_notice(*argv[1:6])
+    elif len(argv) == 5:
+        print(json.dumps({"ok": False, "error": "kind required"}))
+        return 2
     else:
         print(json.dumps({"ok": False, "error": "usage"}))
         return 2

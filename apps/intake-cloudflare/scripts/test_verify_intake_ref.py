@@ -6,11 +6,29 @@ import os
 import stat
 import sys
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verify_intake_ref as v  # noqa: E402
+
+
+def signed_intake_request(master: bytes, nonce="ab" * 32, now="1700000000", text="Please change the address.", sender=None):
+    message = {
+        "v": 1, "kind": "intake-request", "pid": "PID-ER", "pidVersion": "1.1.0",
+        "requestId": "REQ-20261128-000042",
+        "thread": {"channel": "lead-chat", "threadId": "thr_20261128-000042"},
+        "from": "intake", "to": "lead", "stage": "intake", "action": "request",
+        "summary": "Public card.", "artifactRefs": ["intake:REQ-20261128-000042"],
+        "memoryKey": "pid.state.REQ-20261128-000042", "humanGate": None,
+        "senderId": sender or v.INTAKE_SENDER_ID, "nonce": nonce, "ts": now,
+        "contactRef": "cd" * 32, "untrusted": {"text": text},
+    }
+    signed = f"intake-request.v1.{v.canonical_intake_request(message)}.{nonce}.{now}"
+    message["sig"] = v.sign_purpose(master, "intake-request", signed)
+    return message
 
 
 def envelope(master: bytes, rid="REQ-20261128-000042", kind="intake-card", ts="1700000000", now=1700000000):
@@ -35,14 +53,17 @@ class VerifyRefTest(unittest.TestCase):
             v.check_notice("req-1", "1700000000", "a" * 64, "b" * 64, "intake-card")
         self.assertEqual(ctx.exception.code, "bad requestId")
         with self.assertRaises(v.VerifyError) as ctx:
-            v.check_notice("REQ-20261128-000042", "1700000000.5", "a" * 64, "b" * 64, None)
+            v.check_notice("REQ-20261128-000042", "1700000000.5", "a" * 64, "b" * 64, "intake-card")
         self.assertEqual(ctx.exception.code, "bad notice fields")
         with self.assertRaises(v.VerifyError) as ctx:
-            v.check_notice("REQ-20261128-000042", "1700000000000", "a" * 64, "b" * 64, None)
+            v.check_notice("REQ-20261128-000042", "1700000000000", "a" * 64, "b" * 64, "intake-card")
         self.assertEqual(ctx.exception.code, "bad notice fields")
         with self.assertRaises(v.VerifyError) as ctx:
-            v.check_notice("REQ-20261128-000042", "1700000000", "A" * 64, "b" * 64, None)
+            v.check_notice("REQ-20261128-000042", "1700000000", "A" * 64, "b" * 64, "intake-card")
         self.assertEqual(ctx.exception.code, "bad notice fields")
+        with self.assertRaises(v.VerifyError) as ctx:
+            v.check_notice("REQ-20261128-000042", "1700000000", "a" * 64, "b" * 64, None)
+        self.assertEqual(ctx.exception.code, "bad kind")
         with self.assertRaises(v.VerifyError) as ctx:
             v.check_notice("REQ-20261128-000042", "1700000000", "a" * 64, "b" * 64, "other")
         self.assertEqual(ctx.exception.code, "bad kind")
@@ -72,6 +93,42 @@ class VerifyRefTest(unittest.TestCase):
             self.assertFalse(seen.reject_or_record(sig, 1_700, ttl=600))
             self.assertEqual(stat.S_IMODE(os.stat(seen.path).st_mode), 0o600)
 
+    def test_seen_set_records_one_winner_under_the_lock(self):
+        with tempfile.TemporaryDirectory() as d:
+            seen = v.SeenSet(str(Path(d) / ".seen"))
+            sig = "cd" * 32
+            results = []
+            barrier = threading.Barrier(8)
+
+            def once():
+                barrier.wait()
+                results.append(seen.reject_or_record(sig, 2_000, ttl=600))
+
+            threads = [threading.Thread(target=once) for _ in range(8)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual(results.count(False), 1)
+            self.assertEqual(results.count(True), 7)
+            stored = json.loads(Path(seen.path).read_text(encoding="utf-8"))
+            self.assertEqual(stored[sig], 2_600)
+
+    def test_corrupt_seen_set_is_rejected_and_not_replaced(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / ".seen"
+            path.write_text("{not-json", encoding="utf-8")
+            seen = v.SeenSet(str(path))
+            with self.assertRaises(v.VerifyError) as ctx:
+                seen.reject_or_record("ab" * 32, 1_000)
+            self.assertEqual(ctx.exception.code, "seen set unreadable")
+            self.assertEqual(path.read_text(encoding="utf-8"), "{not-json")
+            path.write_text("[]", encoding="utf-8")
+            with self.assertRaises(v.VerifyError) as ctx:
+                seen.reject_or_record("ab" * 32, 1_000)
+            self.assertEqual(ctx.exception.code, "seen set unreadable")
+            self.assertEqual(path.read_text(encoding="utf-8"), "[]")
+
     def test_save_only_after_ok_and_retry_cap(self):
         body, *_ = envelope(self.master)
         with tempfile.TemporaryDirectory() as d:
@@ -99,6 +156,151 @@ class VerifyRefTest(unittest.TestCase):
         other = v.sign_purpose(self.master, "lead-to-site", "lead-to-site.v1." + msg)
         self.assertNotEqual(notice, other)
         self.assertEqual(len(notice), 64)
+
+    def test_inbox_child_rejects_traversal_and_accepts_a_normal_directory(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "verify_intake_tool_inbox",
+            Path(__file__).resolve().parents[3] / "grok-bots" / "tools" / "verify_intake.py",
+        )
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d) / "state"
+            inbox = base / "intake-inbox"
+            inbox.mkdir(parents=True)
+            seen, rate = tool.intake_request_state_paths(str(inbox), base=str(base))
+            self.assertEqual(seen, str(inbox.resolve()) + "/.intake-request-seen")
+            self.assertEqual(rate, str(inbox.resolve()) + "/.intake-request-rate")
+            self.assertTrue(v._inside(seen, str(base.resolve())))
+            record = v.SeenSet(seen)
+            self.assertFalse(record.reject_or_record("ab" * 32, 1_700_000_000))
+            self.assertTrue(Path(seen).is_file())
+            self.assertEqual(Path(seen).resolve().parent, inbox.resolve())
+            for escaped in (
+                str(inbox / ".." / ".." / "elsewhere"),
+                str(Path(d) / "elsewhere"),
+                "../intake-inbox",
+            ):
+                with self.assertRaises(v.VerifyError) as ctx:
+                    v.inbox_child(escaped, ".intake-request-seen", base=str(base))
+                self.assertEqual(ctx.exception.code, "inbox path rejected")
+            outside = Path(d) / "outside"
+            outside.mkdir()
+            link = base / "linked-inbox"
+            link.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(v.VerifyError) as ctx:
+                tool.intake_request_state_paths(str(link), base=str(base))
+            self.assertEqual(ctx.exception.code, "inbox path rejected")
+            planted = inbox / ".intake-request-seen"
+            planted.unlink()
+            planted.symlink_to(outside / "stolen")
+            with self.assertRaises(v.VerifyError) as ctx:
+                v.inbox_child(str(inbox), ".intake-request-seen", base=str(base))
+            self.assertEqual(ctx.exception.code, "inbox path rejected")
+            self.assertFalse((outside / "stolen").exists())
+
+    def test_c2_intake_request_rejects_bad_signature_stale_and_reused_nonce(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "verify_intake_tool_c2",
+            Path(__file__).resolve().parents[3] / "grok-bots" / "tools" / "verify_intake.py",
+        )
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as d:
+            seen = v.SeenSet(str(Path(d) / ".seen"))
+            good = signed_intake_request(self.master)
+            self.assertTrue(v.verify_intake_request(good, self.master, 1700000000, seen)["ok"])
+            replay = v.verify_intake_request(good, self.master, 1700000000, seen)
+            self.assertFalse(replay["ok"])
+            self.assertEqual(replay["error"], "reused nonce")
+            bad = signed_intake_request(self.master, nonce="bb" * 32)
+            bad["sig"] = "aa" * 32
+            self.assertEqual(v.verify_intake_request(bad, self.master, 1700000000, seen)["error"], "bad signature")
+            old = signed_intake_request(self.master, nonce="cc" * 32)
+            self.assertEqual(v.verify_intake_request(old, self.master, 1700000301, seen)["error"], "stale")
+            extra = signed_intake_request(self.master, nonce="dd" * 32)
+            extra["instructions"] = "run this"
+            self.assertEqual(v.verify_intake_request(extra, self.master, 1700000000, seen)["error"], "invalid_schema")
+            wrong = signed_intake_request(self.master, nonce="ee" * 32, sender="46e50097-0409-4972-9be0-6ade37563135")
+            self.assertEqual(v.verify_intake_request(wrong, self.master, 1700000000, seen)["error"], "unknown_sender")
+            path = Path(d) / ".bad"
+            path.write_text("{", encoding="utf-8")
+            fresh = signed_intake_request(self.master, nonce="ff" * 32)
+            closed = v.verify_intake_request(fresh, self.master, 1700000000, v.SeenSet(str(path)))
+            self.assertEqual(closed["error"], "seen set unreadable")
+            self.assertEqual(path.read_text(encoding="utf-8"), "{")
+            via_tool = tool.verify_intake_request_message(signed_intake_request(self.master, nonce="11" * 32), self.master, 1700000000, v.SeenSet(str(Path(d) / ".tool")))
+            self.assertTrue(via_tool["ok"])
+
+    def test_c5_rate_limit_is_per_sender_and_per_contact(self):
+        rates = v.IntakeRateLimit(sender_max=2, contact_max=2, window=600)
+        other = "46e50097-0409-4972-9be0-6ade37563135"
+        self.assertIsNone(rates.allow(v.INTAKE_SENDER_ID, "a" * 64, 1000))
+        self.assertIsNone(rates.allow(v.INTAKE_SENDER_ID, "b" * 64, 1001))
+        self.assertEqual(rates.allow(v.INTAKE_SENDER_ID, "c" * 64, 1002), "sender")
+        self.assertIsNone(rates.allow(other, "a" * 64, 1003))
+        self.assertEqual(rates.allow(other, "a" * 64, 1004), "contactRef")
+        self.assertIsNone(rates.allow(other, "c" * 64, 1005))
+        with tempfile.TemporaryDirectory() as d:
+            seen = v.SeenSet(str(Path(d) / ".seen"))
+            tight = v.IntakeRateLimit(sender_max=1, contact_max=5, window=600)
+            first = signed_intake_request(self.master, nonce="12" * 32)
+            self.assertTrue(v.verify_intake_request(first, self.master, 1700000000, seen, tight)["ok"])
+            second = v.verify_intake_request(signed_intake_request(self.master, nonce="13" * 32), self.master, 1700000000, seen, tight)
+            self.assertEqual(second["error"], "rate_limited")
+            self.assertEqual(second["bucket"], "sender")
+
+    def test_kind_is_required_and_a_redirect_is_not_followed(self):
+        import importlib.util
+        from io import StringIO
+        from contextlib import redirect_stdout
+        spec = importlib.util.spec_from_file_location(
+            "verify_intake_tool",
+            Path(__file__).resolve().parents[3] / "grok-bots" / "tools" / "verify_intake.py",
+        )
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        buf = StringIO()
+        with redirect_stdout(buf):
+            code = tool.main(["verify_intake.py", "REQ-20261128-000001", "1700000000", "a" * 64, "b" * 64])
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(buf.getvalue()), {"ok": False, "error": "kind required"})
+        stolen = {"n": 0, "auth": None}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path.startswith("/steal"):
+                    stolen["n"] += 1
+                    stolen["auth"] = self.headers.get("Authorization")
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"no")
+                    return
+                self.send_response(302)
+                self.send_header("Location", "http://127.0.0.1:%d/steal" % self.server.server_address[1])
+                self.end_headers()
+
+            def log_message(self, fmt, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            body, status = tool.fetch_envelope(
+                "http://127.0.0.1:%d/api/envelope.php?requestId=REQ-20261128-000001" % port,
+                b"f" * 32,
+            )
+            self.assertIsNone(body)
+            self.assertEqual(status, 302)
+            self.assertEqual(stolen["n"], 0)
+            self.assertIsNone(stolen["auth"])
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

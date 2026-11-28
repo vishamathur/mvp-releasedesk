@@ -148,6 +148,33 @@ class ExtractTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertIsNone(out["repository"])
 
+    def test_n23_drops_invalid_repo_and_default_branch(self):
+        cat = ex.load_catalogue(ex.CATALOGUE)
+        q = {"path": None, "mode": None, "note": "test"}
+        bad_repo = "octocat/Hello-World;rm"
+        bad_branch = "master && id"
+        bad_host_branch = "refs/heads/master`id"
+        doc = card()
+        doc["repository"]["repo"] = bad_repo
+        doc["repository"]["defaultBranch"] = bad_branch
+        doc["repository"]["verification"]["defaultBranchFromHost"] = bad_host_branch
+        out = ex.extract(doc, cat, q)
+        self.assertTrue(out["ok"])
+        blob = json.dumps(out)
+        self.assertNotIn(bad_repo, blob)
+        self.assertNotIn(bad_branch, blob)
+        self.assertNotIn(bad_host_branch, blob)
+        self.assertNotIn("repo", out["repository"])
+        self.assertNotIn("defaultBranch", out["repository"])
+        self.assertEqual(out["repository"]["verification"]["defaultBranchFromHost"], "")
+        kept = card()
+        kept["repository"]["defaultBranch"] = "feature/safe_name"
+        kept["repository"]["verification"]["defaultBranchFromHost"] = "feature/safe_name"
+        good = ex.extract(kept, cat, q)
+        self.assertTrue(good["ok"])
+        self.assertEqual(good["repository"]["repo"], "octocat/Hello-World")
+        self.assertEqual(good["repository"]["defaultBranch"], "feature/safe_name")
+
     def test_cli_refuses_loose_inbox_and_accepts_mode_600(self):
         payload = json.dumps(card()).encode()
         with tempfile.TemporaryDirectory() as d:

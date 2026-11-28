@@ -64,7 +64,7 @@ with `Authorization: Bearer <LEAD_FETCH_KEY>`. Envelopes can be fetched for 24 h
 | `data/` JSON files with `flock` | D1 database bound as `DB` (`migrations/0001_init.sql`, same as `schema.sql`) |
 | `data/ratelimit/*.json` | `rate_hits` table, sliding window, one atomic batch per hit, IP stored only as a hash |
 | `bin/drain-outbox.php` on cPanel Cron | Failed messages are retried from `waitUntil` on later API calls, at most every 5 minutes, up to 5 a run, `dead` after 50 attempts. Pages has no Cron Triggers |
-| hourly `intake_cleanup()` | the same, from any API call through `waitUntil`: submissions, finance artifacts, status and events older than `RETENTION_DAYS` (1 day), and every outbox state older than 24 h |
+| hourly `intake_cleanup()` | the same purge, 24 h after `created_at` plus the next API call, including a catalogue read. An idle site keeps rows until that call. Pages has no Cron Triggers |
 | `intake-config.php` | `[vars]` in `wrangler.toml` plus four Pages secrets. Optional var: `GROK_VISION_MODEL`. Fifth secret: `LEAD_FETCH_KEY` |
 | `LEAD_DELIVERY=email` (`mail()`) | not available. Use `webhook`. Choosing `email` is a delivery error, never a silent success |
 | `REMOTE_ADDR` | `CF-Connecting-IP` |
@@ -84,13 +84,13 @@ codebase Release Desk can read. The form asks first, before the rest of the form
 |---|---|
 | Visitor says there is **no** repository or codebase | The page explains an enhancement can't be acted on without one and offers New application or Website creation. The rest of the form stays hidden. `POST /api/intake.php` with `hasRepo` not `true` is `422 repo_required` (`reason: no_repository`) and stores nothing. |
 | Visitor says there **is** one | The form collects code host, `owner/repo` or https address, default branch, a short stack description and a technical contact reference. **Check repository** calls `POST /api/repo-check.php` (20 per 10 min per IP). |
-| GitHub | `GET https://api.github.com/repos/{owner}/{repo}` with a User-Agent and no token. 200 is `verified`. 404 is `access-pending` (not found or private). 403/429/network errors are `check-unavailable` (503, retry later). |
-| Private GitHub repo | The page tells the customer to invite the GitHub user `vishamathur` with the Read role, then **I've granted access: check again**. Only if the Pages secret `GITHUB_REPO_CHECK_TOKEN` is set does the server retry a 404 once with that token (read-only access for the invited account). Without it a private repo stays `access-pending` and is not submitted. The token is never logged or returned. |
-| Other hosts | An https address (no IP literals, internal names or odd ports; up to 3 redirects, each re-checked). A 200 that is not a sign-in page is `unverified-host` (reachable, not confirmed as a repository) and is accepted. A 401/403/404 or sign-in redirect is `access-pending`. |
-| Submit | `POST /api/intake.php` re-runs the live check. Anything other than `verified` or `unverified-host` is `422 repo_not_verified` (with `state`, `reason` and a visitor message) and nothing is stored or sent. Missing or malformed details are `400` with field names. |
+| GitHub | `GET https://api.github.com/repos/{owner}/{repo}` with a User-Agent and no token. Redirects are not followed off `https://api.github.com`. A public 200 is `verified`, which means publicly readable, not that the visitor owns it. 404 is `access-pending`. 403/429/network errors are `check-unavailable` (503, retry later). |
+| Private GitHub repo | Looks the same as a repository that does not exist: `access-pending`, and the response does not include visibility, the host's default branch, or a name GitHub returned. `GITHUB_REPO_CHECK_TOKEN` is never sent on this public path. The page still tells the customer how to invite `vishamathur`, but this check cannot confirm that invitation. |
+| Other hosts | Not probed. GitLab, Bitbucket and any other host are `access-pending` with reason `host_not_allowlisted` and are not accepted. |
+| Submit | `POST /api/intake.php` re-runs the same public check, keyed in the cache by the caller. Only `verified` is accepted. Anything else is `422 repo_not_verified` and nothing is stored or sent. Missing or malformed details are `400` with field names. |
 
 A submitted card carries `repository: { host, repo, url, defaultBranch, stack, technicalContact, verification: { state, method, httpStatus, visibility, defaultBranchFromHost, checkedAt } }`
-inside the signed payload, and the proposed handoff summary ends with `Repository <repo> (<state>).` Only the Cloudflare build has this; the legacy PHP build in `apps/intake/private` does not enforce it.
+inside the signed payload. The proposed handoff summary says the repository is publicly readable and that this is not an ownership check. Only the Cloudflare build has this; the legacy PHP build in `apps/intake/private` does not enforce it.
 
 ## Build and test (live repository checks only)
 
