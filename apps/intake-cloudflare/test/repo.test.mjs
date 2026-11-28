@@ -31,6 +31,16 @@ test("repoParse: GitHub owner/repo and github.com addresses; other hosts need an
   }
 });
 
+test("repoGithubApiUrl: only https://api.github.com, never a caller-supplied host", () => {
+  const u = W.repoGithubApiUrl("octocat", "Hello-World");
+  assert.equal(u.origin, "https://api.github.com");
+  assert.equal(u.href, "https://api.github.com/repos/octocat/Hello-World");
+  assert.equal(W.repoGithubApiUrl("octocat", "Hello-World/../../../etc"), null);
+  // The fetch site is a constant origin; path segments are encoded, so a crafted name cannot change the host.
+  const sneak = W.repoGithubApiUrl("octocat", "@evil.example/repo");
+  assert.ok(sneak === null || sneak.origin === "https://api.github.com");
+});
+
 test("live GitHub: a public repository is verified with no token and the result is recorded", async () => {
   const v = await W.repoVerify({}, W.repoParse("github", PUBLIC_GH), 1_800_000_000);
   assert.equal(v.state, "verified"); assert.equal(v.method, "github-api-public"); assert.equal(v.httpStatus, 200);

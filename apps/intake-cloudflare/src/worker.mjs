@@ -1033,11 +1033,21 @@ function repoResult(p, now, fields) {
   return { host: p.host, repo: p.repo, url: p.url, state: "access-pending", method: "", httpStatus: 0, visibility: "unknown", defaultBranch: "", checkedAt: gmdate.iso(now), ...fields };
 }
 
+/** Always https://api.github.com. Owner and name must already have passed repoParse. */
+export function repoGithubApiUrl(owner, name) {
+  if (!GH_OWNER_RE.test(owner) || !GH_REPO_RE.test(name) || name === "." || name === "..") return null;
+  const url = new URL("https://api.github.com/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name));
+  if (url.origin !== "https://api.github.com" || url.username !== "" || url.password !== "" || url.port !== "") return null;
+  return url;
+}
+
 async function repoGithubGet(p, token) {
   const [owner, name] = p.repo.split("/");
+  const url = repoGithubApiUrl(owner, name);
+  if (!url) return { status: 0, json: null };
   const headers = { Accept: "application/vnd.github+json", "User-Agent": REPO_UA, "X-GitHub-Api-Version": "2022-11-28" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, { headers, signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
   let json = null;
   if (res.status === 200) json = await res.json().catch(() => null); else await res.body?.cancel().catch(() => {});
   return { status: res.status, json };
@@ -1073,7 +1083,7 @@ async function repoVerifyHttps(p, now) {
     for (let hops = 0; ; hops++) {
       const u = new URL(url);
       if (!repoHostOk(u)) return repoResult(p, now, { method, reason: "redirect_not_allowed" });
-      const res = await fetch(u.href, { method: "GET", headers: { "User-Agent": REPO_UA, Accept: "text/html,*/*;q=0.5" }, redirect: "manual", signal: AbortSignal.timeout(8000) });
+      const res = await fetch(u, { method: "GET", headers: { "User-Agent": REPO_UA, Accept: "text/html,*/*;q=0.5" }, redirect: "manual", signal: AbortSignal.timeout(8000) });
       await res.body?.cancel().catch(() => {});
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get("Location");
